@@ -1,0 +1,63 @@
+# GitHub Pages deploy stub for Valley Commute Flows.
+#
+# This workflow is intentionally NOT pushed in the initial build pass. Before
+# enabling:
+#   1. Move the project into its own GitHub repo (or a sub-tree of one).
+#   2. Update `vite.config.ts` `base` to '/<repo-name>/' if hosting at a
+#      project page (currently set to './' for portability).
+#   3. In repo Settings → Pages, set source to "GitHub Actions".
+#   4. Push this file to `.github/workflows/deploy.yml` on the default branch.
+#
+# Builds the Vite app and publishes `dist/` to GitHub Pages on every push to
+# `main`. No data refresh runs in CI — `public/data/*.json` are committed.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

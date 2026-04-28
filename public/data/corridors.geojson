@@ -1,0 +1,468 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "version": 1,
+    "description": "Canonical corridor graph for the Valley Commute Flow Map. Hand-authored. Source of truth — committed to repo. Smoothed geometries are generated at build time from controlPoints via Catmull-Rom interpolation; the geometry field on corridor features is left empty and filled by scripts/build-data.py.",
+    "lastEdited": "2026-04-27",
+    "editor": "Added Meeker (MKR / ZIP 81641) node and the Hwy 13 corridor from Rifle to Meeker — pulls the Rio Blanco County commute into the in-topology graph instead of routing it through GW_W (Grand Junction)."
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "ASP",
+        "label": "Aspen",
+        "associatedZip": "81611"
+      },
+      "geometry": { "type": "Point", "coordinates": [-106.8175, 39.1911] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "SMV",
+        "label": "Snowmass Village",
+        "associatedZip": "81615"
+      },
+      "geometry": { "type": "Point", "coordinates": [-106.9378, 39.2130] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "BAS",
+        "label": "Basalt",
+        "associatedZip": "81621"
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.0328, 39.3691] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "CARB",
+        "label": "Carbondale",
+        "associatedZip": "81623"
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.2117, 39.4019] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "GWS",
+        "label": "Glenwood Springs",
+        "associatedZip": "81601"
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.3248, 39.5505] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "NCT",
+        "label": "New Castle",
+        "associatedZip": "81647"
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.5384, 39.5773] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "SLT",
+        "label": "Silt",
+        "associatedZip": "81652"
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.6592, 39.5489] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "RFL",
+        "label": "Rifle",
+        "associatedZip": "81650"
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.7842, 39.5347] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "PCT",
+        "label": "Parachute",
+        "associatedZip": "81635"
+      },
+      "geometry": { "type": "Point", "coordinates": [-108.0539, 39.4500] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "DBQ",
+        "label": "De Beque",
+        "associatedZip": "81630"
+      },
+      "geometry": { "type": "Point", "coordinates": [-108.2231, 39.3306] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "MKR",
+        "label": "Meeker",
+        "associatedZip": "81641",
+        "note": "Town of Meeker, Rio Blanco County. Connected to the in-valley graph via Hwy 13 from Rifle (~41 miles north)."
+      },
+      "geometry": { "type": "Point", "coordinates": [-107.9128, 40.0372] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "J_BC",
+        "label": "Brush Creek Junction",
+        "associatedZip": null,
+        "note": "Hwy 82 / Brush Creek Rd junction near Aspen Airport / Buttermilk."
+      },
+      "geometry": { "type": "Point", "coordinates": [-106.9300, 39.2700] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "J_OS",
+        "label": "Old Snowmass Junction",
+        "associatedZip": "81654",
+        "note": "Hwy 82 / Snowmass Creek Rd junction (east-southeast of Basalt). ZIP 81654 (Old Snowmass / Snowmass post office) folds into this node per plan."
+      },
+      "geometry": { "type": "Point", "coordinates": [-106.9849, 39.3310] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "GW_E",
+        "label": "I-70 East Gateway (Gypsum)",
+        "associatedZip": null,
+        "note": "Off-map anchor in the Gypsum / Eagle County area for Front Range / I-70 east in-state external origins (80xxx ZIPs). Marks the eastern edge of the study area where I-70 enters Glenwood Canyon."
+      },
+      "geometry": { "type": "Point", "coordinates": [-106.9540, 39.6450] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "node",
+        "nodeId": "GW_W",
+        "label": "I-70 West Gateway",
+        "associatedZip": null,
+        "note": "Off-map anchor for Grand Junction / Western Slope in-state external origins (81xxx ZIPs not in-topology)."
+      },
+      "geometry": { "type": "Point", "coordinates": [-108.5500, 39.1000] }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "C82_ASP_BC",
+        "label": "Hwy 82 — Aspen to Brush Creek",
+        "fromNodeId": "ASP",
+        "toNodeId": "J_BC",
+        "roadName": "Hwy 82",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-106.8175, 39.1911],
+          [-106.8420, 39.2050],
+          [-106.8650, 39.2160],
+          [-106.8900, 39.2280],
+          [-106.9100, 39.2450],
+          [-106.9300, 39.2700]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "C82_BC_OS",
+        "label": "Hwy 82 — Brush Creek to Old Snowmass",
+        "fromNodeId": "J_BC",
+        "toNodeId": "J_OS",
+        "roadName": "Hwy 82",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-106.9300, 39.2700],
+          [-106.9350, 39.2870],
+          [-106.9450, 39.3030],
+          [-106.9600, 39.3160],
+          [-106.9750, 39.3260],
+          [-106.9849, 39.3310]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "C82_OS_BAS",
+        "label": "Hwy 82 — Old Snowmass to Basalt",
+        "fromNodeId": "J_OS",
+        "toNodeId": "BAS",
+        "roadName": "Hwy 82",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-106.9849, 39.3310],
+          [-107.0000, 39.3430],
+          [-107.0150, 39.3540],
+          [-107.0270, 39.3625],
+          [-107.0328, 39.3691]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "C82_BAS_CARB",
+        "label": "Hwy 82 — Basalt to Carbondale",
+        "fromNodeId": "BAS",
+        "toNodeId": "CARB",
+        "roadName": "Hwy 82",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.0328, 39.3691],
+          [-107.0620, 39.3815],
+          [-107.0950, 39.3895],
+          [-107.1300, 39.3950],
+          [-107.1650, 39.3990],
+          [-107.1900, 39.4005],
+          [-107.2117, 39.4019]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "C82_CARB_GWS",
+        "label": "Hwy 82 — Carbondale to Glenwood",
+        "fromNodeId": "CARB",
+        "toNodeId": "GWS",
+        "roadName": "Hwy 82",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.2117, 39.4019],
+          [-107.2245, 39.4280],
+          [-107.2410, 39.4520],
+          [-107.2620, 39.4760],
+          [-107.2880, 39.5050],
+          [-107.3080, 39.5300],
+          [-107.3200, 39.5430],
+          [-107.3248, 39.5505]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "BC_SMV",
+        "label": "Brush Creek Rd — Junction to Snowmass Village",
+        "fromNodeId": "J_BC",
+        "toNodeId": "SMV",
+        "roadName": "Brush Creek Rd",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-106.9300, 39.2700],
+          [-106.9290, 39.2540],
+          [-106.9300, 39.2400],
+          [-106.9320, 39.2280],
+          [-106.9355, 39.2190],
+          [-106.9378, 39.2130]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "I70_GWS_NCT",
+        "label": "I-70 — Glenwood to New Castle",
+        "fromNodeId": "GWS",
+        "toNodeId": "NCT",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.3248, 39.5505],
+          [-107.3650, 39.5610],
+          [-107.4100, 39.5680],
+          [-107.4600, 39.5740],
+          [-107.5050, 39.5765],
+          [-107.5384, 39.5773]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "I70_NCT_SLT",
+        "label": "I-70 — New Castle to Silt",
+        "fromNodeId": "NCT",
+        "toNodeId": "SLT",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.5384, 39.5773],
+          [-107.5750, 39.5760],
+          [-107.6100, 39.5700],
+          [-107.6400, 39.5610],
+          [-107.6592, 39.5489]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "I70_SLT_RFL",
+        "label": "I-70 — Silt to Rifle",
+        "fromNodeId": "SLT",
+        "toNodeId": "RFL",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.6592, 39.5489],
+          [-107.6900, 39.5460],
+          [-107.7250, 39.5420],
+          [-107.7560, 39.5380],
+          [-107.7842, 39.5347]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "I70_RFL_PCT",
+        "label": "I-70 — Rifle to Parachute",
+        "fromNodeId": "RFL",
+        "toNodeId": "PCT",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.7842, 39.5347],
+          [-107.8200, 39.5310],
+          [-107.8600, 39.5240],
+          [-107.9000, 39.5130],
+          [-107.9400, 39.4990],
+          [-107.9800, 39.4820],
+          [-108.0200, 39.4650],
+          [-108.0539, 39.4500]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "I70_PCT_DBQ",
+        "label": "I-70 — Parachute to De Beque",
+        "fromNodeId": "PCT",
+        "toNodeId": "DBQ",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-108.0539, 39.4500],
+          [-108.0900, 39.4250],
+          [-108.1250, 39.3970],
+          [-108.1550, 39.3700],
+          [-108.1850, 39.3470],
+          [-108.2231, 39.3306]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "C13_RFL_MKR",
+        "label": "Hwy 13 — Rifle to Meeker",
+        "fromNodeId": "RFL",
+        "toNodeId": "MKR",
+        "roadName": "Hwy 13",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-107.7842, 39.5347],
+          [-107.7860, 39.6200],
+          [-107.8050, 39.7100],
+          [-107.8350, 39.8000],
+          [-107.8700, 39.8900],
+          [-107.9000, 39.9700],
+          [-107.9128, 40.0372]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "GW_E_GWS",
+        "label": "I-70 — Gypsum to Glenwood (Glenwood Canyon)",
+        "fromNodeId": "GW_E",
+        "toNodeId": "GWS",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-106.9540, 39.6450],
+          [-107.0100, 39.6470],
+          [-107.0570, 39.6443],
+          [-107.1140, 39.6280],
+          [-107.1700, 39.6010],
+          [-107.2200, 39.5810],
+          [-107.2620, 39.5740],
+          [-107.2950, 39.5630],
+          [-107.3140, 39.5560],
+          [-107.3248, 39.5505]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "kind": "corridor",
+        "corridorId": "GW_W_DBQ",
+        "label": "De Beque → I-70 West Gateway",
+        "fromNodeId": "DBQ",
+        "toNodeId": "GW_W",
+        "roadName": "I-70",
+        "smoothing": "catmull-rom",
+        "controlPoints": [
+          [-108.2231, 39.3306],
+          [-108.2900, 39.2780],
+          [-108.3550, 39.2200],
+          [-108.4200, 39.1700],
+          [-108.4900, 39.1300],
+          [-108.5500, 39.1000]
+        ]
+      },
+      "geometry": { "type": "LineString", "coordinates": [] }
+    }
+  ]
+}

@@ -1,0 +1,876 @@
+[
+  {
+    "zip": "75237",
+    "place": "Dallas",
+    "lat": 32.664916,
+    "lng": -96.872401,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80003",
+    "place": "Arvada",
+    "lat": 39.825413,
+    "lng": -105.064435,
+    "totalAsWorkplace": 3,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80011",
+    "place": "Aurora",
+    "lat": 39.744033,
+    "lng": -104.790013,
+    "totalAsWorkplace": 26,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80012",
+    "place": "Aurora",
+    "lat": 39.699766,
+    "lng": -104.837834,
+    "totalAsWorkplace": 5,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80020",
+    "place": "Broomfield",
+    "lat": 39.930782,
+    "lng": -105.074287,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80021",
+    "place": "Broomfield",
+    "lat": 39.890663,
+    "lng": -105.113724,
+    "totalAsWorkplace": 10,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80022",
+    "place": "Commerce City",
+    "lat": 39.861115,
+    "lng": -104.788777,
+    "totalAsWorkplace": 52,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80026",
+    "place": "Lafayette",
+    "lat": 40.012151,
+    "lng": -105.09991,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80033",
+    "place": "Wheat Ridge",
+    "lat": 39.772675,
+    "lng": -105.104801,
+    "totalAsWorkplace": 10,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80111",
+    "place": "Englewood",
+    "lat": 39.612004,
+    "lng": -104.882787,
+    "totalAsWorkplace": 81,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80112",
+    "place": "Englewood",
+    "lat": 39.573236,
+    "lng": -104.86489,
+    "totalAsWorkplace": 226,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80120",
+    "place": "Littleton",
+    "lat": 39.593836,
+    "lng": -105.01146,
+    "totalAsWorkplace": 20,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80123",
+    "place": "Littleton",
+    "lat": 39.61601,
+    "lng": -105.069449,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80134",
+    "place": "Parker",
+    "lat": 39.48283,
+    "lng": -104.780001,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 8,
+    "isAnchor": false
+  },
+  {
+    "zip": "80138",
+    "place": "Parker",
+    "lat": 39.517532,
+    "lng": -104.670911,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 1,
+    "isAnchor": false
+  },
+  {
+    "zip": "80202",
+    "place": "Denver",
+    "lat": 39.751526,
+    "lng": -104.997673,
+    "totalAsWorkplace": 581,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80203",
+    "place": "Denver",
+    "lat": 39.731419,
+    "lng": -104.982764,
+    "totalAsWorkplace": 86,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80204",
+    "place": "Denver",
+    "lat": 39.734757,
+    "lng": -105.020678,
+    "totalAsWorkplace": 57,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80206",
+    "place": "Denver",
+    "lat": 39.730369,
+    "lng": -104.952511,
+    "totalAsWorkplace": 70,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80210",
+    "place": "Denver",
+    "lat": 39.676626,
+    "lng": -104.962315,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 42,
+    "isAnchor": false
+  },
+  {
+    "zip": "80223",
+    "place": "Denver",
+    "lat": 39.695794,
+    "lng": -105.003843,
+    "totalAsWorkplace": 12,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80226",
+    "place": "Lakewood",
+    "lat": 39.710131,
+    "lng": -105.092127,
+    "totalAsWorkplace": 3,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80229",
+    "place": "Thornton",
+    "lat": 39.85425,
+    "lng": -104.957598,
+    "totalAsWorkplace": 21,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80231",
+    "place": "Denver",
+    "lat": 39.671225,
+    "lng": -104.887861,
+    "totalAsWorkplace": 5,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80237",
+    "place": "Denver",
+    "lat": 39.639871,
+    "lng": -104.901711,
+    "totalAsWorkplace": 11,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80249",
+    "place": "Denver",
+    "lat": 39.854746,
+    "lng": -104.695804,
+    "totalAsWorkplace": 144,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80301",
+    "place": "Boulder",
+    "lat": 40.04569,
+    "lng": -105.20089,
+    "totalAsWorkplace": 141,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80302",
+    "place": "Boulder",
+    "lat": 40.025056,
+    "lng": -105.348664,
+    "totalAsWorkplace": 59,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80303",
+    "place": "Boulder",
+    "lat": 39.973222,
+    "lng": -105.209276,
+    "totalAsWorkplace": 5,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80401",
+    "place": "Golden",
+    "lat": 39.718872,
+    "lng": -105.235342,
+    "totalAsWorkplace": 27,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80424",
+    "place": "Breckenridge",
+    "lat": 39.473285,
+    "lng": -106.00426,
+    "totalAsWorkplace": 132,
+    "totalAsResidence": 12,
+    "isAnchor": false
+  },
+  {
+    "zip": "80435",
+    "place": "Keystone",
+    "lat": 39.573898,
+    "lng": -105.934721,
+    "totalAsWorkplace": 52,
+    "totalAsResidence": 56,
+    "isAnchor": false
+  },
+  {
+    "zip": "80443",
+    "place": "Frisco",
+    "lat": 39.503377,
+    "lng": -106.174069,
+    "totalAsWorkplace": 40,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80446",
+    "place": "Granby",
+    "lat": 40.163892,
+    "lng": -105.934574,
+    "totalAsWorkplace": 3,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80461",
+    "place": "Leadville",
+    "lat": 39.242242,
+    "lng": -106.287866,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 114,
+    "isAnchor": false
+  },
+  {
+    "zip": "80487",
+    "place": "Steamboat Springs",
+    "lat": 40.581425,
+    "lng": -106.885954,
+    "totalAsWorkplace": 327,
+    "totalAsResidence": 191,
+    "isAnchor": false
+  },
+  {
+    "zip": "80498",
+    "place": "Silverthorne",
+    "lat": 39.746631,
+    "lng": -106.27053,
+    "totalAsWorkplace": 64,
+    "totalAsResidence": 32,
+    "isAnchor": false
+  },
+  {
+    "zip": "80504",
+    "place": "Longmont",
+    "lat": 40.16564,
+    "lng": -105.029231,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 18,
+    "isAnchor": false
+  },
+  {
+    "zip": "80516",
+    "place": "Erie",
+    "lat": 40.052867,
+    "lng": -105.021054,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 12,
+    "isAnchor": false
+  },
+  {
+    "zip": "80517",
+    "place": "Estes Park",
+    "lat": 40.397935,
+    "lng": -105.614927,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 28,
+    "isAnchor": false
+  },
+  {
+    "zip": "80525",
+    "place": "Fort Collins",
+    "lat": 40.527358,
+    "lng": -105.041438,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 5,
+    "isAnchor": false
+  },
+  {
+    "zip": "80534",
+    "place": "Johnstown",
+    "lat": 40.331863,
+    "lng": -104.937467,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 3,
+    "isAnchor": false
+  },
+  {
+    "zip": "80550",
+    "place": "Windsor",
+    "lat": 40.488775,
+    "lng": -104.899732,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 12,
+    "isAnchor": false
+  },
+  {
+    "zip": "80620",
+    "place": "La Salle",
+    "lat": 40.375758,
+    "lng": -104.713561,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 9,
+    "isAnchor": false
+  },
+  {
+    "zip": "80621",
+    "place": "Fort Lupton",
+    "lat": 40.107188,
+    "lng": -104.801281,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 5,
+    "isAnchor": false
+  },
+  {
+    "zip": "80631",
+    "place": "Greeley",
+    "lat": 40.4447,
+    "lng": -104.679378,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 32,
+    "isAnchor": false
+  },
+  {
+    "zip": "80634",
+    "place": "Greeley",
+    "lat": 40.40141,
+    "lng": -104.792395,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 61,
+    "isAnchor": false
+  },
+  {
+    "zip": "80751",
+    "place": "Sterling",
+    "lat": 40.651901,
+    "lng": -103.241063,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 8,
+    "isAnchor": false
+  },
+  {
+    "zip": "80907",
+    "place": "Colorado Springs",
+    "lat": 38.878994,
+    "lng": -104.821148,
+    "totalAsWorkplace": 18,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80920",
+    "place": "Colorado Springs",
+    "lat": 38.955706,
+    "lng": -104.772275,
+    "totalAsWorkplace": 12,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81147",
+    "place": "Pagosa Springs",
+    "lat": 37.286627,
+    "lng": -107.085416,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 22,
+    "isAnchor": false
+  },
+  {
+    "zip": "81230",
+    "place": "Gunnison",
+    "lat": 38.395065,
+    "lng": -106.953683,
+    "totalAsWorkplace": 36,
+    "totalAsResidence": 110,
+    "isAnchor": false
+  },
+  {
+    "zip": "81301",
+    "place": "Durango",
+    "lat": 37.529427,
+    "lng": -107.821502,
+    "totalAsWorkplace": 4,
+    "totalAsResidence": 108,
+    "isAnchor": false
+  },
+  {
+    "zip": "81401",
+    "place": "Montrose",
+    "lat": 38.514973,
+    "lng": -107.766148,
+    "totalAsWorkplace": 201,
+    "totalAsResidence": 131,
+    "isAnchor": false
+  },
+  {
+    "zip": "81403",
+    "place": "Montrose",
+    "lat": 38.314564,
+    "lng": -107.92836,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 16,
+    "isAnchor": false
+  },
+  {
+    "zip": "81410",
+    "place": "Austin",
+    "lat": 38.80969,
+    "lng": -107.976469,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 2,
+    "isAnchor": false
+  },
+  {
+    "zip": "81413",
+    "place": "Cedaredge",
+    "lat": 38.975741,
+    "lng": -107.899073,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 27,
+    "isAnchor": false
+  },
+  {
+    "zip": "81416",
+    "place": "Delta",
+    "lat": 38.640468,
+    "lng": -108.254583,
+    "totalAsWorkplace": 60,
+    "totalAsResidence": 108,
+    "isAnchor": false
+  },
+  {
+    "zip": "81428",
+    "place": "Paonia",
+    "lat": 38.962987,
+    "lng": -107.599578,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 14,
+    "isAnchor": false
+  },
+  {
+    "zip": "81435",
+    "place": "Telluride",
+    "lat": 37.868751,
+    "lng": -107.925117,
+    "totalAsWorkplace": 21,
+    "totalAsResidence": 9,
+    "isAnchor": false
+  },
+  {
+    "zip": "81501",
+    "place": "Grand Junction",
+    "lat": 39.071844,
+    "lng": -108.546,
+    "totalAsWorkplace": 558,
+    "totalAsResidence": 242,
+    "isAnchor": false
+  },
+  {
+    "zip": "81503",
+    "place": "Grand Junction",
+    "lat": 39.034026,
+    "lng": -108.486598,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 176,
+    "isAnchor": false
+  },
+  {
+    "zip": "81504",
+    "place": "Grand Junction",
+    "lat": 39.120298,
+    "lng": -108.488532,
+    "totalAsWorkplace": 30,
+    "totalAsResidence": 421,
+    "isAnchor": false
+  },
+  {
+    "zip": "81505",
+    "place": "Grand Junction",
+    "lat": 39.214122,
+    "lng": -108.588404,
+    "totalAsWorkplace": 408,
+    "totalAsResidence": 77,
+    "isAnchor": false
+  },
+  {
+    "zip": "81506",
+    "place": "Grand Junction",
+    "lat": 39.124877,
+    "lng": -108.558662,
+    "totalAsWorkplace": 144,
+    "totalAsResidence": 114,
+    "isAnchor": false
+  },
+  {
+    "zip": "81507",
+    "place": "Grand Junction",
+    "lat": 39.009885,
+    "lng": -108.651873,
+    "totalAsWorkplace": 3,
+    "totalAsResidence": 146,
+    "isAnchor": false
+  },
+  {
+    "zip": "81520",
+    "place": "Clifton",
+    "lat": 39.111083,
+    "lng": -108.433844,
+    "totalAsWorkplace": 3,
+    "totalAsResidence": 125,
+    "isAnchor": false
+  },
+  {
+    "zip": "81521",
+    "place": "Fruita",
+    "lat": 39.156637,
+    "lng": -108.878833,
+    "totalAsWorkplace": 7,
+    "totalAsResidence": 179,
+    "isAnchor": false
+  },
+  {
+    "zip": "81525",
+    "place": "Mack",
+    "lat": 39.259524,
+    "lng": -108.967298,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 3,
+    "isAnchor": false
+  },
+  {
+    "zip": "81526",
+    "place": "Palisade",
+    "lat": 39.083037,
+    "lng": -108.345615,
+    "totalAsWorkplace": 15,
+    "totalAsResidence": 36,
+    "isAnchor": false
+  },
+  {
+    "zip": "81601",
+    "place": "Glenwood Springs",
+    "lat": 39.5505,
+    "lng": -107.3248,
+    "totalAsWorkplace": 11917,
+    "totalAsResidence": 9556,
+    "isAnchor": true
+  },
+  {
+    "zip": "81611",
+    "place": "Aspen",
+    "lat": 39.1911,
+    "lng": -106.8175,
+    "totalAsWorkplace": 13341,
+    "totalAsResidence": 6559,
+    "isAnchor": true
+  },
+  {
+    "zip": "81615",
+    "place": "Snowmass Village",
+    "lat": 39.213,
+    "lng": -106.9378,
+    "totalAsWorkplace": 3880,
+    "totalAsResidence": 1365,
+    "isAnchor": true
+  },
+  {
+    "zip": "81620",
+    "place": "Avon",
+    "lat": 39.61303,
+    "lng": -106.503056,
+    "totalAsWorkplace": 862,
+    "totalAsResidence": 86,
+    "isAnchor": false
+  },
+  {
+    "zip": "81621",
+    "place": "Basalt",
+    "lat": 39.3691,
+    "lng": -107.0328,
+    "totalAsWorkplace": 3230,
+    "totalAsResidence": 3900,
+    "isAnchor": true
+  },
+  {
+    "zip": "81623",
+    "place": "Carbondale",
+    "lat": 39.4019,
+    "lng": -107.2117,
+    "totalAsWorkplace": 5132,
+    "totalAsResidence": 9131,
+    "isAnchor": true
+  },
+  {
+    "zip": "81624",
+    "place": "Collbran",
+    "lat": 39.159447,
+    "lng": -107.745095,
+    "totalAsWorkplace": 17,
+    "totalAsResidence": 55,
+    "isAnchor": false
+  },
+  {
+    "zip": "81625",
+    "place": "Craig",
+    "lat": 40.704673,
+    "lng": -107.736157,
+    "totalAsWorkplace": 10,
+    "totalAsResidence": 110,
+    "isAnchor": false
+  },
+  {
+    "zip": "81630",
+    "place": "De Beque",
+    "lat": 39.3306,
+    "lng": -108.2231,
+    "totalAsWorkplace": 310,
+    "totalAsResidence": 348,
+    "isAnchor": true
+  },
+  {
+    "zip": "81631",
+    "place": "Eagle",
+    "lat": 39.626454,
+    "lng": -106.771255,
+    "totalAsWorkplace": 467,
+    "totalAsResidence": 144,
+    "isAnchor": false
+  },
+  {
+    "zip": "81632",
+    "place": "Edwards",
+    "lat": 39.622675,
+    "lng": -106.607079,
+    "totalAsWorkplace": 220,
+    "totalAsResidence": 86,
+    "isAnchor": false
+  },
+  {
+    "zip": "81635",
+    "place": "Parachute",
+    "lat": 39.4519,
+    "lng": -108.0531,
+    "totalAsWorkplace": 1597,
+    "totalAsResidence": 3182,
+    "isAnchor": true
+  },
+  {
+    "zip": "81637",
+    "place": "Eagle",
+    "lat": 39.777826,
+    "lng": -107.105814,
+    "totalAsWorkplace": 392,
+    "totalAsResidence": 264,
+    "isAnchor": false
+  },
+  {
+    "zip": "81641",
+    "place": "Meeker",
+    "lat": 40.109264,
+    "lng": -107.818214,
+    "totalAsWorkplace": 94,
+    "totalAsResidence": 132,
+    "isAnchor": false
+  },
+  {
+    "zip": "81642",
+    "place": "Meredith",
+    "lat": 39.312809,
+    "lng": -106.567699,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 61,
+    "isAnchor": false
+  },
+  {
+    "zip": "81643",
+    "place": "Mesa",
+    "lat": 39.124092,
+    "lng": -108.149294,
+    "totalAsWorkplace": 12,
+    "totalAsResidence": 40,
+    "isAnchor": false
+  },
+  {
+    "zip": "81645",
+    "place": "Minturn",
+    "lat": 39.455587,
+    "lng": -106.458361,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 4,
+    "isAnchor": false
+  },
+  {
+    "zip": "81646",
+    "place": "Molina",
+    "lat": 39.1044,
+    "lng": -108.005195,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 6,
+    "isAnchor": false
+  },
+  {
+    "zip": "81647",
+    "place": "New Castle",
+    "lat": 39.5736,
+    "lng": -107.5306,
+    "totalAsWorkplace": 940,
+    "totalAsResidence": 3587,
+    "isAnchor": true
+  },
+  {
+    "zip": "81648",
+    "place": "Rangely",
+    "lat": 39.904489,
+    "lng": -108.791994,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 17,
+    "isAnchor": false
+  },
+  {
+    "zip": "81650",
+    "place": "Rifle",
+    "lat": 39.5347,
+    "lng": -107.7831,
+    "totalAsWorkplace": 4154,
+    "totalAsResidence": 6709,
+    "isAnchor": true
+  },
+  {
+    "zip": "81652",
+    "place": "Silt",
+    "lat": 39.5483,
+    "lng": -107.6539,
+    "totalAsWorkplace": 1017,
+    "totalAsResidence": 2880,
+    "isAnchor": true
+  },
+  {
+    "zip": "81654",
+    "place": "Snowmass",
+    "lat": 39.331,
+    "lng": -106.9849,
+    "totalAsWorkplace": 283,
+    "totalAsResidence": 800,
+    "isAnchor": true
+  },
+  {
+    "zip": "81656",
+    "place": "Woody Creek",
+    "lat": 39.279456,
+    "lng": -106.7871,
+    "totalAsWorkplace": 31,
+    "totalAsResidence": 165,
+    "isAnchor": false
+  },
+  {
+    "zip": "81657",
+    "place": "Vail",
+    "lat": 39.649325,
+    "lng": -106.325837,
+    "totalAsWorkplace": 366,
+    "totalAsResidence": 102,
+    "isAnchor": false
+  },
+  {
+    "zip": "84078",
+    "place": "Vernal",
+    "lat": 40.465526,
+    "lng": -109.510856,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 24,
+    "isAnchor": false
+  },
+  {
+    "zip": "ALL_OTHER",
+    "place": "All Other Locations",
+    "lat": null,
+    "lng": null,
+    "totalAsWorkplace": 8777,
+    "totalAsResidence": 8774,
+    "isAnchor": false,
+    "isSynthetic": true
+  }
+]
