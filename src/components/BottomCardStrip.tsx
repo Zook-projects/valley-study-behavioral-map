@@ -19,13 +19,11 @@ import { useId, useMemo, useRef, useState } from 'react';
 import { fmtInt, fmtPct } from '../lib/format';
 import type {
   AgeBlock,
-  EducationBlock,
   Naics3Block,
   OdAggregate,
   OdPartner,
   OdSummaryEntry,
   OdSummaryFile,
-  RaceBlock,
   RacFile,
   RacWacAggregate,
   RacWacLatest,
@@ -439,25 +437,6 @@ function naicsRows(b: Naics3Block) {
     { label: 'All other services', value: b.allOther },
   ];
 }
-function educationRows(b: EducationBlock) {
-  return [
-    { label: 'Less than HS', value: b.lessHs },
-    { label: 'High school', value: b.hs },
-    { label: 'Some college', value: b.someCol },
-    { label: 'Bachelor +', value: b.bachPlus },
-  ];
-}
-function raceRows(b: RaceBlock) {
-  return [
-    { label: 'White', value: b.white },
-    { label: 'Black', value: b.black },
-    { label: 'Asian', value: b.asian },
-    { label: 'Am. Indian', value: b.amInd },
-    { label: 'NHPI', value: b.nhpi },
-    { label: 'Two or more', value: b.twoOrMore },
-  ];
-}
-
 // ---------------------------------------------------------------------------
 // Aggregate workforce-mix charts — only used when no ZIP is selected.
 // Per-anchor view keeps the original three-section breakdown table.
@@ -747,8 +726,6 @@ function CardsForRacWac({
   scope,
   wacLatest,
   wacTrend,
-  racLatest,
-  racTrend,
   trendDomain,
   showWacTotal = true,
   isAggregate = false,
@@ -756,8 +733,6 @@ function CardsForRacWac({
   scope: string;
   wacLatest: RacWacLatest | null;
   wacTrend: RacWacTrend | null;
-  racLatest: RacWacLatest | null;
-  racTrend: RacWacTrend | null;
   trendDomain?: [number, number];
   // When false, the standalone "Total jobs (WAC)" sparkline card is hidden.
   // The OD card already exposes a totalJobs trend in the per-anchor view, so
@@ -1662,8 +1637,6 @@ export function BottomCardStrip({
           scope={scope}
           wacLatest={blocks.wacLatest}
           wacTrend={blocks.wacTrend}
-          racLatest={blocks.racLatest}
-          racTrend={blocks.racTrend}
           trendDomain={wacDomain}
           showWacTotal={!isPerZip}
           isAggregate={!isPerZip}
