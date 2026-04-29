@@ -37,8 +37,10 @@ import type {
   CorridorFlowEntry,
   CorridorId,
   CorridorRecord,
+  DirectionFilter,
   FlowRow,
   Mode,
+  PassThroughFile,
   SegmentFilter,
   ZipMeta,
 } from '../types/flow';
@@ -46,6 +48,7 @@ import {
   buildVisibleCorridorMap,
 } from '../lib/corridors';
 import {
+  classifyDirection,
   filteredLatestTotal,
   filteredOdLatestTotal,
   filteredTrendSeries,
@@ -1557,6 +1560,26 @@ interface Props {
   // dimensions, so the filter doesn't touch their cards.
   segmentFilter: SegmentFilter;
   onSegmentFilterChange: (next: SegmentFilter) => void;
+  // Active direction filter (All / East / West). When non-'all', the Top
+  // Inflow / Top Outflow partner lists re-derive against the
+  // direction-filtered FlowRow arrays passed in via flowsInbound/flowsOutbound.
+  directionFilter: DirectionFilter;
+  // Pass-through dataset (latest-year LODES OD pairs whose endpoints flank an
+  // anchor). null when the data file hasn't loaded yet. The card is rendered
+  // only when an anchor is selected and the dataset is available.
+  passThrough: PassThroughFile | null;
+  // Cross-filter state for the pass-through card. Each selection carries
+  // both the place name and the canonical ZIP set — a single rolled-up row
+  // (e.g., "Eagle · multiple") spans more than one ZIP and all of them
+  // must match for the cross-filter to be accurate.
+  passThroughOrigin: { place: string; zips: string[] } | null;
+  passThroughDest: { place: string; zips: string[] } | null;
+  onPassThroughOriginChange: (
+    sel: { place: string; zips: string[] } | null,
+  ) => void;
+  onPassThroughDestChange: (
+    sel: { place: string; zips: string[] } | null,
+  ) => void;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {
@@ -1701,6 +1724,376 @@ function perZipBlocks(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Pass-through traffic card
+// ---------------------------------------------------------------------------
+// Surfaces OD pairs that flow PAST a selected anchor (residence on one
+// longitudinal side, workplace on the other) without either endpoint being
+// the anchor itself. Two columns:
+//   • Left  — origin (residence) ZIPs
+//   • Right — destination (workplace) ZIPs
+// Each side lists the top 10 ZIPs by worker count plus an "All other"
+// residual. Selecting a ZIP on one side cross-filters the other side and
+// is exposed upstream (App.tsx) for the map filter.
+const PASS_THROUGH_TOP_N = 10;
+
+// Display row produced by the place-rollup. zipLabel is the single ZIP when
+// the row represents one ZIP, or the literal string 'multiple' when the
+// place spans more than one (matching the convention od-summary.json uses
+// for the same situation in the partner list).
+interface PassThroughDisplayRow {
+  place: string;
+  zipLabel: string;
+  zips: string[];
+  workers: number;
+}
+
+function PassThroughList({
+  rows,
+  total,
+  residual,
+  selected,
+  oppositeSelected,
+  onSelect,
+}: {
+  rows: PassThroughDisplayRow[];
+  // Display denominator — used for percent column. When the unfiltered
+  // grand total is known (anchor + mode total including residual), pass
+  // it here so percents are stable across cross-filter selections.
+  total: number;
+  // Sum of pairs beyond the per-anchor cap (build-time tail). Surfaced as
+  // a single "All Other Locations" row when no cross-filter is active —
+  // can't be sliced further once a filter narrows the visible set.
+  residual: number;
+  selected: { place: string; zips: string[] } | null;
+  oppositeSelected: { place: string; zips: string[] } | null;
+  onSelect: (sel: { place: string; zips: string[] } | null) => void;
+}) {
+  if (rows.length === 0 && total === 0) {
+    return (
+      <div className="text-[11px]" style={{ color: 'var(--text-dim)' }}>
+        No pass-through pairs in latest vintage.
+      </div>
+    );
+  }
+  const denom = total || rows.reduce((s, r) => s + r.workers, 0) || 1;
+  const top = rows.slice(0, PASS_THROUGH_TOP_N);
+  const tailWorkers = rows
+    .slice(PASS_THROUGH_TOP_N)
+    .reduce((s, r) => s + r.workers, 0);
+  // Combine the runtime tail (rows beyond top-10) with the build-time
+  // residual into one "All Other Locations" row.
+  const remainderWorkers = tailWorkers + residual;
+  // Total displayed at the bottom — sum of the rows actually rendered,
+  // which mirrors the column's filtered universe.
+  const renderedTotal = top.reduce((s, r) => s + r.workers, 0) + remainderWorkers;
+  return (
+    <table className="w-full text-[11px] tnum">
+      <tbody>
+        {top.map((r) => {
+          const isActive = selected?.place === r.place;
+          const dimmed = !isActive && (selected != null || oppositeSelected != null);
+          return (
+            <tr
+              key={r.place}
+              onClick={() =>
+                onSelect(isActive ? null : { place: r.place, zips: r.zips })
+              }
+              className="cursor-pointer"
+              style={{
+                background: isActive ? 'rgba(255,255,255,0.10)' : undefined,
+                opacity: dimmed ? 0.55 : 1,
+              }}
+            >
+              <td className="pr-2 truncate pl-1" style={{ color: 'var(--text-h)' }}>
+                {r.place}
+                <span className="ml-1" style={{ color: 'var(--text-dim)' }}>
+                  · {r.zipLabel}
+                </span>
+              </td>
+              <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
+                {fmtInt(r.workers)}
+              </td>
+              <td className="text-right pr-1" style={{ color: 'var(--text-dim)' }}>
+                {fmtPct(r.workers / denom)}
+              </td>
+            </tr>
+          );
+        })}
+        {remainderWorkers > 0 && (
+          <tr>
+            <td className="pr-2 truncate pl-1" style={{ color: 'var(--text-h)' }}>
+              All Other Locations
+            </td>
+            <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
+              {fmtInt(remainderWorkers)}
+            </td>
+            <td className="text-right pr-1" style={{ color: 'var(--text-dim)' }}>
+              {fmtPct(remainderWorkers / denom)}
+            </td>
+          </tr>
+        )}
+        <tr style={{ borderTop: '1px solid var(--border-soft, rgba(255,255,255,0.10))' }}>
+          <td
+            className="pr-2 pl-1 pt-1 font-semibold uppercase tracking-wider text-[9px]"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            Total
+          </td>
+          <td
+            className="text-right pr-2 pt-1 font-semibold"
+            style={{ color: 'var(--text-h)' }}
+          >
+            {fmtInt(renderedTotal)}
+          </td>
+          <td
+            className="text-right pr-1 pt-1"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            {fmtPct(renderedTotal / denom)}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+function PassThroughCard({
+  anchorZip,
+  anchorPlace,
+  passThrough,
+  zipPlaces,
+  zips,
+  mode,
+  directionFilter,
+  origin,
+  dest,
+  onOriginChange,
+  onDestChange,
+}: {
+  anchorZip: string;
+  anchorPlace: string;
+  passThrough: PassThroughFile;
+  zipPlaces: Map<string, string>;
+  zips: ZipMeta[];
+  mode: Mode;
+  directionFilter: DirectionFilter;
+  origin: { place: string; zips: string[] } | null;
+  dest: { place: string; zips: string[] } | null;
+  onOriginChange: (sel: { place: string; zips: string[] } | null) => void;
+  onDestChange: (sel: { place: string; zips: string[] } | null) => void;
+}) {
+  // Mode-aware bucket: inbound surfaces pairs whose workplace is one of
+  // the OTHER 10 anchors (workers passing through this anchor on their way
+  // to another anchor's workplace); outbound surfaces pairs whose
+  // residence is at one of the OTHER 10 anchors.
+  const anchorEntry = passThrough.byAnchor[anchorZip];
+  const modeEntry = mode === 'inbound' ? anchorEntry?.inbound : anchorEntry?.outbound;
+
+  // Aggregate the (origin, dest) pair list into per-side rollups KEYED BY
+  // PLACE NAME — multiple ZIPs sharing a place (e.g., Eagle 81637 + 81631)
+  // collapse into a single row labeled "{place} · multiple" with a unioned
+  // ZIP set. Cross-filter selections compare on place name and apply on
+  // the unioned ZIP set.
+  const rollup = useMemo(() => {
+    const empty = {
+      origins: [] as PassThroughDisplayRow[],
+      dests: [] as PassThroughDisplayRow[],
+      originTotal: 0,
+      destTotal: 0,
+    };
+    if (!modeEntry) return empty;
+    type AggBucket = { place: string; zips: Set<string>; workers: number };
+    const originAgg = new Map<string, AggBucket>();
+    const destAgg = new Map<string, AggBucket>();
+    const placeOf = (zip: string) => zipPlaces.get(zip) || zip;
+    const destZipsSet = dest ? new Set(dest.zips) : null;
+    const originZipsSet = origin ? new Set(origin.zips) : null;
+    let originTotal = 0;
+    let destTotal = 0;
+    for (const p of modeEntry.pairs) {
+      // Direction filter: classify the (origin → dest) bearing using the
+      // same E/W rule the map uses elsewhere. Pairs classified 'neutral'
+      // (N-S dominated, same-cluster, or missing centroids) drop out of
+      // East/West buckets — keeping them in would smuggle perpendicular
+      // pass-through pairs into a directional view.
+      if (
+        directionFilter !== 'all' &&
+        classifyDirection(p.originZip, p.destZip, zips) !== directionFilter
+      ) {
+        continue;
+      }
+      // Origin column reflects the (current dest filter) constraint.
+      if (!destZipsSet || destZipsSet.has(p.destZip)) {
+        const place = placeOf(p.originZip);
+        const b = originAgg.get(place) ?? {
+          place,
+          zips: new Set<string>(),
+          workers: 0,
+        };
+        b.zips.add(p.originZip);
+        b.workers += p.workerCount;
+        originAgg.set(place, b);
+        originTotal += p.workerCount;
+      }
+      // Dest column reflects the (current origin filter) constraint.
+      if (!originZipsSet || originZipsSet.has(p.originZip)) {
+        const place = placeOf(p.destZip);
+        const b = destAgg.get(place) ?? {
+          place,
+          zips: new Set<string>(),
+          workers: 0,
+        };
+        b.zips.add(p.destZip);
+        b.workers += p.workerCount;
+        destAgg.set(place, b);
+        destTotal += p.workerCount;
+      }
+    }
+    const toRow = (b: AggBucket): PassThroughDisplayRow => {
+      const zips = Array.from(b.zips);
+      return {
+        place: b.place,
+        zipLabel: zips.length > 1 ? 'multiple' : zips[0],
+        zips,
+        workers: b.workers,
+      };
+    };
+    const origins = Array.from(originAgg.values())
+      .map(toRow)
+      .sort((a, b) => b.workers - a.workers);
+    const dests = Array.from(destAgg.values())
+      .map(toRow)
+      .sort((a, b) => b.workers - a.workers);
+    return { origins, dests, originTotal, destTotal };
+  }, [modeEntry, zipPlaces, zips, directionFilter, origin, dest]);
+
+  const directionActive = directionFilter !== 'all';
+  // Build-time residual is computed across the un-direction-filtered tail,
+  // so it can't be apportioned into East/West. Suppress it whenever a
+  // direction filter is active (same rule as cross-filter narrowing).
+  const residualVisible = !directionActive && modeEntry ? modeEntry.residual : 0;
+  const totalPairs = modeEntry
+    ? directionActive
+      ? rollup.originTotal // origin/destTotal match when no cross-filter
+      : modeEntry.pairs.reduce((s, p) => s + p.workerCount, 0) + modeEntry.residual
+    : 0;
+  const filterActive = origin != null || dest != null;
+  const filteredTotal = filterActive
+    ? origin != null
+      ? rollup.destTotal
+      : rollup.originTotal
+    : totalPairs;
+
+  const clearAll = () => {
+    if (origin != null) onOriginChange(null);
+    if (dest != null) onDestChange(null);
+  };
+
+  // Mode-driven copy: which side is the anchor-restricted column, and how
+  // we explain the slice to the reader.
+  const subtitleCopy =
+    mode === 'inbound'
+      ? `Workers commuting past ${anchorPlace} to another anchor workplace · latest year (${passThrough.year})`
+      : `Workers commuting past ${anchorPlace} from another anchor's residents · latest year (${passThrough.year})`;
+
+  // Section box style — matches the pinned tooltip's residence/workplace
+  // sub-cards (see App.tsx pinned panel). The opposite-side section
+  // switches to an amber border whenever a cross-filter is active on this
+  // side, so the user can see which column is being narrowed.
+  const baseSectionBoxStyle: React.CSSProperties = {
+    background: 'var(--bg-card, rgba(255,255,255,0.03))',
+    border: '1px solid var(--border-soft, rgba(255,255,255,0.08))',
+  };
+  const filteredSectionBoxStyle: React.CSSProperties = {
+    background: 'var(--bg-card, rgba(255,255,255,0.03))',
+    border: '1px solid var(--accent)',
+  };
+  // Residence box highlights when DEST is selected (residence column narrows
+  // to dest-paired origins). Workplace box highlights when ORIGIN is
+  // selected (workplace column narrows to origin-paired destinations).
+  const residenceBoxStyle = dest != null ? filteredSectionBoxStyle : baseSectionBoxStyle;
+  const workplaceBoxStyle = origin != null ? filteredSectionBoxStyle : baseSectionBoxStyle;
+
+  return (
+    <div
+      className="glass rounded-md p-3 shrink-0 flex flex-col gap-2"
+      style={{ width: 640 }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div
+            className="text-[10px] font-medium uppercase tracking-wider"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            {anchorPlace} · Pass Through Traffic
+          </div>
+          <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-dim)' }}>
+            {subtitleCopy}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-[11px] tnum" style={{ color: 'var(--text-h)' }}>
+            {fmtInt(filteredTotal)} workers
+          </div>
+          {filterActive && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{
+                color: 'var(--text-h)',
+                background: 'rgba(255,255,255,0.10)',
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex-1 grid grid-cols-2 gap-2 min-h-0">
+        <div className="rounded px-2 py-1.5 flex flex-col gap-1" style={residenceBoxStyle}>
+          <div
+            className="text-[9px] font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--text-h)' }}
+          >
+            Residence
+          </div>
+          <PassThroughList
+            rows={rollup.origins}
+            total={rollup.originTotal + (!filterActive ? residualVisible : 0)}
+            // Build-time residual is only meaningful when no cross-filter
+            // is active and no direction slice is in effect — once a side
+            // narrows the visible pairs (or a direction is selected), the
+            // residual (computed on the unfiltered tail) no longer
+            // belongs to the filtered universe.
+            residual={!filterActive ? residualVisible : 0}
+            selected={origin}
+            oppositeSelected={dest}
+            onSelect={onOriginChange}
+          />
+        </div>
+        <div className="rounded px-2 py-1.5 flex flex-col gap-1" style={workplaceBoxStyle}>
+          <div
+            className="text-[9px] font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--text-h)' }}
+          >
+            Workplace
+          </div>
+          <PassThroughList
+            rows={rollup.dests}
+            total={rollup.destTotal + (!filterActive ? residualVisible : 0)}
+            residual={!filterActive ? residualVisible : 0}
+            selected={dest}
+            oppositeSelected={origin}
+            onSelect={onDestChange}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BottomCardStrip({
   racFile,
   wacFile,
@@ -1716,8 +2109,27 @@ export function BottomCardStrip({
   driveDistance,
   segmentFilter,
   onSegmentFilterChange,
+  directionFilter,
+  passThrough,
+  passThroughOrigin,
+  passThroughDest,
+  onPassThroughOriginChange,
+  onPassThroughDestChange,
 }: Props) {
   const isPerZip = selectedZip != null && selectedZip !== 'ALL_OTHER';
+  // Direction filter forces the partner list to re-derive from the
+  // already-direction-filtered flowsInbound/flowsOutbound arrays. Combined
+  // below with the segment-filter trigger (`filterActive`).
+  const directionActive = directionFilter !== 'all';
+
+  // ZIP → place lookup used by the pass-through card to label rows. Built
+  // from the canonical zips meta array so the card matches the labels used
+  // elsewhere in the UI.
+  const zipPlaces = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const z of zips) m.set(z.zip, z.place);
+    return m;
+  }, [zips]);
 
   // Partner-scoped flow value used to override the OD card's inflow/outflow
   // headlines when a partner is selected. Source dataset is mode-aware:
@@ -2031,7 +2443,7 @@ export function BottomCardStrip({
             >
               <PartnerList
                 partners={
-                  filterActive
+                  filterActive || directionActive
                     ? filterPartners(
                         odEntry.topPartners.inflow,
                         flowsInbound,
@@ -2058,7 +2470,7 @@ export function BottomCardStrip({
             >
               <PartnerList
                 partners={
-                  filterActive
+                  filterActive || directionActive
                     ? filterPartners(
                         odEntry.topPartners.outflow,
                         flowsOutbound,
@@ -2078,6 +2490,21 @@ export function BottomCardStrip({
                 }
               />
             </Card>
+            {passThrough && passThrough.byAnchor[odEntry.zip] && (
+              <PassThroughCard
+                anchorZip={odEntry.zip}
+                anchorPlace={scope}
+                passThrough={passThrough}
+                zipPlaces={zipPlaces}
+                zips={zips}
+                mode={mode}
+                directionFilter={directionFilter}
+                origin={passThroughOrigin}
+                dest={passThroughDest}
+                onOriginChange={onPassThroughOriginChange}
+                onDestChange={onPassThroughDestChange}
+              />
+            )}
           </>
         )}
       </div>

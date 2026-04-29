@@ -112,6 +112,46 @@ export interface CorridorFlowEntry {
   direction: Mode;
 }
 
+// Pass-through OD pairs around an anchor — flows where neither residence
+// nor workplace is the selected anchor and the residence sits on one
+// geographic side (E/W) of the anchor while the workplace sits on the
+// other. Built by scripts/build-passthrough.py from the latest LODES year.
+// The wire format drops segment breakdowns and corridor paths to keep the
+// file small.
+//
+// Mode-aware buckets:
+//   inbound  — workplace ∈ {other 10 anchors} (selected anchor's mode is
+//              "commute IN", so we focus on flows passing through to a
+//              different anchor workplace)
+//   outbound — residence ∈ {other 10 anchors} (selected anchor's mode is
+//              "commute OUT", so we focus on flows where another anchor's
+//              residents pass through this anchor on their commute)
+// Pairs where both endpoints are anchors appear in both buckets.
+export interface PassThroughPair {
+  originZip: string;
+  destZip: string;
+  workerCount: number;
+}
+
+export interface PassThroughModeEntry {
+  // Top-N pairs sorted desc by workerCount (cap defined by build script).
+  pairs: PassThroughPair[];
+  // Sum of workerCounts for pairs beyond the cap. Surfaced as "All other"
+  // residual on both sides of the cross-filter card.
+  residual: number;
+}
+
+export interface PassThroughAnchorEntry {
+  inbound: PassThroughModeEntry;
+  outbound: PassThroughModeEntry;
+}
+
+export interface PassThroughFile {
+  year: number;
+  pairsPerAnchorPerMode: number;
+  byAnchor: Record<string, PassThroughAnchorEntry>;
+}
+
 // Mode-aware runtime rollup keyed by corridor.
 export interface ActiveCorridorAggregation {
   corridorId: CorridorId;

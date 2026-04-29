@@ -21,6 +21,7 @@ import type {
   DirectionFilter,
   FlowRow,
   Mode,
+  PassThroughFile,
   SegmentFilter,
   ZipMeta,
 } from './types/flow';
@@ -91,13 +92,16 @@ function clampTooltipAnchor(
 
 function TooltipBody({
   aggregation,
-  mode,
+  direction,
   zips,
   onSelectPartner,
   selectedPartner,
+  topN = 8,
 }: {
   aggregation: ActiveCorridorAggregation;
-  mode: Mode;
+  // 'residence' renders byOriginZip (where workers come from);
+  // 'workplace' renders byDestZip (where workers go).
+  direction: 'residence' | 'workplace';
   zips: ZipMeta[];
   // When provided, ZIP rows in the breakdown table become clickable —
   // tapping a row sets the partner filter via the same handler the left-rail
@@ -105,8 +109,10 @@ function TooltipBody({
   // chosen place.
   onSelectPartner?: (p: { place: string; zips: string[] }) => void;
   selectedPartner?: { place: string; zips: string[] } | null;
+  topN?: number;
 }) {
-  const map = mode === 'outbound' ? aggregation.byDestZip : aggregation.byOriginZip;
+  const map =
+    direction === 'workplace' ? aggregation.byDestZip : aggregation.byOriginZip;
   const total = aggregation.total || 1;
 
   // Group ZIPs that share a place name (e.g., Eagle 81631 + 81637) into one
@@ -128,9 +134,8 @@ function TooltipBody({
     (a, b) => (b.count - a.count) || a.place.localeCompare(b.place),
   );
 
-  const TOP = 8;
-  const top = rows.slice(0, TOP);
-  const rest = rows.slice(TOP);
+  const top = rows.slice(0, topN);
+  const rest = rows.slice(topN);
   const restCount = rest.reduce((s, r) => s + r.count, 0);
 
   // ZIP-row click target: the entire grouped place (place + every ZIP that
@@ -189,7 +194,7 @@ function TooltipBody({
         {rest.length > 0 && (
           <tr>
             <td className="pr-2 align-baseline italic" style={{ color: 'var(--text-dim)' }}>
-              + {rest.length} more {mode === 'outbound' ? 'destinations' : 'origins'}
+              + {rest.length} more {direction === 'workplace' ? 'destinations' : 'origins'}
             </td>
             <td className="text-right pr-2" style={{ color: 'var(--text)' }}>
               {fmtInt(restCount)}
@@ -214,6 +219,7 @@ export default function App() {
   const [wacFile, setWacFile] = useState<WacFile | null>(null);
   const [odSummary, setOdSummary] = useState<OdSummaryFile | null>(null);
   const [driveDistance, setDriveDistance] = useState<DriveDistanceMap | null>(null);
+  const [passThrough, setPassThrough] = useState<PassThroughFile | null>(null);
   const [mode, setMode] = useState<Mode>('inbound');
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
   // Optional secondary selection — a single partner location chosen from the
@@ -241,6 +247,19 @@ export default function App() {
   // tooltip shows the full breakdown; the hover tooltip is a simplified
   // header-only chip that prompts the user to click for more.
   const [pinned, setPinned] = useState<HoverState | null>(null);
+  // Cross-filter state for the pass-through traffic card. Either side can be
+  // selected independently; when one is set the opposite section's list
+  // narrows to ZIPs paired with the selection (and the map switches to
+  // pass-through flow rendering).
+  // Shape mirrors selectedPartner — cities like Eagle/Grand Junction span
+  // multiple ZIPs that all need to match for filtering, and the rolled-up
+  // pass-through rows surface "{place} · multiple" entries that carry both.
+  const [passThroughOrigin, setPassThroughOrigin] = useState<
+    { place: string; zips: string[] } | null
+  >(null);
+  const [passThroughDest, setPassThroughDest] = useState<
+    { place: string; zips: string[] } | null
+  >(null);
   // When the user clicks empty map to dismiss both tooltips, the mouse may
   // still be over a corridor — without this guard, the next mousemove would
   // immediately re-show the simplified hover tooltip on the dismissed corridor.
@@ -276,8 +295,14 @@ export default function App() {
       fetch(`${DATA_BASE}/drive-distance.json`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
+      // Pass-through flows — optional. Built by scripts/build-passthrough.py
+      // from the latest LODES year. When missing the Pass-Through Traffic
+      // card simply doesn't render.
+      fetch(`${DATA_BASE}/flows-passthrough.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
     ])
-      .then(([fi, fo, z, cg, rac, wac, od, dd]: [
+      .then(([fi, fo, z, cg, rac, wac, od, dd, pt]: [
         FlowRow[],
         FlowRow[],
         ZipMeta[],
@@ -286,6 +311,7 @@ export default function App() {
         WacFile,
         OdSummaryFile,
         DriveDistanceMap | null,
+        PassThroughFile | null,
       ]) => {
         if (cancelled) return;
         // Guard against an old cached JSON (no per-pair segments block) —
@@ -308,6 +334,7 @@ export default function App() {
         setWacFile(wac);
         setOdSummary(od);
         setDriveDistance(dd);
+        setPassThrough(pt);
       })
       .catch((err) => console.error('data load failed', err));
     return () => {
@@ -460,6 +487,13 @@ export default function App() {
     flowsInbound,
   ]);
 
+  // Pass-through cross-filter shares the lifecycle of the partner filter —
+  // it scopes to a specific anchor + a residence/workplace pair, so any
+  // change that invalidates the anchor context also invalidates it.
+  const clearPassThrough = () => {
+    setPassThroughOrigin(null);
+    setPassThroughDest(null);
+  };
   const handleModeChange = (m: Mode) => {
     setHover(null);
     setPinned(null);
@@ -468,18 +502,21 @@ export default function App() {
     // context — clear it when any of those change so we don't carry an
     // orphaned partner across views where it wouldn't be visible.
     setSelectedPartner(null);
+    clearPassThrough();
   };
   const handleSelectZip = (z: string | null) => {
     setHover(null);
     setPinned(null);
     setSelectedZip(z);
     setSelectedPartner(null);
+    clearPassThrough();
   };
   const handleDirectionChange = (d: DirectionFilter) => {
     setHover(null);
     setPinned(null);
     setDirectionFilter(d);
     setSelectedPartner(null);
+    clearPassThrough();
   };
   const handleSelectPartner = (
     p: { place: string; zips: string[] } | null,
@@ -487,11 +524,30 @@ export default function App() {
     setHover(null);
     setPinned(null);
     setSelectedPartner(p);
+    clearPassThrough();
   };
   const handleSegmentFilterChange = (next: SegmentFilter) => {
     setHover(null);
     setPinned(null);
     setSegmentFilter(next);
+  };
+  const handlePassThroughOrigin = (
+    sel: { place: string; zips: string[] } | null,
+  ) => {
+    setHover(null);
+    setPinned(null);
+    setPassThroughOrigin(sel);
+    // Selecting a pass-through filter takes precedence over the partner
+    // filter — they target different flow universes and shouldn't stack.
+    setSelectedPartner(null);
+  };
+  const handlePassThroughDest = (
+    sel: { place: string; zips: string[] } | null,
+  ) => {
+    setHover(null);
+    setPinned(null);
+    setPassThroughDest(sel);
+    setSelectedPartner(null);
   };
 
   if (
@@ -517,10 +573,21 @@ export default function App() {
 
   const headerFor = (s: HoverState) =>
     `${s.aggregation.corridor.label} — ${fmtInt(s.aggregation.total)} workers`;
-  const subheadFor = (s: HoverState) =>
-    mode === 'outbound'
-      ? `Workers travel through here to ${s.aggregation.byDestZip.size} work ZIP(s)`
-      : `Workers come from ${s.aggregation.byOriginZip.size} residence ZIP(s) through this segment`;
+  // Per-card subheads. Residence card describes the origin fan-in; Workplace
+  // card describes the destination fan-out. Both are derived from the same
+  // aggregation so a corridor click renders both axes simultaneously.
+  const subheadForDirection = (
+    s: HoverState,
+    direction: 'residence' | 'workplace',
+  ) =>
+    direction === 'residence'
+      ? `Workers come from ${s.aggregation.byOriginZip.size} residence ZIP(s) through this segment`
+      : `Workers travel through here to ${s.aggregation.byDestZip.size} work ZIP(s)`;
+  // Partner filter is mode-aware: in inbound mode the partner is a residence
+  // ZIP, in outbound mode it's a workplace ZIP. Only the matching card's rows
+  // are clickable for partner filtering; the other card is informational.
+  const partnerDirection: 'residence' | 'workplace' =
+    mode === 'inbound' ? 'residence' : 'workplace';
 
   // Suppress the simplified hover chip when:
   //   (a) the user is hovering over the already-pinned corridor — the full
@@ -591,10 +658,13 @@ export default function App() {
           }}
         />
 
-        {/* Credit chip */}
+        {/* Credit chip — docked to the right edge just above the bottom
+            card strip. The strip is anchored to bottom: 0 with a variable
+            content height (~330px); the chip uses a slightly larger offset
+            so it always clears the cards. */}
         <div
-          className="absolute top-4 right-4 glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
-          style={{ color: 'var(--text-h)' }}
+          className="absolute right-4 glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
+          style={{ color: 'var(--text-h)', bottom: 348 }}
         >
           Created by Jacob Zook
         </div>
@@ -619,103 +689,145 @@ export default function App() {
             clicks the × close button, presses Escape, or clicks empty map.
             pointer-events: auto so the close button and clickable ZIP rows
             are interactive; the rest of the body is text-selectable. */}
-        {pinned && (
-          <div
-            className="fixed glass rounded-md px-3 py-2 text-[11px] z-50"
-            role="dialog"
-            aria-label="Corridor breakdown"
-            style={{
-              top: 60,
-              right: 16,
-              width: 300,
-              maxHeight: 'calc(100vh - 280px)',
-              overflowY: 'auto',
-              border: '1px solid var(--accent)',
-            }}
-          >
-            <div className="flex items-start justify-between gap-2 mb-0.5">
-              <div className="flex-1 min-w-0">
-                <div
-                  className="text-[9px] font-semibold uppercase tracking-wider mb-0.5"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  {selectedZip ? 'Pinned · click ZIP to filter' : 'Pinned'}
-                </div>
-                <span className="font-medium" style={{ color: 'var(--text-h)' }}>
-                  {headerFor(pinned)}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPinned(null)}
-                aria-label="Close pinned tooltip"
-                className="shrink-0 -mr-1 -mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
-                style={{ color: 'var(--text-h)', lineHeight: 1 }}
-              >
-                ×
-              </button>
-            </div>
-            <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-              {subheadFor(pinned)}
-            </div>
-            <TooltipBody
-              aggregation={pinned.aggregation}
-              mode={mode}
-              zips={zips}
-              selectedPartner={selectedPartner}
-              // Partner filtering only makes sense within an anchor context —
-              // it scopes the partner→anchor (or anchor→partner) flow. In
-              // aggregate view (no anchor), leave rows informational rather
-              // than wiring a filter that has no anchor to scope against.
-              onSelectPartner={
-                selectedZip
-                  ? (p) => {
-                      const isSame = selectedPartner?.place === p.place;
-                      // Set partner state directly (rather than going through
-                      // handleSelectPartner) so the pinned tooltip stays open
-                      // and the user can keep exploring the breakdown while
-                      // the filter is active.
-                      setHover(null);
-                      setSelectedPartner(isSame ? null : p);
-                    }
-                  : undefined
+        {pinned && (() => {
+          // Click handler shared by whichever card matches the active mode's
+          // partner axis. In aggregate view (no anchor) partner filtering has
+          // nothing to scope against, so rows are left informational.
+          const partnerClickHandler = selectedZip
+            ? (p: { place: string; zips: string[] }) => {
+                const isSame = selectedPartner?.place === p.place;
+                // Set partner state directly (rather than through
+                // handleSelectPartner) so the pinned tooltip stays open and
+                // the user can keep exploring the breakdown.
+                setHover(null);
+                setSelectedPartner(isSame ? null : p);
               }
-            />
-            <div className="mt-1 text-[10px]" style={{ color: 'var(--text-dim)' }}>
-              {pinned.aggregation.flows.length} flow
-              {pinned.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
-            </div>
-          </div>
-        )}
-
-        {/* Simplified hover tooltip — header + subhead + click prompt only.
-            Edge-aware placement (clampTooltipAnchor) flips it above/left of
-            the cursor near the right/bottom edges so it never clips. Hidden
-            when hovering the already-pinned corridor. */}
-        {showHover && hover && (() => {
-          // Conservative footprint estimate — actual content is usually a
-          // bit smaller, so the clamp errs on the side of more clearance.
-          const anchor = clampTooltipAnchor(hover.clientX, hover.clientY, 280, 110);
+            : undefined;
           return (
             <div
-              className="fixed pointer-events-none glass rounded-md px-3 py-2 text-[11px] z-50"
+              className="fixed glass rounded-md px-3 py-2 text-[11px] z-50"
+              role="dialog"
+              aria-label="Corridor breakdown"
+              style={{
+                top: 60,
+                right: 16,
+                width: 320,
+                maxHeight: 'calc(100vh - 280px)',
+                overflowY: 'auto',
+                border: '1px solid var(--accent)',
+              }}
+            >
+              {/* Panel header — corridor label, total, close button. */}
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-[9px] font-semibold uppercase tracking-wider mb-0.5"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    {selectedZip ? 'Pinned · click ZIP to filter' : 'Pinned'}
+                  </div>
+                  <span className="font-medium" style={{ color: 'var(--text-h)' }}>
+                    {headerFor(pinned)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPinned(null)}
+                  aria-label="Close pinned tooltip"
+                  className="shrink-0 -mr-1 -mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
+                  style={{ color: 'var(--text-h)', lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Card 1 — Places of Residence (origins, byOriginZip). */}
+              <div
+                className="rounded px-2 py-1.5 mb-2"
+                style={{
+                  background: 'var(--bg-card, rgba(255,255,255,0.03))',
+                  border: '1px solid var(--border-soft, rgba(255,255,255,0.08))',
+                }}
+              >
+                <div
+                  className="text-[9px] font-semibold uppercase tracking-wider mb-0.5"
+                  style={{ color: 'var(--text-h)' }}
+                >
+                  Places of Residence
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
+                  {subheadForDirection(pinned, 'residence')}
+                </div>
+                <TooltipBody
+                  aggregation={pinned.aggregation}
+                  direction="residence"
+                  zips={zips}
+                  selectedPartner={selectedPartner}
+                  onSelectPartner={
+                    partnerDirection === 'residence' ? partnerClickHandler : undefined
+                  }
+                />
+              </div>
+
+              {/* Card 2 — Places of Work (destinations, byDestZip). */}
+              <div
+                className="rounded px-2 py-1.5"
+                style={{
+                  background: 'var(--bg-card, rgba(255,255,255,0.03))',
+                  border: '1px solid var(--border-soft, rgba(255,255,255,0.08))',
+                }}
+              >
+                <div
+                  className="text-[9px] font-semibold uppercase tracking-wider mb-0.5"
+                  style={{ color: 'var(--text-h)' }}
+                >
+                  Places of Work
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
+                  {subheadForDirection(pinned, 'workplace')}
+                </div>
+                <TooltipBody
+                  aggregation={pinned.aggregation}
+                  direction="workplace"
+                  zips={zips}
+                  selectedPartner={selectedPartner}
+                  onSelectPartner={
+                    partnerDirection === 'workplace' ? partnerClickHandler : undefined
+                  }
+                />
+              </div>
+
+              <div className="mt-2 text-[10px]" style={{ color: 'var(--text-dim)' }}>
+                {pinned.aggregation.flows.length} flow
+                {pinned.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Hover tooltip — single-line chip showing the corridor label and
+            total workers. Edge-aware placement (clampTooltipAnchor) flips
+            it above/left of the cursor near the right/bottom edges so it
+            never clips. Hidden when hovering the already-pinned corridor —
+            click the corridor for the full breakdown. */}
+        {showHover && hover && (() => {
+          const anchor = clampTooltipAnchor(hover.clientX, hover.clientY, 280, 48);
+          return (
+            <div
+              className="fixed pointer-events-none glass rounded-md px-2.5 py-1.5 text-[11px] z-50 whitespace-nowrap"
               style={{
                 left: anchor.left,
                 top: anchor.top,
-                maxWidth: 280,
               }}
             >
-              <div className="mb-0.5" style={{ color: 'var(--text-h)' }}>
-                <span className="font-medium">{headerFor(hover)}</span>
-              </div>
-              <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                {subheadFor(hover)}
+              <div className="font-medium" style={{ color: 'var(--text-h)' }}>
+                {headerFor(hover)}
               </div>
               <div
-                className="mt-1 text-[10px] italic"
+                className="text-[10px] italic mt-0.5"
                 style={{ color: 'var(--accent)' }}
               >
-                Click on a road segment to view more +
+                Click to view more +
               </div>
             </div>
           );
@@ -737,6 +849,12 @@ export default function App() {
           driveDistance={driveDistance}
           segmentFilter={segmentFilter}
           onSegmentFilterChange={handleSegmentFilterChange}
+          directionFilter={directionFilter}
+          passThrough={passThrough}
+          passThroughOrigin={passThroughOrigin}
+          passThroughDest={passThroughDest}
+          onPassThroughOriginChange={handlePassThroughOrigin}
+          onPassThroughDestChange={handlePassThroughDest}
         />
       </main>
     </div>
