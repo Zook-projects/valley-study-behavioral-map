@@ -39,9 +39,17 @@ html, body, #root {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
   background: var(--bg-base);
+}
+
+/* Desktop locks the viewport so the map + tile + bottom strip composite as a
+   single fixed-size canvas. Mobile (< 768px) uses the stacked-column layout
+   in App.tsx and needs normal document scrolling. */
+@media (min-width: 768px) {
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
 }
 
 /* Tabular numerals for stat tiles */

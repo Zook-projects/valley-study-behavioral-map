@@ -73,10 +73,9 @@ export function DashboardTile({
 }: Props) {
   return (
     <aside
-      className="glass relative z-10 flex flex-col h-full overflow-hidden"
-      style={{ width: 380 }}
+      className="glass relative z-10 flex flex-col w-full md:w-[380px] md:h-full md:overflow-hidden"
     >
-      <div className="flex-1 overflow-y-auto px-5 pt-5 pb-4 space-y-4">
+      <div className="px-5 pt-5 pb-4 space-y-4 md:flex-1 md:overflow-y-auto">
         {/* Header */}
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">

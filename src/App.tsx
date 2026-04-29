@@ -563,7 +563,7 @@ export default function App() {
     !odSummary
   ) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center">
+      <div className="min-h-screen w-full md:w-screen md:h-screen flex items-center justify-center">
         <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>
           Loading flow data…
         </div>
@@ -600,7 +600,7 @@ export default function App() {
     hover.corridorId !== suppressedHover;
 
   return (
-    <div className="w-screen h-screen flex relative" style={{ background: 'var(--bg-base)' }}>
+    <div className="min-h-screen w-full flex flex-col relative md:w-screen md:h-screen md:flex-row" style={{ background: 'var(--bg-base)' }}>
       <DashboardTile
         flows={flows}
         directionFilteredFlows={directionFilteredFlows}
@@ -622,7 +622,13 @@ export default function App() {
         topCorridorOutbound={topCorridorOutbound}
         driveDistance={driveDistance}
       />
-      <main className="flex-1 relative">
+      <main className="relative w-full md:flex-1">
+        {/* Map area wrapper — gives the absolutely-positioned MapCanvas
+            (position:absolute; inset:0) a sized ancestor on mobile so the
+            BottomCardStrip can sit beneath it in document flow. On desktop
+            the wrapper fills main (md:absolute md:inset-0), restoring the
+            pre-mobile layout where overlays and the strip stack via z-index. */}
+        <div className="relative w-full h-[60vh] md:h-auto md:absolute md:inset-0">
         <MapCanvas
           flows={flows}
           zips={zips}
@@ -663,8 +669,8 @@ export default function App() {
             content height (~330px); the chip uses a slightly larger offset
             so it always clears the cards. */}
         <div
-          className="absolute right-4 glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
-          style={{ color: 'var(--text-h)', bottom: 348 }}
+          className="absolute right-4 bottom-2 md:bottom-[348px] glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
+          style={{ color: 'var(--text-h)' }}
         >
           Created by Jacob Zook
         </div>
@@ -682,6 +688,12 @@ export default function App() {
             handleSegmentFilterChange({ axis: 'all', buckets: [] })
           }
         />
+        </div>
+        {/* End map area wrapper. Pinned + hover tooltips below are position:fixed
+            so they live outside the wrapper and don't affect document flow. The
+            BottomCardStrip is a sibling — absolute bottom-0 of main on every
+            viewport, so it overlays the bottom of the 60vh map on mobile and
+            the full-height map on desktop. */}
 
         {/* Pinned tooltip — full breakdown, docked to the top-right of the
             map area so reading position stays stable (does not chase the
@@ -705,15 +717,10 @@ export default function App() {
             : undefined;
           return (
             <div
-              className="fixed glass rounded-md px-3 py-2 text-[11px] z-50"
+              className="fixed glass rounded-md px-3 py-2 text-[11px] z-50 top-2 left-2 right-2 md:top-[60px] md:right-4 md:left-auto md:w-[320px] max-h-[70vh] md:max-h-[calc(100vh-280px)] overflow-y-auto"
               role="dialog"
               aria-label="Corridor breakdown"
               style={{
-                top: 60,
-                right: 16,
-                width: 320,
-                maxHeight: 'calc(100vh - 280px)',
-                overflowY: 'auto',
                 border: '1px solid var(--accent)',
               }}
             >

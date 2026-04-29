@@ -46,7 +46,7 @@ function StatRow({ label, value, sub }: { label: string; value: string; sub?: st
         {label}
       </div>
       <div className="mt-1 flex items-baseline gap-2">
-        <div className="text-xl font-semibold tnum" style={{ color: 'var(--text-h)' }}>
+        <div className="text-xl font-semibold tnum whitespace-nowrap" style={{ color: 'var(--text-h)' }}>
           {value}
         </div>
         {sub && (
