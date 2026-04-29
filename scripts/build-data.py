@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """
-build-data.py — Convert LEHD OnTheMap exports into flow + ZIP + corridor JSON.
+build-data.py — Convert filtered LODES8 extracts into flow + ZIP + corridor JSON.
 
 Reads:
-  - ../LEHD - Zip Code Jobs Data.xlsx
-      sheet "LEHD Commute Inbound"  — anchor workplace ZIP → top-25 home ZIPs
-      sheet "LEHD Commute Outbound" — anchor residence ZIP → top-25 work ZIPs
+  - data/lodes-cache/filtered/{rac,wac,od}-YYYY.csv (built by fetch-lodes.py)
   - public/data/corridors.geojson — hand-authored canonical corridor graph
   - 2024 Census ZCTA Gazetteer (downloaded to /tmp on first run)
 
-Writes:
-  - public/data/flows-inbound.json   (workplace-anchored; corridorPath baked in)
-  - public/data/flows-outbound.json  (residence-anchored; corridorPath baked in)
-  - public/data/zips.json            (union of all ZIPs in either dataset)
-  - public/data/corridors.json       (smoothed geometries + node metadata)
+Writes (all under public/data/):
+  - flows-inbound.json    workplace-anchored flows (latest year, corridorPath baked in)
+  - flows-outbound.json   residence-anchored flows (latest year, corridorPath baked in)
+  - zips.json             union of every ZIP appearing in flows + the 11 anchors
+  - corridors.json        smoothed geometries + node metadata
+  - rac.json              per-ZIP residence-side panel (latest + 2002–2023 trend) + aggregate
+  - wac.json              per-ZIP workplace-side panel (latest + 2002–2023 trend) + aggregate
+  - od-summary.json       per-anchor inflow/outflow blocks + top partners + aggregate
 
-No network calls. Deterministic — two runs against identical inputs produce
-byte-identical outputs.
+The flow JSONs ship the latest LODES vintage only (rendered on the map). The
+2002–2023 trend story lives in rac.json / wac.json / od-summary.json and is
+consumed by the bottom card strip's sparklines.
+
+No network calls (after the first gazetteer fetch). Deterministic — two runs
+against identical inputs produce byte-identical outputs.
 
 Run via: python3 scripts/build-data.py
 """
@@ -30,8 +35,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-import openpyxl
-
+import lodes
 from osrm import OsrmError, route_polyline
 from smoothing import haversine_length_meters
 
@@ -40,8 +44,6 @@ from smoothing import haversine_length_meters
 # ---------------------------------------------------------------------------
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
-VAULT_DIR = PROJECT_ROOT.parent  # .../Valley Study - Behavioral Map/
-XLSX_PATH = VAULT_DIR / "LEHD - Zip Code Jobs Data.xlsx"
 OUT_DIR = PROJECT_ROOT / "public" / "data"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -52,16 +54,12 @@ GAZ_URL = "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazett
 GAZ_LOCAL_TXT = Path("/tmp/2024_Gaz_zcta_national.txt")
 GAZ_LOCAL_ZIP = Path("/tmp/gaz_zcta_2024.zip")
 
-# Coordinate rounding for output JSON. ~10 cm at 6 decimals — well below the
-# rendering precision and below any plausible authoring fidelity.
 COORD_DECIMALS = 6
-
-# OSRM snap-radius (meters). None = use OSRM's built-in nearest-road
-# tolerance, which is permissive enough to accept hand-authored control
-# points sketched roughly along a highway. The route is still constrained
-# to follow the right highway because we pass every controlPoint as an
-# ordered via-point — OSRM threads the route through them in sequence.
 OSRM_SNAP_RADIUS_M: int | None = None
+
+# Latest LODES vintage shipped on the map. The card-strip sparklines render
+# the full 2002–2023 series; the corridor map renders this single year.
+LATEST_YEAR = lodes.LATEST_YEAR
 
 # Anchor ZIPs — appear as workplace (inbound) and residence (outbound).
 ANCHOR_ZIPS = {
@@ -69,8 +67,8 @@ ANCHOR_ZIPS = {
     "81630", "81635", "81647", "81650", "81652", "81654",
 }
 
-# City-center coordinates for anchor ZIPs. Same overrides as v2 — gazetteer
-# centroids are too far from downtown for sprawling resort/rural ZIPs.
+# City-center coordinates for anchor ZIPs. Same overrides as the prior build —
+# gazetteer centroids are too far from downtown for sprawling resort/rural ZIPs.
 CITY_CENTROIDS: dict[str, tuple[float, float]] = {
     "81601": (39.5505, -107.3248),
     "81611": (39.1911, -106.8175),
@@ -85,21 +83,26 @@ CITY_CENTROIDS: dict[str, tuple[float, float]] = {
     "81654": (39.3310, -106.9849),
 }
 
-# Gateway routing rules. ZIPs outside the in-valley corridor topology are
-# routed via one of the two gateway nodes based on their centroid longitude
-# relative to Glenwood Springs. ZIPs east of Glenwood route via GW_E (toward
-# Eagle/Vail/Front Range); ZIPs west of Glenwood route via GW_W (toward
-# Grand Junction). Out-of-state and centroid-less ZIPs fall through to
-# ALL_OTHER reclassification.
-#
-# This is centroid-based, not prefix-based. The 81xxx prefix straddles both
-# sides of Glenwood (Grand Junction-area to the west, Eagle County to the
-# east), so routing by prefix incorrectly sends Eagle County flows through
-# the western corridor.
+# Friendly place names for the 11 anchors. External CO ZIPs fall back to
+# whatever the gazetteer-derived seed map provides; if both miss, the UI
+# renders the bare ZIP code.
+ANCHOR_PLACE_NAMES: dict[str, str] = {
+    "81601": "Glenwood Springs",
+    "81611": "Aspen",
+    "81615": "Snowmass Village",
+    "81621": "Basalt",
+    "81623": "Carbondale",
+    "81630": "DeBeque",
+    "81635": "Battlement Mesa",
+    "81647": "New Castle",
+    "81650": "Rifle",
+    "81652": "Silt",
+    "81654": "Snowmass",
+}
+
+# Gateway routing rules (preserved from the prior build).
 GATEWAY_E_NODE = "GW_E"
 GATEWAY_W_NODE = "GW_W"
-# Glenwood Springs longitude — boundary between east- and west-bound external
-# ZIPs. Anything strictly east takes GW_E; everything else takes GW_W.
 GATEWAY_SPLIT_LNG = -107.3248
 
 
@@ -135,84 +138,43 @@ def load_gazetteer() -> dict[str, tuple[float, float]]:
 
 
 # ---------------------------------------------------------------------------
-# Sheet readers
+# Place-name resolver
 # ---------------------------------------------------------------------------
-def _coerce_zip(value) -> str:
-    """Normalize ZIP cell to a 5-digit string, or pass 'All Other Locations' through."""
-    if value is None:
-        return ""
-    s = str(value).strip()
-    if s == "All Other Locations":
-        return s
-    if s.isdigit():
-        return s.zfill(5)
-    try:
-        return str(int(s)).zfill(5)
-    except ValueError:
-        return s
-
-
-def load_inbound_rows(wb) -> list[dict]:
-    ws = wb["LEHD Commute Inbound"]
-    rows = []
-    for i, row in enumerate(ws.iter_rows(values_only=True), 1):
-        if i < 7:
-            continue
-        if row[7] is None:
-            continue
-        rows.append({
-            "year": int(row[4]),
-            "workplaceCity": str(row[5]).strip(),
-            "residenceCity": str(row[6]).strip(),
-            "workplaceZip": _coerce_zip(row[7]),
-            "residenceZip": _coerce_zip(row[8]),
-            "workerCount": int(row[9]),
-            "percentage": float(row[10]),
-        })
-    return rows
-
-
-def load_outbound_rows(wb) -> list[dict]:
-    ws = wb["LEHD Commute Outbound"]
-    rows = []
-    for i, row in enumerate(ws.iter_rows(values_only=True), 1):
-        if i < 7:
-            continue
-        if row[1] is None:
-            continue
-        rows.append({
-            "year": int(row[1]),
-            "residenceCity": str(row[2]).strip(),
-            "workplaceCity": str(row[3]).strip(),
-            "residenceZip": _coerce_zip(row[4]),
-            "workplaceZip": _coerce_zip(row[5]),
-            "workerCount": int(row[6]),
-            "percentage": float(row[7]),
-        })
-    return rows
+def load_place_name_seed() -> dict[str, str]:
+    """
+    Bootstrap a ZIP→place lookup from the prior build's zips.json so external
+    CO ZIPs already known to the renderer keep their friendly labels. Anchor
+    overrides win over this seed.
+    """
+    seed: dict[str, str] = {}
+    prior = OUT_DIR / "zips.json"
+    if prior.exists():
+        try:
+            with prior.open(encoding="utf-8") as fh:
+                for entry in json.load(fh):
+                    z = entry.get("zip")
+                    p = entry.get("place")
+                    if z and p:
+                        seed[z] = p
+        except Exception as e:
+            print(f"  ! could not seed place names from prior zips.json: {e}", file=sys.stderr)
+    seed.update(ANCHOR_PLACE_NAMES)
+    return seed
 
 
 # ---------------------------------------------------------------------------
-# Corridor graph — load, validate, smooth
+# Corridor graph — load, validate, route via OSRM
 # ---------------------------------------------------------------------------
 def _round_pair(p: list[float] | tuple[float, float]) -> list[float]:
     return [round(float(p[0]), COORD_DECIMALS), round(float(p[1]), COORD_DECIMALS)]
 
 
 def load_corridor_graph() -> tuple[
-    dict[str, dict],          # nodes: nodeId → {label, lng, lat, zip}
-    list[dict],               # corridors: smoothed corridor records
-    dict[str, list[tuple[str, str, float]]],  # adjacency: nodeId → [(corridorId, neighborId, lengthMeters)]
-    dict[str, str],           # zip_to_node: associatedZip → nodeId
+    dict[str, dict],
+    list[dict],
+    dict[str, list[tuple[str, str, float]]],
+    dict[str, str],
 ]:
-    """
-    Read corridors.geojson, validate, smooth corridor geometries, and return
-    the in-memory representation used by the routing pass.
-
-    The smoothed geometry is computed once here and stored on the corridor
-    record so downstream consumers (Dijkstra, output JSON) all see the same
-    bytes.
-    """
     if not CORRIDORS_GEOJSON.exists():
         raise RuntimeError(
             f"corridors.geojson not found at {CORRIDORS_GEOJSON} — "
@@ -247,8 +209,6 @@ def load_corridor_graph() -> tuple[
                 "zip": zip_str,
             }
             if zip_str:
-                # Multiple nodes may share an associated ZIP (e.g., 81654 → J_OS).
-                # First-write wins, but warn if there's an unexpected collision.
                 if zip_str in zip_to_node and zip_to_node[zip_str] != node_id:
                     print(
                         f"  ! ZIP {zip_str} associated with multiple nodes: "
@@ -260,12 +220,7 @@ def load_corridor_graph() -> tuple[
                     zip_to_node[zip_str] = node_id
         elif kind == "corridor":
             corridors.append({"_props": props})
-        # Ignore other feature kinds.
 
-    # Route every corridor against real road geometry via OSRM, threading
-    # the call through the author's controlPoints as via-points so OSRM
-    # cannot pick a parallel side-road shortcut. Cache hits make repeat
-    # builds offline.
     adjacency: dict[str, list[tuple[str, str, float]]] = {nid: [] for nid in nodes}
     routed_corridors: list[dict] = []
     for c in corridors:
@@ -284,20 +239,9 @@ def load_corridor_graph() -> tuple[
         ctrl = props.get("controlPoints")
         if not isinstance(ctrl, list) or len(ctrl) < 2:
             raise RuntimeError(f"corridor {cid}: needs at least 2 control points")
-        # Anchor first/last control points exactly to their node coordinates so
-        # corridor endpoints meet the node centers — important when authors
-        # sketch slightly off-anchor control points.
         ctrl = [[float(p[0]), float(p[1])] for p in ctrl]
         ctrl[0] = [nodes[from_id]["lng"], nodes[from_id]["lat"]]
         ctrl[-1] = [nodes[to_id]["lng"], nodes[to_id]["lat"]]
-
-        # Route from the from-node directly to the to-node — no intermediate
-        # via-points. The hand-authored controlPoints were shaped for the
-        # legacy Catmull-Rom smoother and sit roughly along (not on) the
-        # highway, which causes OSRM to double back at each one. The valley's
-        # major-highway corridors (Hwy 82, I-70, Brush Creek Rd) are
-        # unambiguous routes between any two valley nodes — OSRM's driving
-        # profile picks them by default because they're the fastest paths.
         endpoints = [ctrl[0], ctrl[-1]]
         try:
             geometry = route_polyline(
@@ -309,12 +253,8 @@ def load_corridor_graph() -> tuple[
         except OsrmError as e:
             raise RuntimeError(
                 f"corridor {cid}: OSRM routing failed — {e}. "
-                "Aborting build; corridor geometries must follow real road "
-                "geometry."
+                "Aborting build; corridor geometries must follow real road geometry."
             ) from e
-
-        # Anchor endpoints exactly on node coords (OSRM may snap a few meters
-        # off the declared anchor). Idempotent if already aligned.
         geometry = [_round_pair(p) for p in geometry]
         if geometry:
             geometry[0] = [nodes[from_id]["lng"], nodes[from_id]["lat"]]
@@ -335,44 +275,29 @@ def load_corridor_graph() -> tuple[
 
     if not routed_corridors:
         raise RuntimeError("corridors.geojson contains no corridor features")
-
     return nodes, routed_corridors, adjacency, zip_to_node
 
 
 # ---------------------------------------------------------------------------
-# Dijkstra
+# Dijkstra over the corridor graph
 # ---------------------------------------------------------------------------
 def shortest_corridor_path(
     adjacency: dict[str, list[tuple[str, str, float]]],
     start: str,
     end: str,
 ) -> list[str] | None:
-    """
-    Standard Dijkstra over the corridor graph (undirected via mirrored edges
-    in `adjacency`). Returns an ordered list of corridor IDs from start to
-    end, or None if no path exists.
-
-    Tie-breaking: when two paths share the same total length, the one with
-    fewer corridors wins; ties beyond that resolve alphabetically by
-    corridor ID. Both rules are baked into the priority key so output is
-    deterministic across runs.
-    """
     if start == end:
         return []
     if start not in adjacency or end not in adjacency:
         return None
-
-    # priority queue entries: (total_length, corridor_count, path_tuple, node_id)
     pq: list[tuple[float, int, tuple[str, ...], str]] = [(0.0, 0, (), start)]
     best: dict[str, tuple[float, int, tuple[str, ...]]] = {start: (0.0, 0, ())}
-
     while pq:
         dist, hops, path, node = heapq.heappop(pq)
         if node == end:
             return list(path)
         prev = best.get(node)
         if prev is not None and (dist, hops, path) > prev:
-            # A better path has superseded this entry.
             continue
         for cid, nbr, length in adjacency[node]:
             cand_dist = dist + length
@@ -383,26 +308,13 @@ def shortest_corridor_path(
             if existing is None or cand_key < existing:
                 best[nbr] = cand_key
                 heapq.heappush(pq, (cand_dist, cand_hops, cand_path, nbr))
-
     return None
 
 
 # ---------------------------------------------------------------------------
-# Flow → corridor path mapping
+# Flow → corridor path mapping (preserved from prior build)
 # ---------------------------------------------------------------------------
-def classify_external_zip(
-    zip_code: str,
-    lng: float | None,
-) -> str | None:
-    """
-    Map an out-of-topology ZIP to a gateway node, or return None if the ZIP
-    should be reclassified to ALL_OTHER. Routing rules:
-      - In-state ZIPs (80xxx Front Range, 81xxx Western Slope) route via
-        GW_E if their centroid is east of Glenwood, else GW_W.
-      - Out-of-state ZIPs and ZIPs with no centroid → ALL_OTHER.
-      - In-state ZIPs without a centroid fall back to a prefix-based default
-        (80xxx → GW_E, 81xxx → GW_W) for resilience.
-    """
+def classify_external_zip(zip_code: str, lng: float | None) -> str | None:
     if not zip_code or not zip_code.isdigit() or len(zip_code) != 5:
         return None
     prefix = zip_code[:2]
@@ -410,7 +322,6 @@ def classify_external_zip(
         return None
     if lng is not None:
         return GATEWAY_E_NODE if lng > GATEWAY_SPLIT_LNG else GATEWAY_W_NODE
-    # Centroid-less fallback — preserves the original prefix heuristic.
     return GATEWAY_E_NODE if prefix == "80" else GATEWAY_W_NODE
 
 
@@ -419,7 +330,6 @@ def resolve_node_for_zip(
     zip_to_node: dict[str, str],
     zip_lng: dict[str, float],
 ) -> str | None:
-    """Return the corridor-graph node a flow endpoint maps to, or None."""
     if zip_code in zip_to_node:
         return zip_to_node[zip_code]
     return classify_external_zip(zip_code, zip_lng.get(zip_code))
@@ -431,41 +341,23 @@ def attach_corridor_paths(
     zip_to_node: dict[str, str],
     zip_lng: dict[str, float],
 ) -> tuple[int, int, int]:
-    """
-    Mutate each flow row to add a `corridorPath: list[str]` field. Reclassifies
-    out-of-state and other unmapped flows to ALL_OTHER in place by rewriting
-    `originZip` or `destZip`.
-
-    Returns (routed_count, self_loop_count, reclassified_count).
-    """
     routed = 0
     self_loop = 0
     reclassified = 0
-
-    # Cache shortest paths between (origin_node, dest_node) pairs — every
-    # flow that traverses the same node-to-node arc shares the same corridor
-    # path, so we only run Dijkstra once per unique pair.
     path_cache: dict[tuple[str, str], list[str] | None] = {}
-
     for f in flows:
         ozip = f["originZip"]
         dzip = f["destZip"]
-
-        # Self-flows render as concentric rings, not corridors.
         if ozip == dzip:
             f["corridorPath"] = []
             self_loop += 1
             continue
-
-        # ALL_OTHER inputs are already residual.
         if ozip == "ALL_OTHER" or dzip == "ALL_OTHER":
             f["corridorPath"] = []
             continue
-
         o_node = resolve_node_for_zip(ozip, zip_to_node, zip_lng)
         d_node = resolve_node_for_zip(dzip, zip_to_node, zip_lng)
         if o_node is None or d_node is None:
-            # Reclassify the unmapped side to ALL_OTHER.
             if o_node is None:
                 f["originZip"] = "ALL_OTHER"
             if d_node is None:
@@ -473,14 +365,12 @@ def attach_corridor_paths(
             f["corridorPath"] = []
             reclassified += 1
             continue
-
         cache_key = (o_node, d_node)
         if cache_key in path_cache:
             path = path_cache[cache_key]
         else:
             path = shortest_corridor_path(adjacency, o_node, d_node)
             path_cache[cache_key] = path
-
         if path is None:
             raise RuntimeError(
                 f"no corridor path between node {o_node!r} and node {d_node!r} "
@@ -488,48 +378,35 @@ def attach_corridor_paths(
             )
         f["corridorPath"] = path
         routed += 1
-
     return routed, self_loop, reclassified
-
-
-def build_corridor_aggregation_index(
-    flows_inbound: list[dict],
-    flows_outbound: list[dict],
-) -> dict:
-    """
-    Build a build-time corridor aggregation index for sanity-check assertions.
-    Schema mirrors the plan's §"Step 4". Discardable post-validation; not
-    written to disk by default.
-    """
-    index: dict[str, dict] = {}
-    for f in flows_inbound + flows_outbound:
-        path = f.get("corridorPath") or []
-        if not path:
-            continue
-        wc = int(f["workerCount"])
-        for cid in path:
-            entry = index.setdefault(cid, {
-                "totalWorkersAcrossAllFlows": 0,
-                "flowCount": 0,
-                "byDestZip": {},
-            })
-            entry["totalWorkersAcrossAllFlows"] += wc
-            entry["flowCount"] += 1
-            entry["byDestZip"][f["destZip"]] = entry["byDestZip"].get(f["destZip"], 0) + wc
-    return index
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> int:
-    print(f"reading {XLSX_PATH}", file=sys.stderr)
-    wb = openpyxl.load_workbook(XLSX_PATH, data_only=True)
-    inbound = load_inbound_rows(wb)
-    outbound = load_outbound_rows(wb)
-    print(f"  → {len(inbound)} inbound rows, {len(outbound)} outbound rows", file=sys.stderr)
+    # ------------------------- LODES ingest --------------------------------
+    print("loading LODES filtered cache…", file=sys.stderr)
+    rac_raw = lodes.load_rac_all_years()
+    wac_raw = lodes.load_wac_all_years()
+    od_raw = lodes.load_od_all_years()
+    print(
+        f"  → RAC {len(rac_raw):,} block-year rows; "
+        f"WAC {len(wac_raw):,}; OD {len(od_raw):,}",
+        file=sys.stderr,
+    )
 
-    print("loading corridor graph", file=sys.stderr)
+    rac = lodes.aggregate_rac_or_wac(rac_raw, "h_geocode")
+    wac = lodes.aggregate_rac_or_wac(wac_raw, "w_geocode")
+    od_pairs = lodes.aggregate_od_to_zip_pairs(od_raw)
+    print(
+        f"  → RAC ZCTA-years {len(rac):,}; WAC ZCTA-years {len(wac):,}; "
+        f"OD pairs {len(od_pairs):,}",
+        file=sys.stderr,
+    )
+
+    # ------------------------- Corridor graph ------------------------------
+    print("loading corridor graph…", file=sys.stderr)
     nodes, corridors, adjacency, zip_to_node = load_corridor_graph()
     print(
         f"  → {len(nodes)} nodes, {len(corridors)} corridors, "
@@ -537,58 +414,78 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    print("loading ZCTA gazetteer", file=sys.stderr)
+    print("loading ZCTA gazetteer…", file=sys.stderr)
     centroids = load_gazetteer()
-    print(f"  → {len(centroids)} ZCTA centroids", file=sys.stderr)
+    print(f"  → {len(centroids):,} ZCTA centroids", file=sys.stderr)
 
-    # -----------------------------------------------------------------------
-    # Discover ZIPs and place names from both sheets.
-    # -----------------------------------------------------------------------
-    zip_to_place: dict[str, str] = {}
+    zip_to_place = load_place_name_seed()
+
+    # ------------------------- Build flow rows -----------------------------
+    # The map renders the latest LODES vintage. Other years live in the
+    # rac/wac/od-summary trend arrays for the card strip.
+    od_latest = od_pairs[od_pairs["year"] == LATEST_YEAR]
+
+    # Per-anchor totals for percentage normalization.
+    inbound_totals = (
+        od_latest[od_latest["w_zip"].isin(ANCHOR_ZIPS)]
+        .groupby("w_zip")["totalJobs"].sum().to_dict()
+    )
+    outbound_totals = (
+        od_latest[od_latest["h_zip"].isin(ANCHOR_ZIPS)]
+        .groupby("h_zip")["totalJobs"].sum().to_dict()
+    )
+
+    flows_inbound_out: list[dict] = []
+    for r in od_latest[od_latest["w_zip"].isin(ANCHOR_ZIPS)].itertuples(index=False):
+        denom = inbound_totals.get(r.w_zip, 0) or 1
+        flows_inbound_out.append({
+            "originZip": str(r.h_zip),
+            "originPlace": zip_to_place.get(str(r.h_zip), ""),
+            "destZip": str(r.w_zip),
+            "destPlace": zip_to_place.get(str(r.w_zip), ""),
+            "workerCount": int(r.totalJobs),
+            "percentage": round(int(r.totalJobs) / denom, 6),
+            "year": int(r.year),
+            "source": "LEHD",
+        })
+
+    flows_outbound_out: list[dict] = []
+    for r in od_latest[od_latest["h_zip"].isin(ANCHOR_ZIPS)].itertuples(index=False):
+        denom = outbound_totals.get(r.h_zip, 0) or 1
+        flows_outbound_out.append({
+            "originZip": str(r.h_zip),
+            "originPlace": zip_to_place.get(str(r.h_zip), ""),
+            "destZip": str(r.w_zip),
+            "destPlace": zip_to_place.get(str(r.w_zip), ""),
+            "workerCount": int(r.totalJobs),
+            "percentage": round(int(r.totalJobs) / denom, 6),
+            "year": int(r.year),
+            "source": "LEHD",
+        })
+
+    # Stable order — keeps build deterministic.
+    flows_inbound_out.sort(key=lambda f: (f["destZip"], -f["workerCount"], f["originZip"]))
+    flows_outbound_out.sort(key=lambda f: (f["originZip"], -f["workerCount"], f["destZip"]))
+
+    # ------------------------- ZIP discovery + zips.json -------------------
     all_zips: set[str] = set()
+    for f in flows_inbound_out:
+        if f["originZip"].isdigit():
+            all_zips.add(f["originZip"])
+        if f["destZip"].isdigit():
+            all_zips.add(f["destZip"])
+    for f in flows_outbound_out:
+        if f["originZip"].isdigit():
+            all_zips.add(f["originZip"])
+        if f["destZip"].isdigit():
+            all_zips.add(f["destZip"])
+    # Always include every anchor (even if zero-flow in latest year).
+    all_zips.update(ANCHOR_ZIPS)
 
-    for r in inbound:
-        all_zips.add(r["workplaceZip"])
-        zip_to_place.setdefault(r["workplaceZip"], r["workplaceCity"])
-        if r["residenceZip"].isdigit():
-            all_zips.add(r["residenceZip"])
-            zip_to_place.setdefault(r["residenceZip"], r["residenceCity"])
+    # Per-anchor totals from latest-year LODES (consistent with flow data).
+    workplace_totals = wac[wac["year"] == LATEST_YEAR].set_index("zcta")["totalJobs"].to_dict()
+    residence_totals = rac[rac["year"] == LATEST_YEAR].set_index("zcta")["totalJobs"].to_dict()
 
-    for r in outbound:
-        if r["residenceZip"].isdigit():
-            all_zips.add(r["residenceZip"])
-            zip_to_place.setdefault(r["residenceZip"], r["residenceCity"])
-        if r["workplaceZip"].isdigit():
-            all_zips.add(r["workplaceZip"])
-            zip_to_place.setdefault(r["workplaceZip"], r["workplaceCity"])
-
-    # -----------------------------------------------------------------------
-    # Per-ZIP totals.
-    # -----------------------------------------------------------------------
-    workplace_totals: dict[str, int] = {}
-    for r in inbound:
-        wzip = r["workplaceZip"]
-        workplace_totals[wzip] = workplace_totals.get(wzip, 0) + r["workerCount"]
-
-    residence_totals: dict[str, int] = {}
-    for r in outbound:
-        rzip = r["residenceZip"]
-        residence_totals[rzip] = residence_totals.get(rzip, 0) + r["workerCount"]
-
-    inbound_residence_seed: dict[str, int] = {}
-    for r in inbound:
-        rzip = r["residenceZip"]
-        if rzip.isdigit() and rzip not in ANCHOR_ZIPS:
-            inbound_residence_seed[rzip] = inbound_residence_seed.get(rzip, 0) + r["workerCount"]
-    outbound_workplace_seed: dict[str, int] = {}
-    for r in outbound:
-        wzip = r["workplaceZip"]
-        if wzip.isdigit() and wzip not in ANCHOR_ZIPS:
-            outbound_workplace_seed[wzip] = outbound_workplace_seed.get(wzip, 0) + r["workerCount"]
-
-    # -----------------------------------------------------------------------
-    # Build zips.json
-    # -----------------------------------------------------------------------
     zips_out: list[dict] = []
     missing_centroids: list[str] = []
     for zip_code in sorted(all_zips):
@@ -600,22 +497,24 @@ def main() -> int:
                 missing_centroids.append(zip_code)
                 continue
             lat, lng = centroid
-
-        total_as_wp = workplace_totals.get(zip_code, outbound_workplace_seed.get(zip_code, 0))
-        total_as_res = residence_totals.get(zip_code, inbound_residence_seed.get(zip_code, 0))
-
         zips_out.append({
             "zip": zip_code,
             "place": zip_to_place.get(zip_code, ""),
             "lat": lat,
             "lng": lng,
-            "totalAsWorkplace": total_as_wp,
-            "totalAsResidence": total_as_res,
+            "totalAsWorkplace": int(workplace_totals.get(zip_code, 0)),
+            "totalAsResidence": int(residence_totals.get(zip_code, 0)),
             "isAnchor": zip_code in ANCHOR_ZIPS,
         })
 
-    aol_inbound = sum(r["workerCount"] for r in inbound if r["residenceZip"] == "All Other Locations")
-    aol_outbound = sum(r["workerCount"] for r in outbound if r["workplaceZip"] == "All Other Locations")
+    # Synthetic ALL_OTHER bucket: aggregate any flows that landed there post-
+    # corridor reclassification (out-of-state and unrouted endpoints).
+    aol_inbound = sum(
+        f["workerCount"] for f in flows_inbound_out if f["originZip"] == "ALL_OTHER"
+    )
+    aol_outbound = sum(
+        f["workerCount"] for f in flows_outbound_out if f["destZip"] == "ALL_OTHER"
+    )
     zips_out.append({
         "zip": "ALL_OTHER",
         "place": "All Other Locations",
@@ -626,52 +525,15 @@ def main() -> int:
         "isAnchor": False,
         "isSynthetic": True,
     })
-
     if missing_centroids:
         print(
             f"  ! {len(missing_centroids)} ZIPs without centroids "
-            f"(dropped): {missing_centroids}",
+            f"(dropped): {missing_centroids[:20]}{'…' if len(missing_centroids) > 20 else ''}",
             file=sys.stderr,
         )
 
-    # -----------------------------------------------------------------------
-    # Build flow files.
-    # -----------------------------------------------------------------------
-    flows_inbound_out: list[dict] = []
-    for r in inbound:
-        rzip = r["residenceZip"] if r["residenceZip"].isdigit() else "ALL_OTHER"
-        flows_inbound_out.append({
-            "originZip": rzip,
-            "originPlace": r["residenceCity"],
-            "destZip": r["workplaceZip"],
-            "destPlace": r["workplaceCity"],
-            "workerCount": r["workerCount"],
-            "percentage": r["percentage"],
-            "year": r["year"],
-            "source": "LEHD",
-        })
-
-    flows_outbound_out: list[dict] = []
-    for r in outbound:
-        wzip = r["workplaceZip"] if r["workplaceZip"].isdigit() else "ALL_OTHER"
-        flows_outbound_out.append({
-            "originZip": r["residenceZip"],
-            "originPlace": r["residenceCity"],
-            "destZip": wzip,
-            "destPlace": r["workplaceCity"],
-            "workerCount": r["workerCount"],
-            "percentage": r["percentage"],
-            "year": r["year"],
-            "source": "LEHD",
-        })
-
-    # -----------------------------------------------------------------------
-    # Map flows onto corridors.
-    # -----------------------------------------------------------------------
+    # ------------------------- Corridor routing ----------------------------
     print("\nrouting flows through corridor graph…", file=sys.stderr)
-    # Build a ZIP → longitude lookup used by the gateway classifier. Anchor
-    # overrides win over gazetteer centroids so resort/rural ZIPs get the
-    # downtown coordinate that's already been pinned upstream.
     zip_lng: dict[str, float] = {}
     for z, (_lat, lng) in centroids.items():
         zip_lng[z] = lng
@@ -692,39 +554,66 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    # -----------------------------------------------------------------------
-    # Build corridor aggregation index for build-time validation.
-    # -----------------------------------------------------------------------
-    print("validating corridor aggregation…", file=sys.stderr)
-    agg_index = build_corridor_aggregation_index(flows_inbound_out, flows_outbound_out)
-    corridor_ids_in_use = set(agg_index.keys())
-    declared_corridor_ids = {c["id"] for c in corridors}
-    orphan_corridors = declared_corridor_ids - corridor_ids_in_use
-    if orphan_corridors:
+    # ------------------------- Card-strip JSONs ----------------------------
+    print("\nbuilding rac.json / wac.json / od-summary.json…", file=sys.stderr)
+    rac_entries, rac_aggregate = lodes.build_rac_or_wac_entries(rac, zip_to_place)
+    wac_entries, wac_aggregate = lodes.build_rac_or_wac_entries(wac, zip_to_place)
+    od_entries, od_aggregate = lodes.build_od_summary(
+        od_pairs, ANCHOR_ZIPS, zip_to_place
+    )
+
+    rac_doc = {"latestYear": LATEST_YEAR, "aggregate": rac_aggregate, "entries": rac_entries}
+    wac_doc = {"latestYear": LATEST_YEAR, "aggregate": wac_aggregate, "entries": wac_entries}
+    od_doc = {"latestYear": LATEST_YEAR, "aggregate": od_aggregate, "entries": od_entries}
+
+    # ------------------------- Reconciliation ------------------------------
+    print("\nreconciling LODES totals against flows…", file=sys.stderr)
+    wac_latest_total = sum(int(e["latest"]["totalJobs"]) for e in wac_entries)
+    rac_latest_total = sum(int(e["latest"]["totalJobs"]) for e in rac_entries)
+    inbound_workers_total = sum(f["workerCount"] for f in flows_inbound_out)
+    outbound_workers_total = sum(f["workerCount"] for f in flows_outbound_out)
+
+    # Inbound flows = OD pairs whose w_zip is one of our 11 anchors.
+    # Latest WAC (workplace jobs at our 11 anchors) should equal inbound
+    # totalWorkers exactly when every job is captured. The OD aux file we
+    # filtered carries out-of-state inflow workers, so the equality should
+    # hold within rounding (LODES is internally consistent).
+    in_drift = abs(wac_latest_total - inbound_workers_total) / max(wac_latest_total, 1)
+    out_drift = abs(rac_latest_total - outbound_workers_total) / max(rac_latest_total, 1)
+    print(
+        f"  WAC latest total = {wac_latest_total:,}; flows-inbound total = "
+        f"{inbound_workers_total:,}; drift = {in_drift:.2%}",
+        file=sys.stderr,
+    )
+    print(
+        f"  RAC latest total = {rac_latest_total:,}; flows-outbound total = "
+        f"{outbound_workers_total:,}; drift = {out_drift:.2%}",
+        file=sys.stderr,
+    )
+    # Outbound has an expected gap: residents working out-of-state are absent
+    # from CO-only OD pulls. Warn but don't fail above the small expected gap.
+    if in_drift > 0.005:
         print(
-            f"  ! {len(orphan_corridors)} corridor(s) have zero contributing "
-            f"flows: {sorted(orphan_corridors)}",
+            f"  ! inbound drift {in_drift:.2%} exceeds 0.5%; possible ingest bug",
             file=sys.stderr,
         )
-    # Reconciliation sanity check.
-    flow_corridor_workers = sum(
-        int(f["workerCount"]) * len(f.get("corridorPath") or [])
-        for f in flows_inbound_out + flows_outbound_out
-    )
-    agg_total = sum(int(v["totalWorkersAcrossAllFlows"]) for v in agg_index.values())
-    if flow_corridor_workers > 0:
-        delta = abs(agg_total - flow_corridor_workers) / flow_corridor_workers
-        if delta > 0.01:
-            print(
-                f"  ! aggregation drift {delta:.4%} exceeds 1% threshold",
-                file=sys.stderr,
-            )
-            return 1
-    print(f"  → {len(corridor_ids_in_use)} corridors carrying flow", file=sys.stderr)
 
-    # -----------------------------------------------------------------------
-    # Build corridors.json (frontend-loadable shape).
-    # -----------------------------------------------------------------------
+    # ------------------------- Per-anchor QA -------------------------------
+    print("\nQA — per-anchor totals (latest year):", file=sys.stderr)
+    print(f"  {'ZIP':>5}  {'Place':<22} {'WAC':>8} {'OD-in':>8}  {'RAC':>8} {'OD-out':>8}", file=sys.stderr)
+    for zip_code in sorted(ANCHOR_ZIPS):
+        place = zip_to_place.get(zip_code, "")
+        wac_total = int(wac[(wac["year"] == LATEST_YEAR) & (wac["zcta"] == zip_code)]["totalJobs"].sum())
+        rac_total = int(rac[(rac["year"] == LATEST_YEAR) & (rac["zcta"] == zip_code)]["totalJobs"].sum())
+        od_in = sum(f["workerCount"] for f in flows_inbound_out if f["destZip"] == zip_code)
+        od_out = sum(f["workerCount"] for f in flows_outbound_out if f["originZip"] == zip_code)
+        print(
+            f"  {zip_code:>5}  {place:<22} {wac_total:>8,} {od_in:>8,}  "
+            f"{rac_total:>8,} {od_out:>8,}",
+            file=sys.stderr,
+        )
+
+    # ------------------------- corridors.json ------------------------------
     corridors_json = {
         "version": 1,
         "nodes": [
@@ -751,46 +640,41 @@ def main() -> int:
         ],
     }
 
-    # -----------------------------------------------------------------------
-    # QA
-    # -----------------------------------------------------------------------
-    print("\nQA — inbound per-workplace totals:", file=sys.stderr)
-    for wzip in sorted(ANCHOR_ZIPS):
-        total = sum(f["workerCount"] for f in flows_inbound_out if f["destZip"] == wzip)
-        pct_sum = sum(f["percentage"] for f in flows_inbound_out if f["destZip"] == wzip)
-        place = zip_to_place.get(wzip, "?")
-        print(f"  {wzip} {place:<22} total={total:>6,}  pctSum={pct_sum:.4f}", file=sys.stderr)
-
-    print("\nQA — outbound per-residence totals:", file=sys.stderr)
-    for rzip in sorted(ANCHOR_ZIPS):
-        total = sum(f["workerCount"] for f in flows_outbound_out if f["originZip"] == rzip)
-        pct_sum = sum(f["percentage"] for f in flows_outbound_out if f["originZip"] == rzip)
-        place = zip_to_place.get(rzip, "?")
-        print(f"  {rzip} {place:<22} total={total:>6,}  pctSum={pct_sum:.4f}", file=sys.stderr)
-
-    # -----------------------------------------------------------------------
-    # Write
-    # -----------------------------------------------------------------------
+    # ------------------------- Write ---------------------------------------
     inbound_path = OUT_DIR / "flows-inbound.json"
     outbound_path = OUT_DIR / "flows-outbound.json"
     zips_path = OUT_DIR / "zips.json"
     corridors_path = OUT_DIR / "corridors.json"
+    rac_path = OUT_DIR / "rac.json"
+    wac_path = OUT_DIR / "wac.json"
+    od_path = OUT_DIR / "od-summary.json"
+
     inbound_path.write_text(json.dumps(flows_inbound_out, separators=(",", ":")))
     outbound_path.write_text(json.dumps(flows_outbound_out, separators=(",", ":")))
     zips_path.write_text(json.dumps(zips_out, indent=2))
     corridors_path.write_text(json.dumps(corridors_json, separators=(",", ":")))
-    print(f"\nwrote {inbound_path}  ({inbound_path.stat().st_size:,} bytes)", file=sys.stderr)
-    print(f"wrote {outbound_path}  ({outbound_path.stat().st_size:,} bytes)", file=sys.stderr)
-    print(f"wrote {zips_path}  ({zips_path.stat().st_size:,} bytes)", file=sys.stderr)
-    print(f"wrote {corridors_path}  ({corridors_path.stat().st_size:,} bytes)", file=sys.stderr)
+    rac_path.write_text(json.dumps(rac_doc, separators=(",", ":")))
+    wac_path.write_text(json.dumps(wac_doc, separators=(",", ":")))
+    od_path.write_text(json.dumps(od_doc, separators=(",", ":")))
 
-    # Drop the legacy outputs.
+    for path in (inbound_path, outbound_path, zips_path, corridors_path,
+                 rac_path, wac_path, od_path):
+        print(f"wrote {path.name}  ({path.stat().st_size:,} bytes)", file=sys.stderr)
+
+    # Drop legacy outputs.
     for legacy_name in ("flows.json", "segment-aggregation.json"):
         legacy = OUT_DIR / legacy_name
         if legacy.exists():
             legacy.unlink()
-            print(f"removed legacy {legacy}", file=sys.stderr)
+            print(f"removed legacy {legacy.name}", file=sys.stderr)
 
+    print(
+        f"\nyears={lodes.YEARS[0]}..{lodes.YEARS[-1]}, "
+        f"zips={len(zips_out)}, "
+        f"rac_rows={len(rac_entries)}, wac_rows={len(wac_entries)}, "
+        f"od_pairs={len(od_pairs)}",
+        file=sys.stderr,
+    )
     return 0
 
 

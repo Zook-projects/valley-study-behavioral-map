@@ -36,7 +36,7 @@ export function ZipSelector({ zips, selectedZip, onSelectZip }: Props) {
         className="block text-[10px] font-medium uppercase tracking-wider"
         style={{ color: 'var(--text-dim)' }}
       >
-        Anchor workplaces
+        Anchor Workplaces - Zip Codes
       </label>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Anchor workplace ZIPs">
         {anchorZips.map((z) => {
@@ -86,6 +86,7 @@ export function ZipSelector({ zips, selectedZip, onSelectZip }: Props) {
               background: 'rgba(20,22,28,0.95)',
               border: '1px solid var(--panel-border)',
               backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
             }}
           >
             {matches.map((z) => (

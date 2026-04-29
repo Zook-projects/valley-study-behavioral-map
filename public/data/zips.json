@@ -1,11 +1,11 @@
 [
   {
-    "zip": "75237",
-    "place": "Dallas",
-    "lat": 32.664916,
-    "lng": -96.872401,
+    "zip": "80002",
+    "place": "",
+    "lat": 39.793716,
+    "lng": -105.108382,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 1,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -13,7 +13,43 @@
     "place": "Arvada",
     "lat": 39.825413,
     "lng": -105.064435,
-    "totalAsWorkplace": 3,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80004",
+    "place": "",
+    "lat": 39.81378,
+    "lng": -105.122182,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80005",
+    "place": "",
+    "lat": 39.85165,
+    "lng": -105.131418,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80007",
+    "place": "",
+    "lat": 39.867038,
+    "lng": -105.197733,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80010",
+    "place": "",
+    "lat": 39.73925,
+    "lng": -104.86171,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -22,8 +58,8 @@
     "place": "Aurora",
     "lat": 39.744033,
     "lng": -104.790013,
-    "totalAsWorkplace": 26,
-    "totalAsResidence": 1,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -31,7 +67,70 @@
     "place": "Aurora",
     "lat": 39.699766,
     "lng": -104.837834,
-    "totalAsWorkplace": 5,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80013",
+    "place": "",
+    "lat": 39.661462,
+    "lng": -104.765764,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80014",
+    "place": "",
+    "lat": 39.663552,
+    "lng": -104.837771,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80015",
+    "place": "",
+    "lat": 39.628055,
+    "lng": -104.793254,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80016",
+    "place": "",
+    "lat": 39.593026,
+    "lng": -104.7224,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80017",
+    "place": "",
+    "lat": 39.699437,
+    "lng": -104.775296,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80018",
+    "place": "",
+    "lat": 39.7019,
+    "lng": -104.686962,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80019",
+    "place": "",
+    "lat": 39.778586,
+    "lng": -104.684754,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -41,7 +140,7 @@
     "lat": 39.930782,
     "lng": -105.074287,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 1,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -49,8 +148,8 @@
     "place": "Broomfield",
     "lat": 39.890663,
     "lng": -105.113724,
-    "totalAsWorkplace": 10,
-    "totalAsResidence": 1,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -58,7 +157,16 @@
     "place": "Commerce City",
     "lat": 39.861115,
     "lng": -104.788777,
-    "totalAsWorkplace": 52,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80023",
+    "place": "",
+    "lat": 39.975844,
+    "lng": -105.009381,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -68,7 +176,34 @@
     "lat": 40.012151,
     "lng": -105.09991,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 1,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80027",
+    "place": "",
+    "lat": 39.951506,
+    "lng": -105.15813,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80030",
+    "place": "",
+    "lat": 39.830822,
+    "lng": -105.03747,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80031",
+    "place": "",
+    "lat": 39.873936,
+    "lng": -105.038792,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -76,7 +211,97 @@
     "place": "Wheat Ridge",
     "lat": 39.772675,
     "lng": -105.104801,
-    "totalAsWorkplace": 10,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80045",
+    "place": "",
+    "lat": 39.746661,
+    "lng": -104.837224,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80102",
+    "place": "",
+    "lat": 39.734017,
+    "lng": -104.438524,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80103",
+    "place": "",
+    "lat": 39.7912,
+    "lng": -104.093839,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80104",
+    "place": "",
+    "lat": 39.302112,
+    "lng": -104.819674,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80105",
+    "place": "",
+    "lat": 39.636719,
+    "lng": -103.966232,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80106",
+    "place": "",
+    "lat": 39.186147,
+    "lng": -104.515915,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80107",
+    "place": "",
+    "lat": 39.411894,
+    "lng": -104.572151,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80108",
+    "place": "",
+    "lat": 39.444376,
+    "lng": -104.853179,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80109",
+    "place": "",
+    "lat": 39.372344,
+    "lng": -104.912085,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80110",
+    "place": "",
+    "lat": 39.645936,
+    "lng": -105.011368,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -85,7 +310,7 @@
     "place": "Englewood",
     "lat": 39.612004,
     "lng": -104.882787,
-    "totalAsWorkplace": 81,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -94,7 +319,43 @@
     "place": "Englewood",
     "lat": 39.573236,
     "lng": -104.86489,
-    "totalAsWorkplace": 226,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80113",
+    "place": "",
+    "lat": 39.644445,
+    "lng": -104.965111,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80116",
+    "place": "",
+    "lat": 39.320019,
+    "lng": -104.709712,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80117",
+    "place": "",
+    "lat": 39.395522,
+    "lng": -104.389585,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80118",
+    "place": "",
+    "lat": 39.18964,
+    "lng": -104.881926,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -103,7 +364,25 @@
     "place": "Littleton",
     "lat": 39.593836,
     "lng": -105.01146,
-    "totalAsWorkplace": 20,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80121",
+    "place": "",
+    "lat": 39.610385,
+    "lng": -104.95381,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80122",
+    "place": "",
+    "lat": 39.580309,
+    "lng": -104.954917,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -113,7 +392,88 @@
     "lat": 39.61601,
     "lng": -105.069449,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 1,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80124",
+    "place": "",
+    "lat": 39.532798,
+    "lng": -104.891219,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80125",
+    "place": "",
+    "lat": 39.485382,
+    "lng": -105.062779,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80126",
+    "place": "",
+    "lat": 39.542161,
+    "lng": -104.963124,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80127",
+    "place": "",
+    "lat": 39.530726,
+    "lng": -105.164344,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80128",
+    "place": "",
+    "lat": 39.560922,
+    "lng": -105.079925,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80129",
+    "place": "",
+    "lat": 39.546879,
+    "lng": -105.011599,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80130",
+    "place": "",
+    "lat": 39.528342,
+    "lng": -104.923869,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80132",
+    "place": "",
+    "lat": 39.086552,
+    "lng": -104.85834,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80133",
+    "place": "",
+    "lat": 39.113465,
+    "lng": -104.899806,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -122,7 +482,34 @@
     "lat": 39.48283,
     "lng": -104.780001,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 8,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80135",
+    "place": "",
+    "lat": 39.254744,
+    "lng": -105.156973,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80136",
+    "place": "",
+    "lat": 39.791978,
+    "lng": -104.279929,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80137",
+    "place": "",
+    "lat": 39.712176,
+    "lng": -104.594097,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -131,7 +518,7 @@
     "lat": 39.517532,
     "lng": -104.670911,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 1,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -139,7 +526,7 @@
     "place": "Denver",
     "lat": 39.751526,
     "lng": -104.997673,
-    "totalAsWorkplace": 581,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -148,7 +535,7 @@
     "place": "Denver",
     "lat": 39.731419,
     "lng": -104.982764,
-    "totalAsWorkplace": 86,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -157,7 +544,16 @@
     "place": "Denver",
     "lat": 39.734757,
     "lng": -105.020678,
-    "totalAsWorkplace": 57,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80205",
+    "place": "",
+    "lat": 39.758861,
+    "lng": -104.964699,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -166,7 +562,25 @@
     "place": "Denver",
     "lat": 39.730369,
     "lng": -104.952511,
-    "totalAsWorkplace": 70,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80207",
+    "place": "",
+    "lat": 39.761385,
+    "lng": -104.916696,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80209",
+    "place": "",
+    "lat": 39.706581,
+    "lng": -104.96575,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -176,7 +590,97 @@
     "lat": 39.676626,
     "lng": -104.962315,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 42,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80211",
+    "place": "",
+    "lat": 39.767444,
+    "lng": -105.019736,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80212",
+    "place": "",
+    "lat": 39.772047,
+    "lng": -105.048027,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80214",
+    "place": "",
+    "lat": 39.743312,
+    "lng": -105.069025,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80215",
+    "place": "",
+    "lat": 39.744773,
+    "lng": -105.115977,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80216",
+    "place": "",
+    "lat": 39.787707,
+    "lng": -104.961139,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80218",
+    "place": "",
+    "lat": 39.731168,
+    "lng": -104.970715,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80219",
+    "place": "",
+    "lat": 39.695293,
+    "lng": -105.035601,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80220",
+    "place": "",
+    "lat": 39.733782,
+    "lng": -104.916465,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80221",
+    "place": "",
+    "lat": 39.81602,
+    "lng": -105.011552,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80222",
+    "place": "",
+    "lat": 39.671314,
+    "lng": -104.92823,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -184,7 +688,16 @@
     "place": "Denver",
     "lat": 39.695794,
     "lng": -105.003843,
-    "totalAsWorkplace": 12,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80224",
+    "place": "",
+    "lat": 39.688065,
+    "lng": -104.911575,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -193,7 +706,25 @@
     "place": "Lakewood",
     "lat": 39.710131,
     "lng": -105.092127,
-    "totalAsWorkplace": 3,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80227",
+    "place": "",
+    "lat": 39.665458,
+    "lng": -105.102196,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80228",
+    "place": "",
+    "lat": 39.694935,
+    "lng": -105.173187,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -202,7 +733,16 @@
     "place": "Thornton",
     "lat": 39.85425,
     "lng": -104.957598,
-    "totalAsWorkplace": 21,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80230",
+    "place": "",
+    "lat": 39.720338,
+    "lng": -104.889308,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -211,7 +751,52 @@
     "place": "Denver",
     "lat": 39.671225,
     "lng": -104.887861,
-    "totalAsWorkplace": 5,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80232",
+    "place": "",
+    "lat": 39.688198,
+    "lng": -105.089484,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80233",
+    "place": "",
+    "lat": 39.897536,
+    "lng": -104.943922,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80234",
+    "place": "",
+    "lat": 39.909992,
+    "lng": -105.002643,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80235",
+    "place": "",
+    "lat": 39.647607,
+    "lng": -105.089482,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80236",
+    "place": "",
+    "lat": 39.651633,
+    "lng": -105.039699,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -220,7 +805,52 @@
     "place": "Denver",
     "lat": 39.639871,
     "lng": -104.901711,
-    "totalAsWorkplace": 11,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80238",
+    "place": "",
+    "lat": 39.77741,
+    "lng": -104.879652,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80239",
+    "place": "",
+    "lat": 39.789197,
+    "lng": -104.833616,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80241",
+    "place": "",
+    "lat": 39.929079,
+    "lng": -104.954277,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80246",
+    "place": "",
+    "lat": 39.705173,
+    "lng": -104.930718,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80247",
+    "place": "",
+    "lat": 39.697809,
+    "lng": -104.878897,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -229,7 +859,34 @@
     "place": "Denver",
     "lat": 39.854746,
     "lng": -104.695804,
-    "totalAsWorkplace": 144,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80260",
+    "place": "",
+    "lat": 39.866989,
+    "lng": -105.001354,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80264",
+    "place": "",
+    "lat": 39.742477,
+    "lng": -104.985482,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80290",
+    "place": "",
+    "lat": 39.744092,
+    "lng": -104.986754,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -238,7 +895,7 @@
     "place": "Boulder",
     "lat": 40.04569,
     "lng": -105.20089,
-    "totalAsWorkplace": 141,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -247,7 +904,7 @@
     "place": "Boulder",
     "lat": 40.025056,
     "lng": -105.348664,
-    "totalAsWorkplace": 59,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -256,7 +913,34 @@
     "place": "Boulder",
     "lat": 39.973222,
     "lng": -105.209276,
-    "totalAsWorkplace": 5,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80304",
+    "place": "",
+    "lat": 40.044727,
+    "lng": -105.288351,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80305",
+    "place": "",
+    "lat": 39.976873,
+    "lng": -105.248683,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80310",
+    "place": "",
+    "lat": 40.003986,
+    "lng": -105.261368,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -265,7 +949,61 @@
     "place": "Golden",
     "lat": 39.718872,
     "lng": -105.235342,
-    "totalAsWorkplace": 27,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80403",
+    "place": "",
+    "lat": 39.828768,
+    "lng": -105.316923,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80419",
+    "place": "",
+    "lat": 39.728414,
+    "lng": -105.202468,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80420",
+    "place": "",
+    "lat": 39.324401,
+    "lng": -106.11611,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80421",
+    "place": "",
+    "lat": 39.460932,
+    "lng": -105.501199,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80422",
+    "place": "",
+    "lat": 39.861574,
+    "lng": -105.539757,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80423",
+    "place": "",
+    "lat": 39.845901,
+    "lng": -106.554702,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -274,8 +1012,62 @@
     "place": "Breckenridge",
     "lat": 39.473285,
     "lng": -106.00426,
-    "totalAsWorkplace": 132,
-    "totalAsResidence": 12,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80425",
+    "place": "",
+    "lat": 39.350155,
+    "lng": -105.205591,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80426",
+    "place": "",
+    "lat": 39.875477,
+    "lng": -106.990946,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80427",
+    "place": "",
+    "lat": 39.793654,
+    "lng": -105.524087,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80428",
+    "place": "",
+    "lat": 40.843694,
+    "lng": -106.925249,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80432",
+    "place": "",
+    "lat": 39.230346,
+    "lng": -105.837507,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80433",
+    "place": "",
+    "lat": 39.498109,
+    "lng": -105.303437,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -283,8 +1075,53 @@
     "place": "Keystone",
     "lat": 39.573898,
     "lng": -105.934721,
-    "totalAsWorkplace": 52,
-    "totalAsResidence": 56,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80436",
+    "place": "",
+    "lat": 39.781044,
+    "lng": -105.640202,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80438",
+    "place": "",
+    "lat": 39.744312,
+    "lng": -105.796262,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80439",
+    "place": "",
+    "lat": 39.634422,
+    "lng": -105.440245,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80440",
+    "place": "",
+    "lat": 39.132289,
+    "lng": -106.055005,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80442",
+    "place": "",
+    "lat": 39.92467,
+    "lng": -105.887899,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -292,7 +1129,16 @@
     "place": "Frisco",
     "lat": 39.503377,
     "lng": -106.174069,
-    "totalAsWorkplace": 40,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80444",
+    "place": "",
+    "lat": 39.632198,
+    "lng": -105.734642,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -301,7 +1147,79 @@
     "place": "Granby",
     "lat": 40.163892,
     "lng": -105.934574,
-    "totalAsWorkplace": 3,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80447",
+    "place": "",
+    "lat": 40.29556,
+    "lng": -105.822108,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80448",
+    "place": "",
+    "lat": 39.477204,
+    "lng": -105.834433,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80449",
+    "place": "",
+    "lat": 38.929671,
+    "lng": -105.790096,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80451",
+    "place": "",
+    "lat": 40.040045,
+    "lng": -106.04454,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80452",
+    "place": "",
+    "lat": 39.712014,
+    "lng": -105.597334,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80456",
+    "place": "",
+    "lat": 39.310412,
+    "lng": -105.689471,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80457",
+    "place": "",
+    "lat": 39.65097,
+    "lng": -105.299732,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80459",
+    "place": "",
+    "lat": 40.1547,
+    "lng": -106.414187,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -311,7 +1229,133 @@
     "lat": 39.242242,
     "lng": -106.287866,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 114,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80463",
+    "place": "",
+    "lat": 39.982326,
+    "lng": -106.758075,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80465",
+    "place": "",
+    "lat": 39.609094,
+    "lng": -105.205535,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80466",
+    "place": "",
+    "lat": 39.988037,
+    "lng": -105.544054,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80467",
+    "place": "",
+    "lat": 40.207634,
+    "lng": -106.825857,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80468",
+    "place": "",
+    "lat": 39.914883,
+    "lng": -106.110896,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80469",
+    "place": "",
+    "lat": 40.214461,
+    "lng": -106.967989,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80470",
+    "place": "",
+    "lat": 39.379796,
+    "lng": -105.324404,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80473",
+    "place": "",
+    "lat": 40.449427,
+    "lng": -106.160134,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80475",
+    "place": "",
+    "lat": 39.410988,
+    "lng": -105.608182,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80478",
+    "place": "",
+    "lat": 40.022149,
+    "lng": -105.856936,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80480",
+    "place": "",
+    "lat": 40.672888,
+    "lng": -106.341566,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80481",
+    "place": "",
+    "lat": 40.101411,
+    "lng": -105.576764,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80482",
+    "place": "",
+    "lat": 39.901527,
+    "lng": -105.785677,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80483",
+    "place": "",
+    "lat": 40.091798,
+    "lng": -106.93598,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -319,8 +1363,8 @@
     "place": "Steamboat Springs",
     "lat": 40.581425,
     "lng": -106.885954,
-    "totalAsWorkplace": 327,
-    "totalAsResidence": 191,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -328,8 +1372,26 @@
     "place": "Silverthorne",
     "lat": 39.746631,
     "lng": -106.27053,
-    "totalAsWorkplace": 64,
-    "totalAsResidence": 32,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80501",
+    "place": "",
+    "lat": 40.164832,
+    "lng": -105.101852,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80503",
+    "place": "",
+    "lat": 40.169014,
+    "lng": -105.210376,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -338,7 +1400,52 @@
     "lat": 40.16564,
     "lng": -105.029231,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 18,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80510",
+    "place": "",
+    "lat": 40.2125,
+    "lng": -105.6066,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80512",
+    "place": "",
+    "lat": 40.631157,
+    "lng": -105.574043,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80513",
+    "place": "",
+    "lat": 40.299451,
+    "lng": -105.118553,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80514",
+    "place": "",
+    "lat": 40.070612,
+    "lng": -104.955294,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80515",
+    "place": "",
+    "lat": 40.462346,
+    "lng": -105.382303,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -347,7 +1454,7 @@
     "lat": 40.052867,
     "lng": -105.021054,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 12,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -356,7 +1463,34 @@
     "lat": 40.397935,
     "lng": -105.614927,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 28,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80520",
+    "place": "",
+    "lat": 40.114073,
+    "lng": -104.933438,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80521",
+    "place": "",
+    "lat": 40.593083,
+    "lng": -105.127429,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80524",
+    "place": "",
+    "lat": 40.646854,
+    "lng": -105.029519,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -365,7 +1499,34 @@
     "lat": 40.527358,
     "lng": -105.041438,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 5,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80526",
+    "place": "",
+    "lat": 40.52219,
+    "lng": -105.129441,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80528",
+    "place": "",
+    "lat": 40.499003,
+    "lng": -105.005051,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80530",
+    "place": "",
+    "lat": 40.101551,
+    "lng": -104.923044,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -374,7 +1535,97 @@
     "lat": 40.331863,
     "lng": -104.937467,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 3,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80535",
+    "place": "",
+    "lat": 40.736224,
+    "lng": -105.191062,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80536",
+    "place": "",
+    "lat": 40.878827,
+    "lng": -105.381223,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80537",
+    "place": "",
+    "lat": 40.38308,
+    "lng": -105.200416,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80538",
+    "place": "",
+    "lat": 40.544612,
+    "lng": -105.245108,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80540",
+    "place": "",
+    "lat": 40.224619,
+    "lng": -105.400456,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80542",
+    "place": "",
+    "lat": 40.234051,
+    "lng": -104.999017,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80543",
+    "place": "",
+    "lat": 40.349543,
+    "lng": -104.857385,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80545",
+    "place": "",
+    "lat": 40.842012,
+    "lng": -105.702819,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80547",
+    "place": "",
+    "lat": 40.52663,
+    "lng": -104.965364,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80549",
+    "place": "",
+    "lat": 40.857542,
+    "lng": -105.044126,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -383,7 +1634,70 @@
     "lat": 40.488775,
     "lng": -104.899732,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 12,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80601",
+    "place": "",
+    "lat": 39.962169,
+    "lng": -104.807922,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80602",
+    "place": "",
+    "lat": 39.966162,
+    "lng": -104.908888,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80603",
+    "place": "",
+    "lat": 39.951146,
+    "lng": -104.660237,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80610",
+    "place": "",
+    "lat": 40.673865,
+    "lng": -104.591302,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80611",
+    "place": "",
+    "lat": 40.624941,
+    "lng": -104.249087,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80612",
+    "place": "",
+    "lat": 40.878964,
+    "lng": -104.823773,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80615",
+    "place": "",
+    "lat": 40.545658,
+    "lng": -104.645698,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -392,7 +1706,7 @@
     "lat": 40.375758,
     "lng": -104.713561,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 9,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -401,7 +1715,25 @@
     "lat": 40.107188,
     "lng": -104.801281,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 5,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80623",
+    "place": "",
+    "lat": 40.28534,
+    "lng": -104.782547,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80624",
+    "place": "",
+    "lat": 40.435451,
+    "lng": -104.423055,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -410,7 +1742,7 @@
     "lat": 40.4447,
     "lng": -104.679378,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 32,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -419,7 +1751,232 @@
     "lat": 40.40141,
     "lng": -104.792395,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 61,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80640",
+    "place": "",
+    "lat": 39.88755,
+    "lng": -104.880816,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80642",
+    "place": "",
+    "lat": 40.051416,
+    "lng": -104.612139,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80643",
+    "place": "",
+    "lat": 40.112927,
+    "lng": -104.489176,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80644",
+    "place": "",
+    "lat": 40.334515,
+    "lng": -104.430048,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80645",
+    "place": "",
+    "lat": 40.283314,
+    "lng": -104.649185,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80648",
+    "place": "",
+    "lat": 40.762507,
+    "lng": -104.7305,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80650",
+    "place": "",
+    "lat": 40.64873,
+    "lng": -104.781215,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80651",
+    "place": "",
+    "lat": 40.239757,
+    "lng": -104.815433,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80652",
+    "place": "",
+    "lat": 40.138876,
+    "lng": -104.275168,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80653",
+    "place": "",
+    "lat": 40.446125,
+    "lng": -103.977787,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80654",
+    "place": "",
+    "lat": 40.135588,
+    "lng": -104.081882,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80701",
+    "place": "",
+    "lat": 40.125042,
+    "lng": -103.817561,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80705",
+    "place": "",
+    "lat": 40.271114,
+    "lng": -103.834267,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80720",
+    "place": "",
+    "lat": 40.073492,
+    "lng": -103.187333,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80723",
+    "place": "",
+    "lat": 40.193681,
+    "lng": -103.543329,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80726",
+    "place": "",
+    "lat": 40.923171,
+    "lng": -102.776849,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80728",
+    "place": "",
+    "lat": 40.639921,
+    "lng": -102.87286,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80729",
+    "place": "",
+    "lat": 40.876288,
+    "lng": -104.226608,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80731",
+    "place": "",
+    "lat": 40.587662,
+    "lng": -102.59793,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80733",
+    "place": "",
+    "lat": 40.357168,
+    "lng": -103.474672,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80734",
+    "place": "",
+    "lat": 40.519891,
+    "lng": -102.291952,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80735",
+    "place": "",
+    "lat": 39.709865,
+    "lng": -102.244077,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80737",
+    "place": "",
+    "lat": 40.895118,
+    "lng": -102.198592,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80741",
+    "place": "",
+    "lat": 40.566834,
+    "lng": -103.476991,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80745",
+    "place": "",
+    "lat": 40.895496,
+    "lng": -103.412556,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -428,7 +1985,277 @@
     "lat": 40.651901,
     "lng": -103.241063,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 8,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80758",
+    "place": "",
+    "lat": 40.138836,
+    "lng": -102.193094,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80759",
+    "place": "",
+    "lat": 40.111353,
+    "lng": -102.690716,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80804",
+    "place": "",
+    "lat": 39.34684,
+    "lng": -103.248069,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80805",
+    "place": "",
+    "lat": 39.296843,
+    "lng": -102.437367,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80807",
+    "place": "",
+    "lat": 39.321398,
+    "lng": -102.223225,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80808",
+    "place": "",
+    "lat": 39.008243,
+    "lng": -104.303547,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80809",
+    "place": "",
+    "lat": 38.852008,
+    "lng": -105.008613,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80810",
+    "place": "",
+    "lat": 38.822287,
+    "lng": -102.428708,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80813",
+    "place": "",
+    "lat": 38.754427,
+    "lng": -105.120108,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80814",
+    "place": "",
+    "lat": 38.944862,
+    "lng": -105.189664,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80815",
+    "place": "",
+    "lat": 39.389193,
+    "lng": -103.098983,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80816",
+    "place": "",
+    "lat": 38.857741,
+    "lng": -105.315864,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80817",
+    "place": "",
+    "lat": 38.588209,
+    "lng": -104.67753,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80820",
+    "place": "",
+    "lat": 38.777049,
+    "lng": -105.566978,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80821",
+    "place": "",
+    "lat": 39.00028,
+    "lng": -103.447221,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80826",
+    "place": "",
+    "lat": 39.218744,
+    "lng": -103.691289,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80827",
+    "place": "",
+    "lat": 39.056483,
+    "lng": -105.467359,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80828",
+    "place": "",
+    "lat": 39.264079,
+    "lng": -103.704966,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80829",
+    "place": "",
+    "lat": 38.829101,
+    "lng": -104.932973,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80831",
+    "place": "",
+    "lat": 38.981118,
+    "lng": -104.499945,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80835",
+    "place": "",
+    "lat": 39.218796,
+    "lng": -104.022559,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80840",
+    "place": "",
+    "lat": 39.000068,
+    "lng": -104.864468,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80860",
+    "place": "",
+    "lat": 38.700164,
+    "lng": -105.097304,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80863",
+    "place": "",
+    "lat": 39.032718,
+    "lng": -105.054396,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80864",
+    "place": "",
+    "lat": 38.699006,
+    "lng": -104.187552,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80902",
+    "place": "",
+    "lat": 38.683656,
+    "lng": -104.82224,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80903",
+    "place": "",
+    "lat": 38.832791,
+    "lng": -104.813816,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80904",
+    "place": "",
+    "lat": 38.862565,
+    "lng": -104.87047,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80905",
+    "place": "",
+    "lat": 38.81891,
+    "lng": -104.838348,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80906",
+    "place": "",
+    "lat": 38.752594,
+    "lng": -104.878211,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -436,7 +2263,106 @@
     "place": "Colorado Springs",
     "lat": 38.878994,
     "lng": -104.821148,
-    "totalAsWorkplace": 18,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80908",
+    "place": "",
+    "lat": 39.047585,
+    "lng": -104.69054,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80909",
+    "place": "",
+    "lat": 38.852566,
+    "lng": -104.774326,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80910",
+    "place": "",
+    "lat": 38.812066,
+    "lng": -104.77458,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80911",
+    "place": "",
+    "lat": 38.752825,
+    "lng": -104.719732,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80913",
+    "place": "",
+    "lat": 38.687426,
+    "lng": -104.748914,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80914",
+    "place": "",
+    "lat": 38.824014,
+    "lng": -104.705448,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80915",
+    "place": "",
+    "lat": 38.849836,
+    "lng": -104.716971,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80916",
+    "place": "",
+    "lat": 38.802461,
+    "lng": -104.708714,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80917",
+    "place": "",
+    "lat": 38.886837,
+    "lng": -104.74047,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80918",
+    "place": "",
+    "lat": 38.910393,
+    "lng": -104.780362,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80919",
+    "place": "",
+    "lat": 38.927963,
+    "lng": -104.880243,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -445,7 +2371,538 @@
     "place": "Colorado Springs",
     "lat": 38.955706,
     "lng": -104.772275,
-    "totalAsWorkplace": 12,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80921",
+    "place": "",
+    "lat": 39.060887,
+    "lng": -104.819136,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80922",
+    "place": "",
+    "lat": 38.88995,
+    "lng": -104.700832,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80923",
+    "place": "",
+    "lat": 38.926735,
+    "lng": -104.714341,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80924",
+    "place": "",
+    "lat": 38.966933,
+    "lng": -104.723123,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80925",
+    "place": "",
+    "lat": 38.77004,
+    "lng": -104.643867,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80926",
+    "place": "",
+    "lat": 38.634719,
+    "lng": -104.902972,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80927",
+    "place": "",
+    "lat": 38.9283,
+    "lng": -104.658773,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80928",
+    "place": "",
+    "lat": 38.630401,
+    "lng": -104.401637,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80929",
+    "place": "",
+    "lat": 38.824594,
+    "lng": -104.608368,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80930",
+    "place": "",
+    "lat": 38.805059,
+    "lng": -104.506438,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80939",
+    "place": "",
+    "lat": 38.872785,
+    "lng": -104.675754,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "80951",
+    "place": "",
+    "lat": 38.878533,
+    "lng": -104.657577,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81001",
+    "place": "",
+    "lat": 38.295329,
+    "lng": -104.537238,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81003",
+    "place": "",
+    "lat": 38.277652,
+    "lng": -104.656426,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81004",
+    "place": "",
+    "lat": 38.044054,
+    "lng": -104.71441,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81005",
+    "place": "",
+    "lat": 38.212315,
+    "lng": -104.831773,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81006",
+    "place": "",
+    "lat": 38.239909,
+    "lng": -104.477851,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81007",
+    "place": "",
+    "lat": 38.385809,
+    "lng": -104.795882,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81008",
+    "place": "",
+    "lat": 38.405766,
+    "lng": -104.57872,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81019",
+    "place": "",
+    "lat": 37.942304,
+    "lng": -104.835772,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81020",
+    "place": "",
+    "lat": 37.465135,
+    "lng": -104.609994,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81022",
+    "place": "",
+    "lat": 38.024844,
+    "lng": -104.434721,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81025",
+    "place": "",
+    "lat": 38.455047,
+    "lng": -104.355296,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81027",
+    "place": "",
+    "lat": 37.246664,
+    "lng": -103.723169,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81039",
+    "place": "",
+    "lat": 37.93907,
+    "lng": -104.085204,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81047",
+    "place": "",
+    "lat": 38.009822,
+    "lng": -102.190671,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81050",
+    "place": "",
+    "lat": 37.855707,
+    "lng": -103.471739,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81052",
+    "place": "",
+    "lat": 37.974424,
+    "lng": -102.638977,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81054",
+    "place": "",
+    "lat": 37.911665,
+    "lng": -103.190484,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81055",
+    "place": "",
+    "lat": 37.384354,
+    "lng": -105.118902,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81057",
+    "place": "",
+    "lat": 38.123016,
+    "lng": -102.901912,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81058",
+    "place": "",
+    "lat": 38.10851,
+    "lng": -103.886689,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81059",
+    "place": "",
+    "lat": 37.563258,
+    "lng": -104.001465,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81062",
+    "place": "",
+    "lat": 38.29689,
+    "lng": -103.964339,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81063",
+    "place": "",
+    "lat": 38.43071,
+    "lng": -103.77106,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81064",
+    "place": "",
+    "lat": 37.224707,
+    "lng": -102.999283,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81067",
+    "place": "",
+    "lat": 38.01618,
+    "lng": -103.725034,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81069",
+    "place": "",
+    "lat": 37.891792,
+    "lng": -104.889437,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81073",
+    "place": "",
+    "lat": 37.425411,
+    "lng": -102.705136,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81077",
+    "place": "",
+    "lat": 38.019499,
+    "lng": -103.613443,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81082",
+    "place": "",
+    "lat": 37.185365,
+    "lng": -104.413603,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81089",
+    "place": "",
+    "lat": 37.630413,
+    "lng": -104.674625,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81090",
+    "place": "",
+    "lat": 37.365902,
+    "lng": -102.230461,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81091",
+    "place": "",
+    "lat": 37.14909,
+    "lng": -104.964703,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81092",
+    "place": "",
+    "lat": 38.215278,
+    "lng": -102.908255,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81101",
+    "place": "",
+    "lat": 37.469311,
+    "lng": -105.85273,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81120",
+    "place": "",
+    "lat": 37.195313,
+    "lng": -106.34935,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81122",
+    "place": "",
+    "lat": 37.301809,
+    "lng": -107.537448,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81123",
+    "place": "",
+    "lat": 37.411212,
+    "lng": -105.56571,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81125",
+    "place": "",
+    "lat": 37.819261,
+    "lng": -106.069857,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81128",
+    "place": "",
+    "lat": 37.079692,
+    "lng": -106.620963,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81130",
+    "place": "",
+    "lat": 37.701575,
+    "lng": -107.096886,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81131",
+    "place": "",
+    "lat": 37.865412,
+    "lng": -105.679141,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81132",
+    "place": "",
+    "lat": 37.714226,
+    "lng": -106.416175,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81133",
+    "place": "",
+    "lat": 37.45001,
+    "lng": -105.32842,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81137",
+    "place": "",
+    "lat": 37.051911,
+    "lng": -107.613601,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81140",
+    "place": "",
+    "lat": 37.299115,
+    "lng": -106.161365,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81143",
+    "place": "",
+    "lat": 38.158406,
+    "lng": -105.849977,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81144",
+    "place": "",
+    "lat": 37.553535,
+    "lng": -106.139482,
+    "totalAsWorkplace": 0,
     "totalAsResidence": 0,
     "isAnchor": false
   },
@@ -455,7 +2912,142 @@
     "lat": 37.286627,
     "lng": -107.085416,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 22,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81149",
+    "place": "",
+    "lat": 38.100089,
+    "lng": -106.346144,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81151",
+    "place": "",
+    "lat": 37.239069,
+    "lng": -105.711645,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81152",
+    "place": "",
+    "lat": 37.134542,
+    "lng": -105.395987,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81154",
+    "place": "",
+    "lat": 37.634046,
+    "lng": -106.667927,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81155",
+    "place": "",
+    "lat": 38.28645,
+    "lng": -106.065517,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81201",
+    "place": "",
+    "lat": 38.555478,
+    "lng": -106.107468,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81210",
+    "place": "",
+    "lat": 38.808683,
+    "lng": -106.677952,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81211",
+    "place": "",
+    "lat": 38.972891,
+    "lng": -106.380522,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81212",
+    "place": "",
+    "lat": 38.542383,
+    "lng": -105.423488,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81220",
+    "place": "",
+    "lat": 38.297911,
+    "lng": -107.477679,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81221",
+    "place": "",
+    "lat": 38.362378,
+    "lng": -105.14243,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81223",
+    "place": "",
+    "lat": 38.364528,
+    "lng": -105.612647,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81224",
+    "place": "",
+    "lat": 38.879862,
+    "lng": -106.933,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81225",
+    "place": "",
+    "lat": 38.962294,
+    "lng": -107.016317,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81226",
+    "place": "",
+    "lat": 38.337906,
+    "lng": -105.089415,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -463,8 +3055,98 @@
     "place": "Gunnison",
     "lat": 38.395065,
     "lng": -106.953683,
-    "totalAsWorkplace": 36,
-    "totalAsResidence": 110,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81233",
+    "place": "",
+    "lat": 38.492323,
+    "lng": -105.813776,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81235",
+    "place": "",
+    "lat": 37.965061,
+    "lng": -107.405174,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81236",
+    "place": "",
+    "lat": 38.676257,
+    "lng": -106.263703,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81237",
+    "place": "",
+    "lat": 38.616312,
+    "lng": -106.621254,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81240",
+    "place": "",
+    "lat": 38.500352,
+    "lng": -105.034304,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81241",
+    "place": "",
+    "lat": 38.638258,
+    "lng": -106.490872,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81242",
+    "place": "",
+    "lat": 38.471844,
+    "lng": -106.072904,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81243",
+    "place": "",
+    "lat": 38.265999,
+    "lng": -107.192094,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81251",
+    "place": "",
+    "lat": 39.142548,
+    "lng": -106.437579,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81252",
+    "place": "",
+    "lat": 38.110643,
+    "lng": -105.427521,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -472,8 +3154,107 @@
     "place": "Durango",
     "lat": 37.529427,
     "lng": -107.821502,
-    "totalAsWorkplace": 4,
-    "totalAsResidence": 108,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81303",
+    "place": "",
+    "lat": 37.124375,
+    "lng": -107.854835,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81320",
+    "place": "",
+    "lat": 37.720141,
+    "lng": -108.735147,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81321",
+    "place": "",
+    "lat": 37.31297,
+    "lng": -108.734537,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81323",
+    "place": "",
+    "lat": 37.702727,
+    "lng": -108.126639,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81324",
+    "place": "",
+    "lat": 37.641979,
+    "lng": -109.009593,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81326",
+    "place": "",
+    "lat": 37.145589,
+    "lng": -108.116569,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81327",
+    "place": "",
+    "lat": 37.516777,
+    "lng": -108.656346,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81328",
+    "place": "",
+    "lat": 37.270759,
+    "lng": -108.329659,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81331",
+    "place": "",
+    "lat": 37.445868,
+    "lng": -108.907291,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81332",
+    "place": "",
+    "lat": 37.700344,
+    "lng": -107.991227,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81334",
+    "place": "",
+    "lat": 37.146129,
+    "lng": -108.61295,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -481,8 +3262,8 @@
     "place": "Montrose",
     "lat": 38.514973,
     "lng": -107.766148,
-    "totalAsWorkplace": 201,
-    "totalAsResidence": 131,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -491,7 +3272,7 @@
     "lat": 38.314564,
     "lng": -107.92836,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 16,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -500,7 +3281,16 @@
     "lat": 38.80969,
     "lng": -107.976469,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 2,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81411",
+    "place": "",
+    "lat": 38.251835,
+    "lng": -108.97886,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -509,7 +3299,16 @@
     "lat": 38.975741,
     "lng": -107.899073,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 27,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81415",
+    "place": "",
+    "lat": 38.625512,
+    "lng": -107.627585,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -517,8 +3316,80 @@
     "place": "Delta",
     "lat": 38.640468,
     "lng": -108.254583,
-    "totalAsWorkplace": 60,
-    "totalAsResidence": 108,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81418",
+    "place": "",
+    "lat": 38.899354,
+    "lng": -108.05804,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81419",
+    "place": "",
+    "lat": 38.883071,
+    "lng": -107.747726,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81422",
+    "place": "",
+    "lat": 38.320239,
+    "lng": -108.70826,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81423",
+    "place": "",
+    "lat": 38.009319,
+    "lng": -108.427263,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81424",
+    "place": "",
+    "lat": 38.345022,
+    "lng": -108.502319,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81425",
+    "place": "",
+    "lat": 38.458292,
+    "lng": -108.118672,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81426",
+    "place": "",
+    "lat": 37.866128,
+    "lng": -107.820786,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81427",
+    "place": "",
+    "lat": 38.025834,
+    "lng": -107.609747,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -527,7 +3398,61 @@
     "lat": 38.962987,
     "lng": -107.599578,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 14,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81429",
+    "place": "",
+    "lat": 38.37922,
+    "lng": -108.882861,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81430",
+    "place": "",
+    "lat": 38.053745,
+    "lng": -108.067189,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81431",
+    "place": "",
+    "lat": 38.143531,
+    "lng": -108.514118,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81432",
+    "place": "",
+    "lat": 38.129867,
+    "lng": -107.745344,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81433",
+    "place": "",
+    "lat": 37.722006,
+    "lng": -107.579392,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81434",
+    "place": "",
+    "lat": 38.981711,
+    "lng": -107.43059,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -535,8 +3460,8 @@
     "place": "Telluride",
     "lat": 37.868751,
     "lng": -107.925117,
-    "totalAsWorkplace": 21,
-    "totalAsResidence": 9,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -544,8 +3469,8 @@
     "place": "Grand Junction",
     "lat": 39.071844,
     "lng": -108.546,
-    "totalAsWorkplace": 558,
-    "totalAsResidence": 242,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -554,7 +3479,7 @@
     "lat": 39.034026,
     "lng": -108.486598,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 176,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -562,8 +3487,8 @@
     "place": "Grand Junction",
     "lat": 39.120298,
     "lng": -108.488532,
-    "totalAsWorkplace": 30,
-    "totalAsResidence": 421,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -571,8 +3496,8 @@
     "place": "Grand Junction",
     "lat": 39.214122,
     "lng": -108.588404,
-    "totalAsWorkplace": 408,
-    "totalAsResidence": 77,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -580,8 +3505,8 @@
     "place": "Grand Junction",
     "lat": 39.124877,
     "lng": -108.558662,
-    "totalAsWorkplace": 144,
-    "totalAsResidence": 114,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -589,8 +3514,8 @@
     "place": "Grand Junction",
     "lat": 39.009885,
     "lng": -108.651873,
-    "totalAsWorkplace": 3,
-    "totalAsResidence": 146,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -598,8 +3523,8 @@
     "place": "Clifton",
     "lat": 39.111083,
     "lng": -108.433844,
-    "totalAsWorkplace": 3,
-    "totalAsResidence": 125,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -607,8 +3532,35 @@
     "place": "Fruita",
     "lat": 39.156637,
     "lng": -108.878833,
-    "totalAsWorkplace": 7,
-    "totalAsResidence": 179,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81522",
+    "place": "",
+    "lat": 38.685456,
+    "lng": -108.921083,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81523",
+    "place": "",
+    "lat": 38.924718,
+    "lng": -108.889477,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81524",
+    "place": "",
+    "lat": 39.290535,
+    "lng": -108.732843,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -617,7 +3569,7 @@
     "lat": 39.259524,
     "lng": -108.967298,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 3,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -625,8 +3577,17 @@
     "place": "Palisade",
     "lat": 39.083037,
     "lng": -108.345615,
-    "totalAsWorkplace": 15,
-    "totalAsResidence": 36,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81527",
+    "place": "",
+    "lat": 38.798468,
+    "lng": -108.469982,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -639,6 +3600,15 @@
     "isAnchor": true
   },
   {
+    "zip": "81610",
+    "place": "",
+    "lat": 40.289242,
+    "lng": -108.842569,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
     "zip": "81611",
     "place": "Aspen",
     "lat": 39.1911,
@@ -648,12 +3618,21 @@
     "isAnchor": true
   },
   {
+    "zip": "81612",
+    "place": "",
+    "lat": 39.051104,
+    "lng": -106.845014,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
     "zip": "81615",
     "place": "Snowmass Village",
     "lat": 39.213,
     "lng": -106.9378,
     "totalAsWorkplace": 3880,
-    "totalAsResidence": 1365,
+    "totalAsResidence": 1558,
     "isAnchor": true
   },
   {
@@ -661,8 +3640,8 @@
     "place": "Avon",
     "lat": 39.61303,
     "lng": -106.503056,
-    "totalAsWorkplace": 862,
-    "totalAsResidence": 86,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -688,8 +3667,8 @@
     "place": "Collbran",
     "lat": 39.159447,
     "lng": -107.745095,
-    "totalAsWorkplace": 17,
-    "totalAsResidence": 55,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -697,13 +3676,13 @@
     "place": "Craig",
     "lat": 40.704673,
     "lng": -107.736157,
-    "totalAsWorkplace": 10,
-    "totalAsResidence": 110,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
     "zip": "81630",
-    "place": "De Beque",
+    "place": "DeBeque",
     "lat": 39.3306,
     "lng": -108.2231,
     "totalAsWorkplace": 310,
@@ -715,8 +3694,8 @@
     "place": "Eagle",
     "lat": 39.626454,
     "lng": -106.771255,
-    "totalAsWorkplace": 467,
-    "totalAsResidence": 144,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -724,13 +3703,13 @@
     "place": "Edwards",
     "lat": 39.622675,
     "lng": -106.607079,
-    "totalAsWorkplace": 220,
-    "totalAsResidence": 86,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
     "zip": "81635",
-    "place": "Parachute",
+    "place": "Battlement Mesa",
     "lat": 39.4519,
     "lng": -108.0531,
     "totalAsWorkplace": 1597,
@@ -742,8 +3721,35 @@
     "place": "Eagle",
     "lat": 39.777826,
     "lng": -107.105814,
-    "totalAsWorkplace": 392,
-    "totalAsResidence": 264,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81638",
+    "place": "",
+    "lat": 40.300403,
+    "lng": -107.642739,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81639",
+    "place": "",
+    "lat": 40.564993,
+    "lng": -107.246656,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81640",
+    "place": "",
+    "lat": 40.668299,
+    "lng": -108.514046,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -751,8 +3757,8 @@
     "place": "Meeker",
     "lat": 40.109264,
     "lng": -107.818214,
-    "totalAsWorkplace": 94,
-    "totalAsResidence": 132,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -761,7 +3767,7 @@
     "lat": 39.312809,
     "lng": -106.567699,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 61,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -769,8 +3775,8 @@
     "place": "Mesa",
     "lat": 39.124092,
     "lng": -108.149294,
-    "totalAsWorkplace": 12,
-    "totalAsResidence": 40,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -779,7 +3785,7 @@
     "lat": 39.455587,
     "lng": -106.458361,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 4,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -788,7 +3794,7 @@
     "lat": 39.1044,
     "lng": -108.005195,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 6,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -806,7 +3812,16 @@
     "lat": 39.904489,
     "lng": -108.791994,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 17,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
+    "zip": "81649",
+    "place": "",
+    "lat": 39.484255,
+    "lng": -106.291641,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -828,6 +3843,15 @@
     "isAnchor": true
   },
   {
+    "zip": "81653",
+    "place": "",
+    "lat": 40.895748,
+    "lng": -107.24223,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
     "zip": "81654",
     "place": "Snowmass",
     "lat": 39.331,
@@ -837,12 +3861,21 @@
     "isAnchor": true
   },
   {
+    "zip": "81655",
+    "place": "",
+    "lat": 39.753051,
+    "lng": -106.685878,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
+    "isAnchor": false
+  },
+  {
     "zip": "81656",
     "place": "Woody Creek",
     "lat": 39.279456,
     "lng": -106.7871,
-    "totalAsWorkplace": 31,
-    "totalAsResidence": 165,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -850,17 +3883,8 @@
     "place": "Vail",
     "lat": 39.649325,
     "lng": -106.325837,
-    "totalAsWorkplace": 366,
-    "totalAsResidence": 102,
-    "isAnchor": false
-  },
-  {
-    "zip": "84078",
-    "place": "Vernal",
-    "lat": 40.465526,
-    "lng": -109.510856,
     "totalAsWorkplace": 0,
-    "totalAsResidence": 24,
+    "totalAsResidence": 0,
     "isAnchor": false
   },
   {
@@ -868,8 +3892,8 @@
     "place": "All Other Locations",
     "lat": null,
     "lng": null,
-    "totalAsWorkplace": 8777,
-    "totalAsResidence": 8774,
+    "totalAsWorkplace": 0,
+    "totalAsResidence": 2217,
     "isAnchor": false,
     "isSynthetic": true
   }

@@ -5,6 +5,7 @@
   /* Locked palette per project plan: cool grayscale + warm-amber accent */
   --bg-base: #08090c;          /* near-black map canvas underlay */
   --panel-bg: rgba(255, 255, 255, 0.04);
+  --panel-surface: rgba(20, 22, 28, 0.72);
   --panel-border: rgba(255, 255, 255, 0.08);
   --text: #cfd2d9;
   --text-h: #f5f6f8;
@@ -46,12 +47,22 @@ html, body, #root {
 /* Tabular numerals for stat tiles */
 .tnum { font-variant-numeric: tabular-nums; }
 
-/* Glass tile */
+/* Glass tile.
+   Default surface is a darker semi-opaque base so the panel reads as glass
+   in browsers that do not (or cannot) capture the WebGL map canvas via
+   backdrop-filter (Chromium, Firefox). Browsers that DO blur the backdrop
+   get a more translucent surface via the @supports override below. */
 .glass {
-  background: var(--panel-bg);
+  background: var(--panel-surface);
   border: 1px solid var(--panel-border);
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
+}
+
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  .glass {
+    background: rgba(20, 22, 28, 0.55);
+  }
 }
 
 /* MapLibre style overrides — hide default attribution chrome; we surface it in methodology footer */

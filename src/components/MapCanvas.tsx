@@ -23,6 +23,13 @@ interface Props {
   visibleCorridorMap: Map<CorridorId, ActiveCorridorAggregation>;
   bucketBreaks: [number, number, number, number];
   selectedZip: string | null;
+  // Optional secondary partner selection — when set the renderer fades
+  // every corridor that doesn't carry a flow matching this partner zip set
+  // paired with the active anchor (partner is on origin side in inbound,
+  // destination side in outbound). The non-matching corridors stay drawn
+  // (so the user can still see the network around the highlighted route)
+  // but at the same dim opacity used for non-anchor corridors.
+  selectedPartner: { place: string; zips: string[] } | null;
   mode: Mode;
   onSelectZip: (zip: string | null) => void;
   hoveredCorridorId: CorridorId | null;
@@ -54,6 +61,7 @@ export function MapCanvas({
   visibleCorridorMap,
   bucketBreaks,
   selectedZip,
+  selectedPartner,
   mode,
   onSelectZip,
   hoveredCorridorId,
@@ -234,12 +242,27 @@ export function MapCanvas({
           (a, b) => b[1].total - a[1].total,
         );
 
+      // When a partner is also selected, narrow the "selected" predicate so
+      // only corridors carrying the partner→anchor (inbound) or anchor→partner
+      // (outbound) flow stay bright; every other corridor falls into the
+      // existing dim-on-selection bucket.
+      const partnerZipSet = selectedPartner
+        ? new Set(selectedPartner.zips)
+        : null;
       const isCorridorSelected = (agg: ActiveCorridorAggregation): boolean => {
         if (!selectedZip) return false;
         for (const fr of agg.flows) {
-          if (mode === 'inbound' ? fr.destZip === selectedZip : fr.originZip === selectedZip) {
-            return true;
-          }
+          const anchorMatch =
+            mode === 'inbound'
+              ? fr.destZip === selectedZip
+              : fr.originZip === selectedZip;
+          if (!anchorMatch) continue;
+          if (!partnerZipSet) return true;
+          const partnerMatch =
+            mode === 'inbound'
+              ? partnerZipSet.has(fr.originZip)
+              : partnerZipSet.has(fr.destZip);
+          if (partnerMatch) return true;
         }
         return false;
       };
@@ -351,7 +374,10 @@ export function MapCanvas({
         if (!visibleFlowIds.has(flowIdOf(f))) continue;
         const c = projected.get(f.destZip);
         if (!c) continue;
-        const isSelected = selectedZip === f.destZip;
+        // When a partner is selected the within-anchor self-flow is no longer
+        // part of the highlighted route (partner != anchor by definition), so
+        // demote the ring back to the dim non-selected style.
+        const isSelected = selectedZip === f.destZip && partnerZipSet == null;
         const r = 6 + Math.log1p(f.workerCount) * 1.4;
         const ringStyle = corridorStyle(f.workerCount, bucketBreaks);
         const ring = document.createElementNS(NS, 'circle');
@@ -512,6 +538,7 @@ export function MapCanvas({
     visibleCorridorMap,
     bucketBreaks,
     selectedZip,
+    selectedPartner,
     mode,
     hoveredCorridorId,
     onSelectZip,

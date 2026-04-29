@@ -126,6 +126,84 @@ export function detailForZip(
   return { zip, total, flows: out, selfFlow, allOther };
 }
 
+// Earth radius in miles — Haversine constant.
+const EARTH_RADIUS_MI = 3958.7613;
+// Detour multiplier applied to Haversine when no precomputed drive-distance is
+// available. Empirically chosen for the Roaring Fork / Colorado River valley
+// road network, which generally tracks the valley axis (Hwy 82, I-70).
+const HAVERSINE_DETOUR_FACTOR = 1.25;
+
+/** Drive-distance lookup, keyed `min(zipA,zipB)|max(zipA,zipB)`. */
+export type DriveDistanceMap = Record<string, { miles: number; seconds: number }>;
+
+/** Canonical key into a DriveDistanceMap — sorted to match the build script. */
+export function driveDistanceKey(originZip: string, destZip: string): string {
+  return originZip < destZip ? `${originZip}|${destZip}` : `${destZip}|${originZip}`;
+}
+
+/** Haversine great-circle distance in miles between two centroids. */
+function haversineMiles(
+  lat1Deg: number,
+  lng1Deg: number,
+  lat2Deg: number,
+  lng2Deg: number,
+): number {
+  const lat1 = (lat1Deg * Math.PI) / 180;
+  const lat2 = (lat2Deg * Math.PI) / 180;
+  const dLat = lat2 - lat1;
+  const dLng = ((lng2Deg - lng1Deg) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_MI * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Worker-weighted mean commute distance in miles across all cross-ZIP flows.
+ * Self-flows and ALL_OTHER endpoints are excluded (no meaningful or available
+ * distance).
+ *
+ * Distance source priority per pair:
+ *   1. Precomputed OSRM drive-distance from `driveDistance` (road miles).
+ *   2. Haversine × HAVERSINE_DETOUR_FACTOR fallback when the pair is missing
+ *      from the map (e.g., centroid-only flows that weren't precomputed).
+ *
+ * Pass `undefined` for `driveDistance` to disable the lookup and fall back to
+ * pure Haversine × detour-factor for every pair.
+ */
+export function meanCommuteMiles(
+  flows: FlowRow[],
+  zips: ZipMeta[],
+  driveDistance?: DriveDistanceMap,
+): number {
+  const zipIndex = new Map<string, ZipMeta>();
+  for (const z of zips) zipIndex.set(z.zip, z);
+
+  let weightedMiles = 0;
+  let weight = 0;
+  for (const f of flows) {
+    if (f.originZip === f.destZip) continue;
+    if (f.originZip === 'ALL_OTHER' || f.destZip === 'ALL_OTHER') continue;
+
+    let miles: number | null = null;
+    if (driveDistance) {
+      const hit = driveDistance[driveDistanceKey(f.originZip, f.destZip)];
+      if (hit) miles = hit.miles;
+    }
+    if (miles == null) {
+      const o = zipIndex.get(f.originZip);
+      const d = zipIndex.get(f.destZip);
+      if (!o || !d) continue;
+      if (o.lat == null || o.lng == null || d.lat == null || d.lng == null) continue;
+      miles = haversineMiles(o.lat, o.lng, d.lat, d.lng) * HAVERSINE_DETOUR_FACTOR;
+    }
+
+    weightedMiles += miles * f.workerCount;
+    weight += f.workerCount;
+  }
+  return weight > 0 ? weightedMiles / weight : 0;
+}
+
 /**
  * Classify an O-D pair by geographic bearing using both axes.
  * Returns 'neutral' for self-flows, ALL_OTHER endpoints, missing centroids,

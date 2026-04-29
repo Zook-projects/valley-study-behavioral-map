@@ -12,9 +12,13 @@ dist
 dist-ssr
 *.local
 
-# Build-time OSRM cache for corridor road geometry
+# Build-time OSRM cache for corridor road geometry + ZIP-pair drive distances
 scripts/.osrm-corridor-cache.json
+scripts/.osrm-distance-cache.json
 scripts/__pycache__
+
+# LODES bulk download + filtered cache (pulled by scripts/fetch-lodes.py)
+data/lodes-cache/
 
 # Editor directories and files
 .vscode/*
