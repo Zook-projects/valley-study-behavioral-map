@@ -125,9 +125,9 @@
         "nodeId": "J_BC",
         "label": "Brush Creek Junction",
         "associatedZip": null,
-        "note": "Hwy 82 / Brush Creek Rd junction near Aspen Airport / Buttermilk."
+        "note": "Hwy 82 / Brush Creek Rd intersection at the Aspen Airport roundabout."
       },
-      "geometry": { "type": "Point", "coordinates": [-106.9300, 39.2700] }
+      "geometry": { "type": "Point", "coordinates": [-106.883902, 39.249641] }
     },
     {
       "type": "Feature",

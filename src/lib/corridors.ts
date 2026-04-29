@@ -104,6 +104,11 @@ export function aggregateCorridor(
   entries: CorridorFlowEntry[],
   visibleFlowIds: Set<string>,
   mode: Mode,
+  // Optional override — when the caller's visibleFlows have a filter-rewritten
+  // workerCount (e.g., the segment filter rewrote per-row totals to a subset
+  // of buckets), aggregateCorridor reads from this map so the corridor total
+  // reflects the active filter rather than the cached index's full S000.
+  workerCountByFlowId?: Map<string, number>,
 ): ActiveCorridorAggregation {
   let total = 0;
   const byDestZip = new Map<string, number>();
@@ -113,13 +118,14 @@ export function aggregateCorridor(
   for (const fr of entries) {
     if (fr.direction !== mode) continue;
     if (!visibleFlowIds.has(fr.flowId)) continue;
-    total += fr.workerCount;
-    byDestZip.set(fr.destZip, (byDestZip.get(fr.destZip) ?? 0) + fr.workerCount);
+    const workerCount = workerCountByFlowId?.get(fr.flowId) ?? fr.workerCount;
+    total += workerCount;
+    byDestZip.set(fr.destZip, (byDestZip.get(fr.destZip) ?? 0) + workerCount);
     byOriginZip.set(
       fr.originZip,
-      (byOriginZip.get(fr.originZip) ?? 0) + fr.workerCount,
+      (byOriginZip.get(fr.originZip) ?? 0) + workerCount,
     );
-    flows.push(fr);
+    flows.push({ ...fr, workerCount });
   }
 
   return {
@@ -144,13 +150,19 @@ export function buildVisibleCorridorMap(
   mode: Mode,
 ): Map<CorridorId, ActiveCorridorAggregation> {
   const visibleFlowIds = new Set(visibleFlows.map(flowIdOf));
+  // Carry filter-rewritten workerCounts (e.g., segment filter narrowed a
+  // FlowRow's total to a bucket sum) through to aggregateCorridor so corridor
+  // line widths and totals reflect the active filter rather than the cached
+  // S000 in the static flowIndex.
+  const workerCountByFlowId = new Map<string, number>();
+  for (const f of visibleFlows) workerCountByFlowId.set(flowIdOf(f), f.workerCount);
   const out = new Map<CorridorId, ActiveCorridorAggregation>();
 
   for (const [cid, corridor] of corridorIndex) {
     const entries = flowIndex.get(cid);
     if (!entries) continue;
     if (!entries.some((fr) => fr.direction === mode)) continue;
-    const agg = aggregateCorridor(corridor, entries, visibleFlowIds, mode);
+    const agg = aggregateCorridor(corridor, entries, visibleFlowIds, mode, workerCountByFlowId);
     if (agg.total === 0 || agg.flows.length === 0) continue;
     out.set(cid, agg);
   }

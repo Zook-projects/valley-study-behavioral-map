@@ -361,9 +361,12 @@ def build_od_summary(
     # Capture self-pairs (h_zip == w_zip — people who live AND work in the
     # same ZIP) BEFORE filtering them out, so we can emit a separate
     # "within-ZIP" trend per anchor for the bottom-strip OD card.
+    # Sum all 10 OD value columns (totalJobs + 9 segment buckets) so the
+    # within-ZIP card supports the segment filter the same way inflow/outflow
+    # do — sparklines re-aggregate from the per-year per-bucket series.
     self_pairs = od_pairs[od_pairs["h_zip"] == od_pairs["w_zip"]]
     self_by_year = (
-        self_pairs.groupby(["h_zip", "year"], as_index=False)["totalJobs"]
+        self_pairs.groupby(["h_zip", "year"], as_index=False)[list(OD_COLS.values())]
         .sum()
         .rename(columns={"h_zip": "zip"})
     )
@@ -523,16 +526,17 @@ def build_od_summary(
         out_partners = _split_top("w_zip", "h_zip")
 
         # Within-ZIP series (people who live AND work in this anchor).
+        # Latest carries the full OdLatest shape (totalJobs + age/wage/naics3
+        # buckets) so the within-ZIP card can re-aggregate under a segment
+        # filter. Trend mirrors OD_TREND_DIMS so each per-bucket sparkline can
+        # recompute from the same per-year per-bucket series.
         self_rows = self_by_year[self_by_year["zip"] == zcta].sort_values("year")
         self_latest = self_rows[self_rows["year"] == LATEST_YEAR]
         within_latest = (
-            {"totalJobs": int(self_latest.iloc[0]["totalJobs"])}
+            _od_latest_block(self_latest.iloc[0])
             if not self_latest.empty else None
         )
-        within_trend = [
-            {"year": int(r["year"]), "value": int(r["totalJobs"])}
-            for _, r in self_rows.iterrows()
-        ]
+        within_trend = {dim: _trend_series(self_rows, dim) for dim in OD_TREND_DIMS}
 
         entries.append({
             "zip": zcta,
@@ -579,23 +583,22 @@ def build_od_summary(
     agg_inflow_latest = agg_inflow_year[agg_inflow_year["year"] == LATEST_YEAR]
     agg_outflow_latest = agg_outflow_year[agg_outflow_year["year"] == LATEST_YEAR]
 
-    # Within-ZIP aggregate — sum self-pairs across the anchor set per year.
+    # Within-ZIP aggregate — sum self-pairs across the anchor set per year,
+    # carrying every OD value column so the aggregate within-ZIP card can
+    # also re-aggregate under a segment filter.
     agg_self_year = (
         self_by_year[self_by_year["zip"].isin(anchor_zips)]
-        .groupby("year", as_index=False)["totalJobs"]
+        .groupby("year", as_index=False)[list(OD_COLS.values())]
         .sum()
         .sort_values("year")
         .reset_index(drop=True)
     )
     agg_self_latest = agg_self_year[agg_self_year["year"] == LATEST_YEAR]
     agg_within_latest = (
-        {"totalJobs": int(agg_self_latest.iloc[0]["totalJobs"])}
+        _od_latest_block(agg_self_latest.iloc[0])
         if not agg_self_latest.empty else None
     )
-    agg_within_trend = [
-        {"year": int(r["year"]), "value": int(r["totalJobs"])}
-        for _, r in agg_self_year.iterrows()
-    ]
+    agg_within_trend = {dim: _trend_series(agg_self_year, dim) for dim in OD_TREND_DIMS}
 
     aggregate = {
         "latestYear": LATEST_YEAR,

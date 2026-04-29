@@ -133,9 +133,12 @@ export interface OdSummaryEntry {
   // Within-ZIP commuters (h_zip == w_zip) — workers who live AND work in this
   // ZIP. Excluded from inflow/outflow above so those reflect only cross-ZIP
   // commuters; surfaced separately here as a "live and work" metric.
+  // Latest carries the full OdLatest shape so the within-ZIP card can
+  // recompute under a segment filter; trend mirrors OdTrend so each per-bucket
+  // sparkline can re-aggregate from the same per-year per-bucket series.
   withinZip: {
-    latest: { totalJobs: number } | null;
-    trend: TrendPoint[];
+    latest: OdLatest | null;
+    trend: OdTrend;
   };
   topPartners: {
     inflow: OdPartner[];
@@ -163,8 +166,8 @@ export interface OdAggregate {
     trend: OdTrend;
   };
   withinZip: {
-    latest: { totalJobs: number } | null;
-    trend: TrendPoint[];
+    latest: OdLatest | null;
+    trend: OdTrend;
   };
 }
 

@@ -1,5 +1,7 @@
 // Shared types for flow + ZIP + corridor records emitted by scripts/build-data.py.
 
+import type { AgeBlock, Naics3Block, WageBlock } from './lodes';
+
 export type Mode = 'inbound' | 'outbound';
 
 // Geographic bearing of an O-D pair, derived from longitude difference.
@@ -9,6 +11,33 @@ export type Direction = 'east' | 'west' | 'neutral';
 
 // 3-state direction filter for the dashboard. 'all' = unfiltered.
 export type DirectionFilter = 'all' | 'east' | 'west';
+
+// Per-pair worker breakdowns LODES publishes on every OD row. Within an axis
+// the buckets sum to workerCount within ±2 (LODES noise infusion). LODES does
+// not publish cross-axis joint cells, so the filter UI commits to one axis at
+// a time — see SegmentFilter below.
+export interface FlowSegments {
+  age: AgeBlock;
+  wage: WageBlock;
+  naics3: Naics3Block;
+}
+
+// Active segment-filter axis. 'all' = no filter.
+export type SegmentAxis = 'all' | 'age' | 'wage' | 'naics3';
+
+// Bucket keys for each axis. Kept as a single union so the filter state can
+// hold any combination within whichever axis is active.
+export type AgeBucket = 'u29' | 'age30to54' | 'age55plus';
+export type WageBucket = 'low' | 'mid' | 'high';
+export type Naics3Bucket = 'goods' | 'tradeTransUtil' | 'allOther';
+export type SegmentBucket = AgeBucket | WageBucket | Naics3Bucket;
+
+export interface SegmentFilter {
+  axis: SegmentAxis;
+  // Buckets within the active axis. Empty when axis === 'all'. When all three
+  // buckets within an axis are selected, the filter folds back to axis: 'all'.
+  buckets: SegmentBucket[];
+}
 
 export interface FlowRow {
   // Inbound dataset: originZip is residence (or 'ALL_OTHER' residual), destZip is anchor workplace.
@@ -24,6 +53,10 @@ export interface FlowRow {
   // Ordered list of corridor IDs the flow traverses. Empty for self-flows
   // (origin == dest) and any flow whose endpoints reclassified to ALL_OTHER.
   corridorPath: CorridorId[];
+  // Per-pair LODES OD segment breakdowns. Optional so legacy callers and
+  // older cached JSON still type-check; build-data.py emits this on every
+  // row from the 2026-04-29 build forward.
+  segments?: FlowSegments;
 }
 
 export interface ZipMeta {

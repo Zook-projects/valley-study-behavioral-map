@@ -1,6 +1,25 @@
 // Pure functions for inbound/outbound lookups across the FlowRow set.
 
-import type { Direction, DirectionFilter, FlowRow, Mode, ZipMeta } from '../types/flow';
+import type {
+  AgeBucket,
+  Direction,
+  DirectionFilter,
+  FlowRow,
+  Mode,
+  Naics3Bucket,
+  SegmentBucket,
+  SegmentFilter,
+  WageBucket,
+  ZipMeta,
+} from '../types/flow';
+import type {
+  AgeBlock,
+  Naics3Block,
+  OdLatest,
+  OdTrend,
+  TrendPoint,
+  WageBlock,
+} from '../types/lodes';
 
 // Threshold below which a pair's E-W component is too small to call.
 // 0.005° (longitude-corrected for latitude) keeps same-cluster pairs neutral
@@ -271,4 +290,180 @@ export function filterForSelection(
   return flows.filter((f) =>
     mode === 'inbound' ? f.destZip === selectedZip : f.originZip === selectedZip,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Segment filter
+// ---------------------------------------------------------------------------
+// LODES exposes 9 OD segment buckets (3 age × 3 wage × 3 industry NAICS-3)
+// per pair. Within a single axis the buckets sum to workerCount within ±2;
+// across axes there is no joint cell. The filter UX therefore commits to one
+// axis at a time. `applySegmentFilter` rewrites each FlowRow's workerCount to
+// the sum of the selected buckets within the active axis so every downstream
+// consumer (corridor widths, stats panels, card headlines) re-aggregates
+// against the filtered universe with no extra plumbing.
+
+const ALL_BUCKETS_BY_AXIS: Record<'age' | 'wage' | 'naics3', SegmentBucket[]> = {
+  age: ['u29', 'age30to54', 'age55plus'],
+  wage: ['low', 'mid', 'high'],
+  naics3: ['goods', 'tradeTransUtil', 'allOther'],
+};
+
+/** True when no segment filter is active OR every bucket within the axis is selected. */
+export function isSegmentFilterAll(filter: SegmentFilter): boolean {
+  if (filter.axis === 'all') return true;
+  const all = ALL_BUCKETS_BY_AXIS[filter.axis];
+  if (filter.buckets.length !== all.length) return false;
+  return all.every((b) => filter.buckets.includes(b));
+}
+
+/** Sum of selected buckets in a FlowRow's segments under the active axis. */
+function flowRowSegmentSum(row: FlowRow, filter: SegmentFilter): number {
+  const seg = row.segments;
+  if (!seg || filter.axis === 'all') return row.workerCount;
+  if (filter.buckets.length === 0) return 0;
+  if (filter.axis === 'age') {
+    let n = 0;
+    for (const b of filter.buckets) n += seg.age[b as AgeBucket] ?? 0;
+    return n;
+  }
+  if (filter.axis === 'wage') {
+    let n = 0;
+    for (const b of filter.buckets) n += seg.wage[b as WageBucket] ?? 0;
+    return n;
+  }
+  // naics3
+  let n = 0;
+  for (const b of filter.buckets) n += seg.naics3[b as Naics3Bucket] ?? 0;
+  return n;
+}
+
+/**
+ * Return a new FlowRow array whose workerCount has been replaced by the
+ * sum of the selected buckets within the active axis. When no filter is
+ * active (axis === 'all' OR all buckets in the axis selected), the input
+ * array is returned unchanged so consumers can rely on referential equality.
+ *
+ * Rows missing a `segments` block (legacy JSON) are passed through with
+ * their original workerCount — App.tsx warns once in dev when this happens
+ * so a stale cached build is detectable.
+ */
+export function applySegmentFilter(
+  flows: FlowRow[],
+  filter: SegmentFilter,
+): FlowRow[] {
+  if (isSegmentFilterAll(filter)) return flows;
+  return flows.map((f) => ({ ...f, workerCount: flowRowSegmentSum(f, filter) }));
+}
+
+// ---------------------------------------------------------------------------
+// Block-level segment filtering helpers — used by BottomCardStrip cards that
+// summarize RAC/WAC or OD latest blocks under the segment filter.
+// ---------------------------------------------------------------------------
+
+/** Sum the selected buckets out of an AgeBlock / WageBlock / Naics3Block. */
+export function sumBucketsFromBlock(
+  block: AgeBlock | WageBlock | Naics3Block,
+  filter: SegmentFilter,
+): number {
+  if (filter.axis === 'all' || filter.buckets.length === 0) return 0;
+  let n = 0;
+  if (filter.axis === 'age') {
+    for (const b of filter.buckets) n += (block as AgeBlock)[b as AgeBucket] ?? 0;
+  } else if (filter.axis === 'wage') {
+    for (const b of filter.buckets) n += (block as WageBlock)[b as WageBucket] ?? 0;
+  } else {
+    for (const b of filter.buckets) n += (block as Naics3Block)[b as Naics3Bucket] ?? 0;
+  }
+  return n;
+}
+
+/**
+ * Filtered headline value for a RAC/WAC or OD latest block:
+ *   - filter inactive  → totalJobs (or 0 when block null)
+ *   - filter active    → sum of selected buckets within active axis
+ * RAC/WAC carry richer dimensions (race, ethnicity, education, sex) — those
+ * are not filterable since LODES has no OD analogue. Callers that render
+ * those cards keep their full-total behavior independent of the filter.
+ */
+export function filteredLatestTotal(
+  block:
+    | { totalJobs: number; age: AgeBlock; wage: WageBlock; naics3: Naics3Block }
+    | null,
+  filter: SegmentFilter,
+): number {
+  if (!block) return 0;
+  if (isSegmentFilterAll(filter)) return block.totalJobs;
+  if (filter.axis === 'age') return sumBucketsFromBlock(block.age, filter);
+  if (filter.axis === 'wage') return sumBucketsFromBlock(block.wage, filter);
+  return sumBucketsFromBlock(block.naics3, filter);
+}
+
+/**
+ * Per-year sparkline values for an OdTrend / RacWacTrend under the segment
+ * filter. When the filter is inactive, returns trend.totalJobs unchanged.
+ * Otherwise: at each year, sums the selected buckets across the trend's
+ * per-bucket series. Trends and OD inflow/outflow trends share the same
+ * dimension keys (ageU29, age30to54, age55plus, wageLow, …) so this works
+ * for any OdTrend / RacWacTrend without further plumbing.
+ */
+export function filteredTrendSeries(
+  trend: OdTrend | null,
+  filter: SegmentFilter,
+): TrendPoint[] {
+  if (!trend) return [];
+  if (isSegmentFilterAll(filter)) return trend.totalJobs;
+  if (filter.buckets.length === 0) {
+    // Filter is active but the user has un-selected every bucket — render a
+    // flatlined trend at zero so the sparkline still draws an axis. The
+    // BottomCardStrip is responsible for guarding axis !== 'all' && empty.
+    return trend.totalJobs.map((p) => ({ year: p.year, value: 0 }));
+  }
+  const dimsByAxis: Record<
+    'age' | 'wage' | 'naics3',
+    Record<string, keyof OdTrend>
+  > = {
+    age: {
+      u29: 'ageU29',
+      age30to54: 'age30to54',
+      age55plus: 'age55plus',
+    },
+    wage: {
+      low: 'wageLow',
+      mid: 'wageMid',
+      high: 'wageHigh',
+    },
+    naics3: {
+      goods: 'naicsGoods',
+      tradeTransUtil: 'naicsTradeTransUtil',
+      allOther: 'naicsAllOther',
+    },
+  };
+  const dims = dimsByAxis[filter.axis as 'age' | 'wage' | 'naics3'];
+  const series: TrendPoint[][] = filter.buckets.map(
+    (b) => trend[dims[b as string]] ?? [],
+  );
+  // Walk the canonical year set from the totalJobs series so the output is
+  // dense across 2002–2023. Each year's value is the sum across selected
+  // bucket series at that year (defaults to 0 if a bucket is missing the year).
+  return trend.totalJobs.map((p) => {
+    let value = 0;
+    for (const s of series) {
+      const hit = s.find((q) => q.year === p.year);
+      if (hit) value += hit.value;
+    }
+    return { year: p.year, value };
+  });
+}
+
+/**
+ * Filtered OdLatest "totalJobs" only — convenience wrapper used where the
+ * caller just needs the headline integer for an OD inflow/outflow/within
+ * latest block. Returns 0 when block is null.
+ */
+export function filteredOdLatestTotal(
+  block: OdLatest | null,
+  filter: SegmentFilter,
+): number {
+  return filteredLatestTotal(block, filter);
 }

@@ -49,9 +49,14 @@ html, body, #root {
 
 /* Glass tile.
    Default surface is a darker semi-opaque base so the panel reads as glass
-   in browsers that do not (or cannot) capture the WebGL map canvas via
-   backdrop-filter (Chromium, Firefox). Browsers that DO blur the backdrop
-   get a more translucent surface via the @supports override below. */
+   on top of the WebGL map. Chromium and Firefox advertise `backdrop-filter`
+   support but do NOT actually blur a WebGL <canvas>'s pixels through the
+   filter — the panel just goes see-through. Safari does composite the
+   canvas through `backdrop-filter`, so it can carry a more translucent
+   surface and still look right. The Safari-only feature query below uses a
+   `-webkit-named-image()` value that no Chromium engine implements, so the
+   override fires only in Safari/WebKit. Chromium + Firefox stay on the
+   darker default and read as opaque glass tiles, not see-through windows. */
 .glass {
   background: var(--panel-surface);
   border: 1px solid var(--panel-border);
@@ -59,7 +64,7 @@ html, body, #root {
   -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+@supports (background: -webkit-named-image(apple-pay-logo)) {
   .glass {
     background: rgba(20, 22, 28, 0.55);
   }

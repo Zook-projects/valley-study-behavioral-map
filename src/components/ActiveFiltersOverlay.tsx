@@ -3,7 +3,7 @@
 // looking at the map; the inline chips that previously sat in StatsForZip
 // and StatsAggregated were moved here per design feedback.
 
-import type { DirectionFilter } from '../types/flow';
+import type { DirectionFilter, SegmentFilter } from '../types/flow';
 import { fmtInt } from '../lib/format';
 
 interface Props {
@@ -16,7 +16,28 @@ interface Props {
   // upstream so this component stays presentational.
   directionNumerator: number;
   directionDenominator: number;
+  segmentFilter: SegmentFilter;
+  onClearSegmentFilter: () => void;
 }
+
+const AXIS_LABELS: Record<SegmentFilter['axis'], string> = {
+  all: 'All workers',
+  age: 'Age',
+  wage: 'Earnings',
+  naics3: 'Industry',
+};
+
+const BUCKET_LABELS: Record<string, string> = {
+  u29: 'Under 30',
+  age30to54: '30–54',
+  age55plus: '55+',
+  low: '≤ $1,250/mo',
+  mid: '$1,251–$3,333',
+  high: '> $3,333/mo',
+  goods: 'Goods',
+  tradeTransUtil: 'Trade · Trans · Util',
+  allOther: 'All Other Services',
+};
 
 function Chip({
   label,
@@ -61,12 +82,22 @@ export function ActiveFiltersOverlay({
   onClearPartner,
   directionNumerator,
   directionDenominator,
+  segmentFilter,
+  onClearSegmentFilter,
 }: Props) {
   const directionActive = directionFilter !== 'all';
-  if (!directionActive && !selectedPartner) return null;
+  const segmentActive = segmentFilter.axis !== 'all';
+  if (!directionActive && !selectedPartner && !segmentActive) return null;
 
   const directionLabel =
     directionFilter === 'east' ? 'Eastbound only' : 'Westbound only';
+
+  const segmentBucketsLabel =
+    segmentActive && segmentFilter.buckets.length > 0
+      ? segmentFilter.buckets
+          .map((b) => BUCKET_LABELS[b] ?? b)
+          .join(' · ')
+      : 'all buckets';
 
   return (
     <div className="absolute top-4 left-4 z-30 flex flex-col items-start gap-1.5 pointer-events-none">
@@ -86,6 +117,13 @@ export function ActiveFiltersOverlay({
           }`}
           onClear={onClearPartner}
           ariaLabel="Clear partner filter"
+        />
+      )}
+      {segmentActive && (
+        <Chip
+          label={`Segment: ${AXIS_LABELS[segmentFilter.axis]} · ${segmentBucketsLabel}`}
+          onClear={onClearSegmentFilter}
+          ariaLabel="Clear segment filter"
         />
       )}
     </div>

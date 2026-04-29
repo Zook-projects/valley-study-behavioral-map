@@ -37,6 +37,14 @@ interface Props {
     corridorId: CorridorId | null,
     payload?: { aggregation: ActiveCorridorAggregation; clientX: number; clientY: number },
   ) => void;
+  // Corridor-click pins the full tooltip until the user clicks a different
+  // corridor or an empty part of the map. The pinned state lives in App.tsx;
+  // MapCanvas just notifies on each interaction.
+  onClickCorridor: (
+    corridorId: CorridorId,
+    payload: { aggregation: ActiveCorridorAggregation; clientX: number; clientY: number },
+  ) => void;
+  onClickEmpty: () => void;
 }
 
 // CARTO Dark Matter style — open, no API key required.
@@ -66,10 +74,20 @@ export function MapCanvas({
   onSelectZip,
   hoveredCorridorId,
   onHoverCorridor,
+  onClickCorridor,
+  onClickEmpty,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MLMap | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // Keep onClickEmpty fresh inside the init-once effect — that effect captures
+  // its closures on first mount, so we deref the latest callback on each click
+  // via this ref instead of re-binding the listener.
+  const onClickEmptyRef = useRef(onClickEmpty);
+  useEffect(() => {
+    onClickEmptyRef.current = onClickEmpty;
+  }, [onClickEmpty]);
 
   const prefersReducedMotion =
     typeof window !== 'undefined' &&
@@ -95,6 +113,11 @@ export function MapCanvas({
     });
     map.touchZoomRotate.disableRotation();
     mapRef.current = map;
+
+    // Empty-map clicks clear any pinned tooltip. Corridor halos and ZIP nodes
+    // get pointer-events: auto so their handlers fire first; only clicks that
+    // miss them reach MapLibre's canvas and trigger this listener.
+    map.on('click', () => onClickEmptyRef.current());
 
     // Boost road visibility — CARTO Dark Matter renders roads near-black.
     map.on('style.load', () => {
@@ -179,6 +202,11 @@ export function MapCanvas({
     const map = mapRef.current;
     const svg = svgRef.current;
     if (!map || !svg) return;
+
+    // Container-level snap-to-nearest mousemove (item 8). render() rebuilds
+    // halos on every map move/resize; we swap this listener with the new
+    // closure each render so it stays bound to the current haloLookup.
+    let currentSnapMove: ((e: MouseEvent) => void) | null = null;
 
     const render = () => {
       const rect = map.getContainer().getBoundingClientRect();
@@ -274,6 +302,79 @@ export function MapCanvas({
 
       const hasSelection = selectedZip != null;
 
+      // ---- Shared hover state for all corridor halos this render pass ----
+      // - Hover delay (item 7): only the *first* tooltip appearance is
+      //   delayed by ~100ms; subsequent corridor switches fire immediately.
+      // - Re-anchor threshold (item 9): once a tooltip is open on a
+      //   corridor, additional mousemoves on the same corridor only re-fire
+      //   onHoverCorridor when the cursor has moved > 8px since the last
+      //   reported position. Reduces tooltip jitter.
+      let hoverTimer: number | null = null;
+      let pendingHover:
+        | { cid: CorridorId; agg: ActiveCorridorAggregation; x: number; y: number }
+        | null = null;
+      let activeCorridorId: CorridorId | null = null;
+      let lastClientX = -9999;
+      let lastClientY = -9999;
+
+      const fireHover = (
+        cid: CorridorId,
+        agg: ActiveCorridorAggregation,
+        x: number,
+        y: number,
+      ) => {
+        if (cid === activeCorridorId) {
+          const dx = x - lastClientX;
+          const dy = y - lastClientY;
+          if (dx * dx + dy * dy < 64) return; // 8px threshold (item 9)
+        }
+        activeCorridorId = cid;
+        lastClientX = x;
+        lastClientY = y;
+        onHoverCorridor(cid, { aggregation: agg, clientX: x, clientY: y });
+      };
+
+      const scheduleHover = (
+        cid: CorridorId,
+        agg: ActiveCorridorAggregation,
+        x: number,
+        y: number,
+      ) => {
+        if (activeCorridorId != null) {
+          fireHover(cid, agg, x, y);
+          return;
+        }
+        pendingHover = { cid, agg, x, y };
+        if (hoverTimer != null) return;
+        hoverTimer = window.setTimeout(() => {
+          hoverTimer = null;
+          if (pendingHover) {
+            const p = pendingHover;
+            pendingHover = null;
+            fireHover(p.cid, p.agg, p.x, p.y);
+          }
+        }, 100);
+      };
+
+      const clearHover = () => {
+        if (hoverTimer != null) {
+          window.clearTimeout(hoverTimer);
+          hoverTimer = null;
+        }
+        pendingHover = null;
+        if (activeCorridorId != null) {
+          activeCorridorId = null;
+          lastClientX = -9999;
+          lastClientY = -9999;
+          onHoverCorridor(null);
+        }
+      };
+
+      // Lookup so the container-level snap-to-nearest handler can resolve
+      // a data-corridor-id back to its aggregation without re-walking the
+      // visible-corridor map.
+      const haloLookup = new Map<CorridorId, ActiveCorridorAggregation>();
+
       const buildPathD = (corridor: CorridorRecord): string => {
         if (!corridor.geometry.length) return '';
         const parts: string[] = [];
@@ -313,31 +414,64 @@ export function MapCanvas({
         if (!pathD) continue;
 
         // Hit halo — invisible, wide, captures pointer events on thin corridors.
+        // Stroke-width 36 gives every corridor a generous hover/click target;
+        // the visible path on top still renders at its bucket-derived width
+        // (visuals unchanged). The visible path is set to pointer-events:none
+        // below so clicks landing directly on the stroke fall through to this
+        // halo's click handler — without that, the visible path's default
+        // pointer-events:auto swallows the click and pin-on-click breaks in
+        // every browser when the cursor is *on* the corridor itself.
         const halo = document.createElementNS(NS, 'path');
         halo.setAttribute('d', pathD);
         halo.setAttribute('fill', 'none');
         halo.setAttribute('stroke', 'transparent');
-        halo.setAttribute('stroke-width', '12');
+        halo.setAttribute('stroke-width', '36');
         halo.setAttribute('stroke-linecap', 'round');
         halo.setAttribute('stroke-linejoin', 'round');
+        // Explicit pointer-events: stroke ensures the transparent stroke is
+        // hit-testable by both event dispatch and document.elementsFromPoint
+        // (used by the snap-to-nearest container handler below).
+        halo.style.pointerEvents = 'stroke';
         halo.style.cursor = 'pointer';
         halo.dataset.corridorId = corridorId;
+        haloLookup.set(corridorId, agg);
         const hoverEnter = (e: MouseEvent) =>
-          onHoverCorridor(corridorId, {
-            aggregation: agg,
-            clientX: e.clientX,
-            clientY: e.clientY,
-          });
+          scheduleHover(corridorId, agg, e.clientX, e.clientY);
         const hoverMove = (e: MouseEvent) =>
-          onHoverCorridor(corridorId, {
+          scheduleHover(corridorId, agg, e.clientX, e.clientY);
+        const hoverLeave = () => clearHover();
+        const clickHandler = (e: MouseEvent) => {
+          // Stop the click from propagating to MapLibre's canvas, which
+          // otherwise fires onClickEmpty and clears the pin we just set.
+          e.stopPropagation();
+          onClickCorridor(corridorId, {
             aggregation: agg,
             clientX: e.clientX,
             clientY: e.clientY,
           });
-        const hoverLeave = () => onHoverCorridor(null);
+        };
+        // Touch support (item 12) — tapping a corridor pins its tooltip.
+        // preventDefault stops the synthetic mouse click that follows the
+        // touch from re-firing onClickCorridor (and avoids the 300ms tap
+        // delay on some browsers).
+        const touchHandler = (e: TouchEvent) => {
+          const t = e.touches[0] ?? e.changedTouches[0];
+          if (!t) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onClickCorridor(corridorId, {
+            aggregation: agg,
+            clientX: t.clientX,
+            clientY: t.clientY,
+          });
+        };
         halo.addEventListener('mouseenter', hoverEnter as EventListener);
         halo.addEventListener('mousemove', hoverMove as EventListener);
         halo.addEventListener('mouseleave', hoverLeave);
+        halo.addEventListener('click', clickHandler as EventListener);
+        halo.addEventListener('touchstart', touchHandler as EventListener, {
+          passive: false,
+        });
 
         const path = document.createElementNS(NS, 'path');
         path.setAttribute('d', pathD);
@@ -349,6 +483,11 @@ export function MapCanvas({
         path.setAttribute('opacity', String(baseOpacity));
         if (dashed) path.setAttribute('stroke-dasharray', '3 4');
         if (isInteractive) path.setAttribute('filter', 'url(#amber-glow)');
+        // Pointer events on the visible stroke are routed through the
+        // transparent halo behind it (appended just above). Without this the
+        // visible path's default pointer-events:auto captures the click,
+        // and since this path has no click handler the pin silently drops.
+        path.style.pointerEvents = 'none';
         if (!prefersReducedMotion) {
           path.style.transition = 'opacity 220ms ease, stroke 220ms ease';
         }
@@ -519,6 +658,45 @@ export function MapCanvas({
           labelGroup.appendChild(label);
         }
       }
+
+      // ---- Snap-to-nearest corridor on the map container (item 8) ----
+      // Per-halo mouseenter/mousemove handles direct hits. This handler
+      // covers the "cursor is *near* a thin corridor but not directly on
+      // its 18px halo" case by ring-sampling document.elementsFromPoint at
+      // ±8 and ±12 px around the cursor in 8 directions. First match wins.
+      // Skips when a halo is directly under the cursor (those listeners
+      // already fired). Clears the hover when the cursor moves into open
+      // map space, so the snap doesn't keep a stale tooltip alive.
+      const SNAP_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+        [8, 0], [-8, 0], [0, 8], [0, -8],
+        [12, 0], [-12, 0], [0, 12], [0, -12],
+        [8, 8], [8, -8], [-8, 8], [-8, -8],
+        [12, 12], [12, -12], [-12, 12], [-12, -12],
+      ];
+      const container = map.getContainer();
+      const snapMove = (e: MouseEvent) => {
+        const direct = document.elementsFromPoint(e.clientX, e.clientY);
+        for (const el of direct) {
+          if ((el as HTMLElement).dataset?.corridorId) return;
+        }
+        for (const [dx, dy] of SNAP_OFFSETS) {
+          const els = document.elementsFromPoint(e.clientX + dx, e.clientY + dy);
+          for (const el of els) {
+            const cid = (el as HTMLElement).dataset?.corridorId;
+            if (!cid) continue;
+            const aggMatch = haloLookup.get(cid);
+            if (!aggMatch) continue;
+            scheduleHover(cid, aggMatch, e.clientX, e.clientY);
+            return;
+          }
+        }
+        if (activeCorridorId != null) clearHover();
+      };
+      if (currentSnapMove) {
+        container.removeEventListener('mousemove', currentSnapMove);
+      }
+      container.addEventListener('mousemove', snapMove);
+      currentSnapMove = snapMove;
     };
 
     render();
@@ -530,6 +708,10 @@ export function MapCanvas({
       map.off('move', render);
       map.off('resize', render);
       map.off('load', render);
+      if (currentSnapMove) {
+        map.getContainer().removeEventListener('mousemove', currentSnapMove);
+        currentSnapMove = null;
+      }
     };
   }, [
     flows,
@@ -543,6 +725,7 @@ export function MapCanvas({
     hoveredCorridorId,
     onSelectZip,
     onHoverCorridor,
+    onClickCorridor,
     prefersReducedMotion,
   ]);
 

@@ -21,6 +21,24 @@ the full study area when nothing is selected and switch to a single anchor
 when a ZIP is chosen — the two top-partner cards (top inflow, top outflow)
 appear only in the per-anchor view.
 
+A **segment filter panel** sits as the leading column inside the card
+strip. The user picks one axis at a time — **All Workers / Age / Earnings
+/ Industry** — and multi-selects buckets within it (Age: Under 30 / 30–54
+/ 55+; Earnings: ≤$1,250/mo / mid / >$3,333/mo; Industry: Goods Producing
+/ Trade·Trans·Util / All Other Services). LODES does not publish joint
+cross-axis cells, so committing to a single axis at a time keeps every
+displayed number a clean within-axis sum (e.g., `SA01 + SA02 = 30–54
+universe`). When the filter is active, **every consumer** re-aggregates
+against the bucket sum: corridor stroke widths and Top corridor / Top
+O–D pair stats, OD card headlines and sparklines (inflow, outflow,
+within-ZIP), the WAC total card, and the regional `Total Workers` /
+`Cross-ZIP commute share` headlines. RAC/WAC cards on dimensions LODES
+does not break down at the OD level (Education, Race, Ethnicity, Sex)
+intentionally stay anchored to their full totals. Average commute distance
+is pinned to the unfiltered inbound set by design (matches the
+direction-filter behaviour). The active filter also surfaces as a
+dismissable chip in the top-left `ActiveFiltersOverlay`.
+
 Source: U.S. Census Bureau, **LEHD LODES8 (vintage 8.4)** — Origin-Destination
 (OD), Workplace Area Characteristics (WAC), and Residence Area Characteristics
 (RAC) for Colorado, 2002–2023, JT00 (All Jobs).
@@ -178,9 +196,14 @@ python3 scripts/build-data.py
 The script writes seven files under `public/data/`:
 
 - `flows-inbound.json` — workplace-anchored flows, each with a
-  `corridorPath: [CorridorId, …]` list. Ships **latest year only**.
-- `flows-outbound.json` — residence-anchored flows, with `corridorPath`.
-  Latest year only.
+  `corridorPath: [CorridorId, …]` list **and a per-pair LODES segment
+  block** (`segments: { age: { u29, age30to54, age55plus }, wage: { low,
+  mid, high }, naics3: { goods, tradeTransUtil, allOther } }`) so the
+  frontend filter can re-aggregate to any within-axis bucket sum. Ships
+  **latest year only**. A build-time sanity check asserts each axis sum
+  matches `workerCount` within ±2 (LODES noise infusion tolerance).
+- `flows-outbound.json` — residence-anchored flows, with `corridorPath`
+  and the same `segments` block. Latest year only.
 - `zips.json` — ZIP centroid + role metadata.
 - `corridors.json` — the smoothed, length-stamped corridor graph.
 - `rac.json` — per-anchor residence panel: latest-year demographic block
@@ -189,7 +212,11 @@ The script writes seven files under `public/data/`:
 - `wac.json` — per-anchor workplace panel, same shape as `rac.json`.
 - `od-summary.json` — per-anchor inflow + outflow blocks (totals,
   age/wage/NAICS-3, sparkline trends) plus top-N partner ZIPs for
-  inflow and outflow. Includes a regional aggregate.
+  inflow and outflow. The within-ZIP block (`withinZip.latest` +
+  `withinZip.trend`) carries the full age/wage/NAICS-3 latest block and
+  per-bucket per-year trend series so the within-ZIP card can re-aggregate
+  under the segment filter just like inflow/outflow. Includes a regional
+  aggregate.
 
 The build:
 
@@ -253,6 +280,9 @@ src/
     MapCanvas.tsx        ← MapLibre + SVG overlay, per-corridor rendering
     DashboardTile.tsx    ← 380px frosted-glass left rail
     BottomCardStrip.tsx  ← horizontal LODES card strip (aggregate ↔ per-anchor)
+    SegmentFilterPanel.tsx ← leading axis/bucket chip column inside the strip
+    ActiveFiltersOverlay.tsx ← dismissable chip rail (top-left) for direction,
+                               partner, and segment filters
     ModeToggle.tsx       ← Inbound (To) / Outbound (From) toggle
     ZipSelector.tsx      ← anchor chips + type-ahead search
     StatsAggregated.tsx  ← whole-region stats (active mode only)
@@ -260,8 +290,15 @@ src/
     MethodologyFooter.tsx
   lib/
     arcMath.ts           ← log-scale stroke widths
-    flowQueries.ts       ← pure selectors over the flow array
-    corridors.ts         ← mode-aware corridor aggregation (hover tooltip)
+    flowQueries.ts       ← pure selectors over the flow array, including the
+                           segment filter helpers (applySegmentFilter rewrites
+                           workerCount to the active within-axis bucket sum;
+                           filteredOdLatestTotal / filteredTrendSeries
+                           re-aggregate latest blocks + per-year trends)
+    corridors.ts         ← mode-aware corridor aggregation (hover tooltip);
+                           aggregateCorridor honours an optional workerCount
+                           override map so corridor totals reflect the segment
+                           filter without rebuilding the cached corridor index
     format.ts            ← number formatting
   types/
     flow.ts              ← FlowRow, ZipMeta, Mode, CorridorRecord, …

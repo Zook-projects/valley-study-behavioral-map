@@ -39,12 +39,21 @@ import type {
   CorridorRecord,
   FlowRow,
   Mode,
+  SegmentFilter,
   ZipMeta,
 } from '../types/flow';
 import {
   buildVisibleCorridorMap,
 } from '../lib/corridors';
-import { meanCommuteMiles, type DriveDistanceMap } from '../lib/flowQueries';
+import {
+  filteredLatestTotal,
+  filteredOdLatestTotal,
+  filteredTrendSeries,
+  isSegmentFilterAll,
+  meanCommuteMiles,
+  type DriveDistanceMap,
+} from '../lib/flowQueries';
+import { SegmentFilterPanel } from './SegmentFilterPanel';
 
 // ---------------------------------------------------------------------------
 // Sparkline
@@ -726,13 +735,25 @@ function CardsForRacWac({
   scope,
   wacLatest,
   wacTrend,
+  racLatest,
+  racTrend,
+  mode,
   trendDomain,
   showWacTotal = true,
   isAggregate = false,
+  segmentFilter,
+  odMixOverride,
 }: {
   scope: string;
   wacLatest: RacWacLatest | null;
   wacTrend: RacWacTrend | null;
+  // RAC counterparts. In a per-anchor view the Workforce mix card switches
+  // its data source by direction: inbound mode reads WAC (workers AT this
+  // anchor), outbound mode reads RAC (residents OF this anchor commuting
+  // out). Aggregate view keeps the original WAC charts for both modes.
+  racLatest: RacWacLatest | null;
+  racTrend: RacWacTrend | null;
+  mode: Mode;
   trendDomain?: [number, number];
   // When false, the standalone "Total jobs (WAC)" sparkline card is hidden.
   // The OD card already exposes a totalJobs trend in the per-anchor view, so
@@ -743,15 +764,79 @@ function CardsForRacWac({
   // pie Industry). Per-anchor view keeps the original three-section
   // breakdown table.
   isAggregate?: boolean;
+  // Active LODES segment filter — when axis matches age/wage/naics3, the
+  // WAC Total jobs card collapses to the filtered headline + sparkline.
+  // The breakdown cards (age/wage/industry/race/etc.) keep their full-totals
+  // visual treatment per spec.
+  segmentFilter: SegmentFilter;
+  // OD-derived workforce mix override for per-anchor view. When present, the
+  // Workforce mix card is built from per-pair LODES OD segment cells summed
+  // across the anchor's mode-active flows (and narrowed to selectedPartner
+  // when set), rather than from the anchor's RAC/WAC totals. The OD source
+  // tracks partner selection naturally — useful for "show me the demographic
+  // mix of just Rifle commuters" without leaving the strip.
+  //
+  // LODES caveat: per-pair age/wage/industry cells are uni-axis. When a
+  // segment-filter axis is active, this override still presents all three
+  // axes; only the workerCount headline narrows to the filtered axis. Joint
+  // cross-axis cells aren't published by LODES, so the off-axis breakdowns
+  // remain the unfiltered population by construction. This matches RAC/WAC
+  // behavior under the filter.
+  odMixOverride?: {
+    age: AgeBlock;
+    wage: WageBlock;
+    naics3: Naics3Block;
+    total: number;
+    title: string;
+    subtitle: string;
+  } | null;
 }) {
+  const filterActive = !isSegmentFilterAll(segmentFilter);
+  const filteredWacTotalLatest =
+    filterActive && wacLatest
+      ? filteredOdLatestTotal(wacLatest, segmentFilter)
+      : wacLatest?.totalJobs ?? 0;
+  const filteredWacTotalTrend =
+    filterActive && wacTrend
+      ? filteredTrendSeries(wacTrend, segmentFilter)
+      : wacTrend?.totalJobs ?? [];
+
+  // Per-anchor mode-aware data source for the Workforce mix card.
+  // Priority: OD-derived override (when provided) > RAC (outbound) > WAC.
+  // The OD path makes the card respond to selectedPartner and mode without
+  // a parallel RAC/WAC plumbing pass.
+  const useOdOverride = !isAggregate && odMixOverride != null;
+  const mixIsRac = !useOdOverride && !isAggregate && mode === 'outbound' && racLatest != null;
+  const mixBlock: { age: AgeBlock; wage: WageBlock; naics3: Naics3Block } | null = useOdOverride
+    ? odMixOverride!
+    : mixIsRac
+      ? racLatest!
+      : wacLatest;
+  const mixSourceLabel = useOdOverride
+    ? odMixOverride!.subtitle
+    : mixIsRac
+      ? 'RAC · latest year'
+      : 'WAC · latest year';
+  const mixTitle = useOdOverride
+    ? odMixOverride!.title
+    : `${scope} · Workforce mix`;
+  const mixTotalKey = useOdOverride
+    ? odMixOverride!.total
+    : mixIsRac
+      ? racLatest?.totalJobs ?? 0
+      : wacLatest?.totalJobs ?? 0;
+
   return (
     <>
       {showWacTotal && wacLatest && wacTrend && (
-        <Card title={`${scope} · Total jobs (WAC)`} subtitle="Workplace total jobs · 2002–2023">
-          <HeadlineNumber value={wacLatest.totalJobs} />
+        <Card
+          title={`${scope} · Total jobs (WAC)`}
+          subtitle="Workplace total jobs · 2002–2023"
+        >
+          <HeadlineNumber value={filteredWacTotalLatest} />
           <div className="flex-1 min-h-0">
             <Sparkline
-              series={wacTrend.totalJobs}
+              series={filteredWacTotalTrend}
               yDomain={trendDomain}
               dotColor="var(--text-h)"
               name="Total jobs"
@@ -773,16 +858,16 @@ function CardsForRacWac({
           </Card>
         </>
       )}
-      {wacLatest && !isAggregate && (
-        <Card title={`${scope} · Workforce mix`} subtitle="WAC · latest year" width={280}>
+      {mixBlock && !isAggregate && (
+        <Card title={mixTitle} subtitle={mixSourceLabel} width={280}>
           <BreakdownSection label="Age">
-            <Breakdown rows={ageRows(wacLatest.age)} total={wacLatest.totalJobs} />
+            <Breakdown rows={ageRows(mixBlock.age)} total={mixTotalKey} />
           </BreakdownSection>
           <BreakdownSection label="Wages">
-            <Breakdown rows={wageRows(wacLatest.wage)} total={wacLatest.totalJobs} />
+            <Breakdown rows={wageRows(mixBlock.wage)} total={mixTotalKey} />
           </BreakdownSection>
           <BreakdownSection label="Industry · NAICS-3">
-            <Breakdown rows={naicsRows(wacLatest.naics3)} total={wacLatest.totalJobs} />
+            <Breakdown rows={naicsRows(mixBlock.naics3)} total={mixTotalKey} />
           </BreakdownSection>
         </Card>
       )}
@@ -1195,17 +1280,23 @@ function PartnerList({
 }
 
 // ---------------------------------------------------------------------------
-// Workplace Metrics (per-anchor only)
+// Workplace / Residence Metrics (per-anchor only)
 // ---------------------------------------------------------------------------
-// Surfaces five anchor-workplace facts at a glance:
-//   • Total Workers              — WAC totalJobs (= inflow + within)
-//   • Cross-ZIP commute share    — inflow / (inflow + within)
-//   • Avg. commute distance      — worker-weighted miles across inbound
-//                                  cross-ZIP flows (drive-distance preferred,
-//                                  Haversine × detour-factor fallback)
-//   • Top corridor               — corridor carrying the most inbound workers
-//                                  to the selected anchor
-//   • Top O–D pair               — single highest origin → this-anchor flow
+// Surfaces five anchor facts at a glance, with semantics flipped by the
+// active map mode:
+//   • Total Workers / Total Resident Workers
+//       inbound  → WAC totalJobs (workforce universe = inflow + within)
+//       outbound → RAC totalJobs (resident-worker universe = outflow + within)
+//   • Cross-ZIP commute share / Cross-ZIP outbound share
+//       inbound  → inflow / (inflow + within)
+//       outbound → outflow / (outflow + within)
+//   • Avg. commute distance      — worker-weighted miles across the active
+//                                  mode's cross-ZIP flows (drive-distance
+//                                  preferred, Haversine × detour fallback)
+//   • Top corridor               — corridor carrying the most workers in the
+//                                  active mode through the selected anchor
+//   • Top O–D pair               — single highest origin → anchor (inbound)
+//                                  or anchor → destination (outbound) flow
 function MetricRow({
   label,
   value,
@@ -1242,124 +1333,182 @@ function WorkplaceMetricsCard({
   scope,
   selectedZip,
   selectedPartner,
+  mode,
   wacLatest,
+  racLatest,
   inflowLatest,
+  outflowLatest,
   withinLatest,
   topInflowPartner,
+  topOutflowPartner,
   flowsInbound,
+  flowsOutbound,
   zips,
   corridorIndex,
   flowIndex,
   driveDistance,
+  segmentFilter,
 }: {
   scope: string;
   selectedZip: string;
   // When set, the three partner-scoped metrics (Total Workers, Cross-ZIP
   // commute share, Average commute distance) recompute against the single
-  // partner→anchor flow. Top corridor and Top O–D pair stay anchor-scoped
+  // partner↔anchor flow. Top corridor and Top O–D pair stay anchor-scoped
   // per spec — the user's request named only those three for filtering.
   selectedPartner: { place: string; zips: string[] } | null;
+  // Map mode controls whether this card frames stats around workplace
+  // (inbound — workers commuting in) or residence (outbound — residents
+  // commuting out). All five metrics flip semantics; partner-scoped
+  // overrides follow the same direction.
+  mode: Mode;
   wacLatest: RacWacLatest | null;
+  racLatest: RacWacLatest | null;
   inflowLatest: { totalJobs: number } | null;
+  outflowLatest: { totalJobs: number } | null;
   withinLatest: { totalJobs: number } | null;
   topInflowPartner: OdPartner | null;
+  topOutflowPartner: OdPartner | null;
   flowsInbound: FlowRow[];
+  flowsOutbound: FlowRow[];
   zips: ZipMeta[];
   corridorIndex: Map<CorridorId, CorridorRecord>;
   flowIndex: Map<CorridorId, CorridorFlowEntry[]>;
   driveDistance: DriveDistanceMap | null;
+  segmentFilter: SegmentFilter;
 }) {
-  // Inbound flows narrowed to this anchor — the universe used for the
-  // distance and corridor metrics. Self-flows and ALL_OTHER are kept here;
-  // the consumers (meanCommuteMiles, corridor builder) handle exclusion.
-  const anchorInbound = useMemo(
-    () => flowsInbound.filter((f) => f.destZip === selectedZip),
-    [flowsInbound, selectedZip],
-  );
+  const isInbound = mode === 'inbound';
 
-  // Partner-scoped subset — single origin → anchor flow(s). Multi-ZIP
-  // cities (e.g., Eagle 81631 + 81637) sum across all of their ZIPs so
-  // the headline matches the row clicked in StatsForZip.
-  const partnerInbound = useMemo(() => {
+  // Anchor-touching flows for the active mode. Inbound: dest = anchor;
+  // outbound: origin = anchor. Self-flows and ALL_OTHER are kept here; the
+  // consumers (meanCommuteMiles, corridor builder) handle exclusion.
+  const anchorFlows = useMemo(() => {
+    const dataset = isInbound ? flowsInbound : flowsOutbound;
+    return dataset.filter((f) =>
+      isInbound ? f.destZip === selectedZip : f.originZip === selectedZip,
+    );
+  }, [isInbound, flowsInbound, flowsOutbound, selectedZip]);
+
+  // Partner-scoped subset — single partner→anchor (inbound) or
+  // anchor→partner (outbound) flow(s). Multi-ZIP cities sum across all of
+  // their ZIPs so the headline matches the row clicked in StatsForZip.
+  const partnerFlows = useMemo(() => {
     if (!selectedPartner) return [];
     const set = new Set(selectedPartner.zips);
-    return anchorInbound.filter((f) => set.has(f.originZip));
-  }, [anchorInbound, selectedPartner]);
+    return anchorFlows.filter((f) =>
+      isInbound ? set.has(f.originZip) : set.has(f.destZip),
+    );
+  }, [anchorFlows, selectedPartner, isInbound]);
 
   // Anchor-wide weighted mean (always computed for the unfiltered display).
   const anchorAvgMiles = useMemo(
-    () => meanCommuteMiles(anchorInbound, zips, driveDistance ?? undefined),
-    [anchorInbound, zips, driveDistance],
+    () => meanCommuteMiles(anchorFlows, zips, driveDistance ?? undefined),
+    [anchorFlows, zips, driveDistance],
   );
 
   // Partner-scoped weighted mean — single OD pair (or a small set of pairs
   // for multi-ZIP cities); meanCommuteMiles already excludes self / ALL_OTHER.
   const partnerAvgMiles = useMemo(
-    () => meanCommuteMiles(partnerInbound, zips, driveDistance ?? undefined),
-    [partnerInbound, zips, driveDistance],
+    () => meanCommuteMiles(partnerFlows, zips, driveDistance ?? undefined),
+    [partnerFlows, zips, driveDistance],
   );
 
-  // Highest-volume corridor among inbound flows touching this anchor.
-  // Self-flows have no corridorPath, so they drop out naturally. Stays
-  // anchor-scoped regardless of partner — partner filter applies only to the
-  // three named metrics per the user spec.
+  // Highest-volume corridor among flows touching this anchor (in active
+  // mode). Self-flows have no corridorPath, so they drop out naturally.
+  // Stays anchor-scoped regardless of partner — partner filter applies only
+  // to the three named metrics per the user spec.
   const topCorridor = useMemo<{ label: string; total: number } | null>(() => {
-    const map = buildVisibleCorridorMap(corridorIndex, flowIndex, anchorInbound, 'inbound');
+    const map = buildVisibleCorridorMap(corridorIndex, flowIndex, anchorFlows, mode);
     if (map.size === 0) return null;
     let best: ActiveCorridorAggregation | null = null;
     for (const agg of map.values()) {
       if (!best || agg.total > best.total) best = agg;
     }
     return best ? { label: best.corridor.label, total: best.total } : null;
-  }, [corridorIndex, flowIndex, anchorInbound]);
+  }, [corridorIndex, flowIndex, anchorFlows, mode]);
 
-  // Anchor-wide totals (workforce universe).
-  const anchorTotalWorkers =
-    wacLatest?.totalJobs ??
-    ((inflowLatest?.totalJobs ?? 0) + (withinLatest?.totalJobs ?? 0));
-  const anchorInflow = inflowLatest?.totalJobs ?? 0;
+  // Anchor-wide totals (workforce / resident-worker universe). Under the
+  // segment filter we re-aggregate WAC (inbound) or RAC (outbound) against
+  // the active axis buckets so the headline matches the filtered population.
+  // When the source block is missing we fall back to the directional flow +
+  // within, both of which already carry filtered totals from perZipBlocks.
+  const directionalLatest = isInbound ? wacLatest : racLatest;
+  const directionalFlow = isInbound
+    ? inflowLatest?.totalJobs ?? 0
+    : outflowLatest?.totalJobs ?? 0;
   const anchorWithin = withinLatest?.totalJobs ?? 0;
-  const anchorCrossDenom = anchorInflow + anchorWithin;
+  const anchorTotalWorkers = directionalLatest
+    ? filteredLatestTotal(directionalLatest, segmentFilter)
+    : directionalFlow + anchorWithin;
+  const anchorCrossDenom = directionalFlow + anchorWithin;
   const anchorCrossShare =
-    anchorCrossDenom > 0 ? anchorInflow / anchorCrossDenom : 0;
+    anchorCrossDenom > 0 ? directionalFlow / anchorCrossDenom : 0;
 
   // Partner-scoped totals. Workers count comes from the live FlowRow set
   // (latest LEHD vintage), keeping it consistent with the Top-10 list value.
-  const partnerWorkers = partnerInbound.reduce((s, f) => s + f.workerCount, 0);
+  const partnerWorkers = partnerFlows.reduce((s, f) => s + f.workerCount, 0);
   // Partner contribution to the anchor's cross-ZIP universe — i.e., what
-  // share of the cross-ZIP commuters this partner accounts for.
+  // share of the cross-ZIP commuters (or resident commuters out) this
+  // partner accounts for.
   const partnerCrossShare =
-    anchorInflow > 0 ? partnerWorkers / anchorInflow : 0;
+    directionalFlow > 0 ? partnerWorkers / directionalFlow : 0;
 
   const isPartnerScoped = selectedPartner != null;
+  const topPartner = isInbound ? topInflowPartner : topOutflowPartner;
+
+  // Mode-dependent labels. Inbound frames the anchor as a workplace; outbound
+  // frames it as a residence. The partner sits on the origin side in inbound
+  // mode and the destination side in outbound mode — the O–D arrow flips.
+  const cardTitle = isInbound
+    ? `${scope} · Workplace Metrics`
+    : `${scope} · Residence Metrics`;
+  const totalLabel = isInbound ? 'Total Workers' : 'Total Resident Workers';
+  const totalShareLabel = isInbound ? 'workforce' : 'resident workers';
+  const crossShareLabel = isInbound
+    ? 'Cross-ZIP commute share'
+    : 'Cross-ZIP outbound share';
+  const crossShareSubAnchor = isInbound
+    ? `${fmtInt(directionalFlow)} of ${fmtInt(anchorCrossDenom)} workers commute in`
+    : `${fmtInt(directionalFlow)} of ${fmtInt(anchorCrossDenom)} residents commute out`;
+  const crossShareSubPartner = isInbound
+    ? `${fmtInt(partnerWorkers)} of ${fmtInt(directionalFlow)} cross-ZIP commuters`
+    : `${fmtInt(partnerWorkers)} of ${fmtInt(directionalFlow)} cross-ZIP outbound residents`;
+  const distanceSub = isInbound
+    ? 'Worker-weighted · inbound cross-ZIP'
+    : 'Worker-weighted · outbound cross-ZIP';
+  const distanceSubPartner = isInbound
+    ? `From ${selectedPartner?.place ?? ''} · worker-weighted`
+    : `To ${selectedPartner?.place ?? ''} · worker-weighted`;
+  const topPartnerArrow = topPartner
+    ? isInbound
+      ? `${topPartner.place || topPartner.zip} → ${scope}`
+      : `${scope} → ${topPartner.place || topPartner.zip}`
+    : '—';
 
   return (
     <Card
-      title={`${scope} · Workplace Metrics`}
+      title={cardTitle}
       subtitle={
         isPartnerScoped
-          ? `Filtered: from ${selectedPartner!.place} · latest year`
+          ? isInbound
+            ? `Filtered: from ${selectedPartner!.place} · latest year`
+            : `Filtered: to ${selectedPartner!.place} · latest year`
           : 'At-a-glance · latest year'
       }
       width={280}
     >
       <MetricRow
-        label="Total Workers"
+        label={totalLabel}
         value={fmtInt(isPartnerScoped ? partnerWorkers : anchorTotalWorkers)}
         sub={
           isPartnerScoped
-            ? `${fmtPct(partnerWorkers / Math.max(1, anchorTotalWorkers))} of ${scope} workforce`
+            ? `${fmtPct(partnerWorkers / Math.max(1, anchorTotalWorkers))} of ${scope} ${totalShareLabel}`
             : undefined
         }
       />
       <MetricRow
-        label="Cross-ZIP commute share"
+        label={crossShareLabel}
         value={fmtPct(isPartnerScoped ? partnerCrossShare : anchorCrossShare)}
-        sub={
-          isPartnerScoped
-            ? `${fmtInt(partnerWorkers)} of ${fmtInt(anchorInflow)} cross-ZIP commuters`
-            : `${fmtInt(anchorInflow)} of ${fmtInt(anchorCrossDenom)} workers commute in`
-        }
+        sub={isPartnerScoped ? crossShareSubPartner : crossShareSubAnchor}
       />
       <MetricRow
         label="Average commute distance"
@@ -1368,11 +1517,7 @@ function WorkplaceMetricsCard({
             ? `${(isPartnerScoped ? partnerAvgMiles : anchorAvgMiles).toFixed(1)} mi`
             : '—'
         }
-        sub={
-          isPartnerScoped
-            ? `From ${selectedPartner!.place} · worker-weighted`
-            : 'Worker-weighted · inbound cross-ZIP'
-        }
+        sub={isPartnerScoped ? distanceSubPartner : distanceSub}
       />
       <MetricRow
         label="Top corridor"
@@ -1381,12 +1526,8 @@ function WorkplaceMetricsCard({
       />
       <MetricRow
         label="Top O–D pair"
-        value={
-          topInflowPartner
-            ? `${topInflowPartner.place || topInflowPartner.zip} → ${scope}`
-            : '—'
-        }
-        sub={topInflowPartner ? `${fmtInt(topInflowPartner.workers)} workers` : undefined}
+        value={topPartnerArrow}
+        sub={topPartner ? `${fmtInt(topPartner.workers)} workers` : undefined}
       />
     </Card>
   );
@@ -1412,17 +1553,109 @@ interface Props {
   corridorIndex: Map<CorridorId, CorridorRecord>;
   flowIndex: Map<CorridorId, CorridorFlowEntry[]>;
   driveDistance: DriveDistanceMap | null;
+  // Active LODES segment filter — slices OD inflow/outflow/within-zip cards
+  // and the OD-axis dimensions on RAC/WAC. Education / race / ethnicity /
+  // sex stay anchored to full totals — LODES has no OD analogue for those
+  // dimensions, so the filter doesn't touch their cards.
+  segmentFilter: SegmentFilter;
+  onSegmentFilterChange: (next: SegmentFilter) => void;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {
   return entries.find((e) => e.zip === zip) ?? null;
 }
 
+// Re-derive Top Partner worker counts from the active-filter FlowRow arrays
+// arriving at BottomCardStrip. App.tsx runs `applySegmentFilter` upstream so
+// the workerCount on each row already carries the sum of selected buckets
+// within the active axis. Summing per partner here is therefore filter-aware
+// for free.
+//
+// Inflow side: partner sits on the origin (workers commuting INTO anchor).
+// Outflow side: partner sits on the destination (residents commuting OUT).
+//
+// ALL_OTHER residual: the inbound dataset literally carries an 'ALL_OTHER'
+// origin row (mapped back to "outside the study area"); the outbound dataset
+// does not — it lists every cross-state destination explicitly. So the
+// residual is computed as either-or: any literal ALL_OTHER endpoint plus any
+// cross-ZIP flow whose partner-side ZIP is not in the union of named partner
+// ZIPs. This matches how od-summary.json builds the residual at build time.
+//
+// Returns a new array sorted desc by filtered workers, with zero-worker
+// named partners dropped. The ALL_OTHER residual is preserved (pinned last)
+// so the table layout matches the unfiltered case.
+function filterPartners(
+  partners: OdPartner[],
+  flows: FlowRow[],
+  anchorZip: string,
+  side: 'inflow' | 'outflow',
+): OdPartner[] {
+  const namedZipSet = new Set<string>();
+  for (const p of partners) {
+    if (p.zip === 'ALL_OTHER') continue;
+    for (const z of p.zips) namedZipSet.add(z);
+  }
+
+  const workersByZip = new Map<string, number>();
+  let allOtherWorkers = 0;
+  for (const f of flows) {
+    if (side === 'inflow') {
+      if (f.destZip !== anchorZip) continue;
+      if (f.originZip === f.destZip) continue; // within-ZIP, surfaced separately
+      if (f.originZip === 'ALL_OTHER' || !namedZipSet.has(f.originZip)) {
+        allOtherWorkers += f.workerCount;
+      } else {
+        workersByZip.set(
+          f.originZip,
+          (workersByZip.get(f.originZip) ?? 0) + f.workerCount,
+        );
+      }
+    } else {
+      if (f.originZip !== anchorZip) continue;
+      if (f.originZip === f.destZip) continue;
+      if (f.destZip === 'ALL_OTHER' || !namedZipSet.has(f.destZip)) {
+        allOtherWorkers += f.workerCount;
+      } else {
+        workersByZip.set(
+          f.destZip,
+          (workersByZip.get(f.destZip) ?? 0) + f.workerCount,
+        );
+      }
+    }
+  }
+
+  const named: OdPartner[] = [];
+  let allOther: OdPartner | null = null;
+  for (const p of partners) {
+    if (p.zip === 'ALL_OTHER') {
+      allOther = { ...p, workers: allOtherWorkers };
+      continue;
+    }
+    let sum = 0;
+    for (const z of p.zips) sum += workersByZip.get(z) ?? 0;
+    if (sum > 0) named.push({ ...p, workers: sum });
+  }
+  named.sort((a, b) => b.workers - a.workers);
+  return allOther ? [...named, allOther] : named;
+}
+
 function aggregateScope(): string {
   return 'Region';
 }
 
-function aggregateBlocks(rac: RacWacAggregate, wac: RacWacAggregate, od: OdAggregate) {
+// Per-block resolver: applies the segment filter to OD inflow/outflow/within
+// latest+trend. When the filter is inactive, returns the full-totalJobs
+// values exactly as before. When active, the headline integers come from
+// filteredOdLatestTotal (sum of selected buckets in the latest block) and
+// the sparkline series come from filteredTrendSeries (per-year sum across
+// selected bucket dims). RAC/WAC `latest`/`trend` pass through untouched —
+// CardsForRacWac handles its own per-axis filter recomputation below.
+function aggregateBlocks(
+  rac: RacWacAggregate,
+  wac: RacWacAggregate,
+  od: OdAggregate,
+  segmentFilter: SegmentFilter,
+) {
   return {
     racLatest: rac.latest,
     racTrend: rac.trend,
@@ -1431,12 +1664,18 @@ function aggregateBlocks(rac: RacWacAggregate, wac: RacWacAggregate, od: OdAggre
     // The OD dataset is a ring of pairs touching the 11 anchors (not a closed
     // universe), so inflow and outflow are NOT symmetric at the regional level
     // — emit them separately, matching the per-zip view.
-    inflowLatest: od.inflow.latest,
-    inflowTrend: od.inflow.trend.totalJobs,
-    outflowLatest: od.outflow.latest,
-    outflowTrend: od.outflow.trend.totalJobs,
-    withinLatest: od.withinZip.latest,
-    withinTrend: od.withinZip.trend,
+    inflowLatest: od.inflow.latest
+      ? { totalJobs: filteredOdLatestTotal(od.inflow.latest, segmentFilter) }
+      : null,
+    inflowTrend: filteredTrendSeries(od.inflow.trend, segmentFilter),
+    outflowLatest: od.outflow.latest
+      ? { totalJobs: filteredOdLatestTotal(od.outflow.latest, segmentFilter) }
+      : null,
+    outflowTrend: filteredTrendSeries(od.outflow.trend, segmentFilter),
+    withinLatest: od.withinZip.latest
+      ? { totalJobs: filteredOdLatestTotal(od.withinZip.latest, segmentFilter) }
+      : null,
+    withinTrend: filteredTrendSeries(od.withinZip.trend, segmentFilter),
   };
 }
 
@@ -1444,18 +1683,25 @@ function perZipBlocks(
   racEntry: RacFile['entries'][number] | null,
   wacEntry: WacFile['entries'][number] | null,
   odEntry: OdSummaryEntry | null,
+  segmentFilter: SegmentFilter,
 ) {
   return {
     racLatest: racEntry?.latest ?? null,
     racTrend: racEntry?.trend ?? null,
     wacLatest: wacEntry?.latest ?? null,
     wacTrend: wacEntry?.trend ?? null,
-    inflowLatest: odEntry?.inflow.latest ?? null,
-    inflowTrend: odEntry?.inflow.trend.totalJobs ?? [],
-    outflowLatest: odEntry?.outflow.latest ?? null,
-    outflowTrend: odEntry?.outflow.trend.totalJobs ?? [],
-    withinLatest: odEntry?.withinZip.latest ?? null,
-    withinTrend: odEntry?.withinZip.trend ?? [],
+    inflowLatest: odEntry?.inflow.latest
+      ? { totalJobs: filteredOdLatestTotal(odEntry.inflow.latest, segmentFilter) }
+      : null,
+    inflowTrend: filteredTrendSeries(odEntry?.inflow.trend ?? null, segmentFilter),
+    outflowLatest: odEntry?.outflow.latest
+      ? { totalJobs: filteredOdLatestTotal(odEntry.outflow.latest, segmentFilter) }
+      : null,
+    outflowTrend: filteredTrendSeries(odEntry?.outflow.trend ?? null, segmentFilter),
+    withinLatest: odEntry?.withinZip.latest
+      ? { totalJobs: filteredOdLatestTotal(odEntry.withinZip.latest, segmentFilter) }
+      : null,
+    withinTrend: filteredTrendSeries(odEntry?.withinZip.trend ?? null, segmentFilter),
   };
 }
 
@@ -1472,6 +1718,8 @@ export function BottomCardStrip({
   corridorIndex,
   flowIndex,
   driveDistance,
+  segmentFilter,
+  onSegmentFilterChange,
 }: Props) {
   const isPerZip = selectedZip != null && selectedZip !== 'ALL_OTHER';
 
@@ -1520,10 +1768,16 @@ export function BottomCardStrip({
   const racEntry = isPerZip ? findEntry(racFile.entries, selectedZip) : null;
   const wacEntry = isPerZip ? findEntry(wacFile.entries, selectedZip) : null;
   const odEntry = isPerZip ? findEntry(odSummary.entries, selectedZip) : null;
+  const filterActive = !isSegmentFilterAll(segmentFilter);
 
   const blocks = isPerZip
-    ? perZipBlocks(racEntry, wacEntry, odEntry)
-    : aggregateBlocks(racFile.aggregate, wacFile.aggregate, odSummary.aggregate);
+    ? perZipBlocks(racEntry, wacEntry, odEntry, segmentFilter)
+    : aggregateBlocks(
+        racFile.aggregate,
+        wacFile.aggregate,
+        odSummary.aggregate,
+        segmentFilter,
+      );
 
   const scope = isPerZip
     ? `${odEntry?.place || racEntry?.place || wacEntry?.place || selectedZip}`
@@ -1562,6 +1816,120 @@ export function BottomCardStrip({
     return [0, Math.max(...vals)];
   }, [blocks.wacTrend]);
 
+  // OD-derived workforce mix for the per-anchor view.
+  // ----------------------------------------------------------------------
+  // Sums each FlowRow's `segments` block across the anchor's mode-active
+  // flow set, optionally narrowed to the selected partner. The result mirrors
+  // the shape RAC/WAC blocks expose (age/wage/naics3 + total) so
+  // CardsForRacWac can swap data sources behind one prop.
+  //
+  // Why this exists: RAC/WAC are anchor-level rollups — they don't move when
+  // a partner row is clicked. Switching the mix card to per-pair OD segments
+  // lets the breakdown narrow to "the demographic mix of just Rifle → GWS"
+  // (or any selected partner) using the same cells already on each FlowRow.
+  //
+  // Mode mapping:
+  //   inbound  → flows where destZip === anchor (workplace universe).
+  //              Self-flows (within-ZIP commute) are KEPT — those workers
+  //              both live and work in the anchor and belong in its
+  //              workforce.
+  //   outbound → flows where originZip === anchor AND destZip !== anchor
+  //              (residence universe of *leavers* only). Self-flows are
+  //              EXCLUDED — outbound on this card means "where do residents
+  //              who commute out go," not "all residents."
+  //
+  // Filter handling: `applySegmentFilter` rewrites each FlowRow's
+  // `workerCount` upstream but DOES NOT modify the `segments` block (LODES
+  // doesn't publish joint cross-axis cells, so no honest per-axis cell
+  // re-projection exists under filter). To keep the mix card internally
+  // consistent we therefore drive both the displayed total AND the breakdown
+  // values from segment cells — never from `workerCount`. Each axis's three
+  // buckets sum to S000 within ±2 (LODES noise infusion); we use the age
+  // axis as the canonical total. Net effect: the card shows the full-
+  // population OD mix regardless of segment filter — the filter still
+  // affects every other card on the strip, but per-axis percentages here
+  // stay self-consistent and obey LODES's joint-cell limit.
+  const odMixOverride = useMemo<{
+    age: AgeBlock;
+    wage: WageBlock;
+    naics3: Naics3Block;
+    total: number;
+    title: string;
+    subtitle: string;
+  } | null>(() => {
+    if (!isPerZip || !selectedZip) return null;
+    const dataset = mode === 'inbound' ? flowsInbound : flowsOutbound;
+    const partnerSet = selectedPartner ? new Set(selectedPartner.zips) : null;
+
+    const age: AgeBlock = { u29: 0, age30to54: 0, age55plus: 0 };
+    const wage: WageBlock = { low: 0, mid: 0, high: 0 };
+    const naics3: Naics3Block = { goods: 0, tradeTransUtil: 0, allOther: 0 };
+    let rowsWithSegments = 0;
+    let rowsTotal = 0;
+
+    for (const f of dataset) {
+      if (mode === 'inbound') {
+        if (f.destZip !== selectedZip) continue;
+        if (partnerSet && !partnerSet.has(f.originZip)) continue;
+      } else {
+        if (f.originZip !== selectedZip) continue;
+        // Outbound = leavers only. Drop self-flows so the residence-side
+        // mix reflects only residents who commute OUT, not stay-at-home
+        // workers.
+        if (f.destZip === selectedZip) continue;
+        if (partnerSet && !partnerSet.has(f.destZip)) continue;
+      }
+      rowsTotal += 1;
+      if (!f.segments) continue;
+      rowsWithSegments += 1;
+      age.u29 += f.segments.age.u29;
+      age.age30to54 += f.segments.age.age30to54;
+      age.age55plus += f.segments.age.age55plus;
+      wage.low += f.segments.wage.low;
+      wage.mid += f.segments.wage.mid;
+      wage.high += f.segments.wage.high;
+      naics3.goods += f.segments.naics3.goods;
+      naics3.tradeTransUtil += f.segments.naics3.tradeTransUtil;
+      naics3.allOther += f.segments.naics3.allOther;
+    }
+
+    // Drop the override when no rows match (e.g., partner filter hits a
+    // dataset gap) or when none of the matching rows carry a segments
+    // block — RAC/WAC fallback gives a sensible card instead of an empty one.
+    if (rowsTotal === 0 || rowsWithSegments === 0) return null;
+
+    // Total driven from segment cells (canonical: age sum). Stays
+    // self-consistent with the breakdown values regardless of segment
+    // filter state — the filter narrows other cards on the strip, not
+    // this one.
+    const total = age.u29 + age.age30to54 + age.age55plus;
+    if (total === 0) return null;
+
+    // Title flips by direction — inbound frames the anchor as a workplace,
+    // outbound as a residence. Subtitle reflects scope (partner vs full).
+    const title =
+      mode === 'inbound'
+        ? `${scope} · Workforce mix`
+        : `${scope} · Resident workforce mix`;
+    const subtitle = selectedPartner
+      ? mode === 'inbound'
+        ? `OD · from ${selectedPartner.place} · latest year`
+        : `OD · to ${selectedPartner.place} · latest year`
+      : mode === 'inbound'
+        ? 'OD · workforce + within-ZIP · latest year'
+        : 'OD · outbound commuters · latest year';
+
+    return { age, wage, naics3, total, title, subtitle };
+  }, [
+    isPerZip,
+    selectedZip,
+    mode,
+    flowsInbound,
+    flowsOutbound,
+    selectedPartner,
+    scope,
+  ]);
+
   return (
     <div
       className="absolute left-0 right-0 bottom-0 z-20 pointer-events-auto"
@@ -1574,6 +1942,11 @@ export function BottomCardStrip({
           paddingBottom: 6,
         }}
       >
+        <SegmentFilterPanel
+          value={segmentFilter}
+          onChange={onSegmentFilterChange}
+          compact={isPerZip}
+        />
         {isPerZip && (
           <CardsForOd
             scope={scope}
@@ -1620,26 +1993,39 @@ export function BottomCardStrip({
             scope={scope}
             selectedZip={selectedZip}
             selectedPartner={selectedPartner}
+            mode={mode}
             wacLatest={blocks.wacLatest}
+            racLatest={blocks.racLatest}
             inflowLatest={blocks.inflowLatest}
+            outflowLatest={blocks.outflowLatest}
             withinLatest={blocks.withinLatest}
             topInflowPartner={
               odEntry?.topPartners.inflow.find((p) => p.zip !== 'ALL_OTHER') ?? null
             }
+            topOutflowPartner={
+              odEntry?.topPartners.outflow.find((p) => p.zip !== 'ALL_OTHER') ?? null
+            }
             flowsInbound={flowsInbound}
+            flowsOutbound={flowsOutbound}
             zips={zips}
             corridorIndex={corridorIndex}
             flowIndex={flowIndex}
             driveDistance={driveDistance}
+            segmentFilter={segmentFilter}
           />
         )}
         <CardsForRacWac
           scope={scope}
           wacLatest={blocks.wacLatest}
           wacTrend={blocks.wacTrend}
+          racLatest={blocks.racLatest}
+          racTrend={blocks.racTrend}
+          mode={mode}
           trendDomain={wacDomain}
           showWacTotal={!isPerZip}
           isAggregate={!isPerZip}
+          segmentFilter={segmentFilter}
+          odMixOverride={odMixOverride}
         />
         {isPerZip && odEntry && (
           <>
@@ -1649,7 +2035,16 @@ export function BottomCardStrip({
               width={260}
             >
               <PartnerList
-                partners={odEntry.topPartners.inflow}
+                partners={
+                  filterActive
+                    ? filterPartners(
+                        odEntry.topPartners.inflow,
+                        flowsInbound,
+                        odEntry.zip,
+                        'inflow',
+                      )
+                    : odEntry.topPartners.inflow
+                }
                 denominator={
                   (blocks.inflowLatest?.totalJobs ?? 0) +
                   (blocks.withinLatest?.totalJobs ?? 0)
@@ -1667,7 +2062,16 @@ export function BottomCardStrip({
               width={260}
             >
               <PartnerList
-                partners={odEntry.topPartners.outflow}
+                partners={
+                  filterActive
+                    ? filterPartners(
+                        odEntry.topPartners.outflow,
+                        flowsOutbound,
+                        odEntry.zip,
+                        'outflow',
+                      )
+                    : odEntry.topPartners.outflow
+                }
                 denominator={
                   (blocks.outflowLatest?.totalJobs ?? 0) +
                   (blocks.withinLatest?.totalJobs ?? 0)

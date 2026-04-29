@@ -435,6 +435,30 @@ def main() -> int:
         .groupby("h_zip")["totalJobs"].sum().to_dict()
     )
 
+    # Build a FlowRow's per-pair segments block from the namedtuple emitted by
+    # od_latest.itertuples(). LODES OD files carry all 9 segment buckets (3 age
+    # × 3 wage × 3 industry NAICS-3) per pair; aggregate_od_to_zip_pairs has
+    # already renamed the columns. Within each axis the buckets sum to
+    # totalJobs (S000), within ±2 because of LODES noise infusion.
+    def _segments_for_row(r) -> dict:
+        return {
+            "age": {
+                "u29": int(r.ageU29),
+                "age30to54": int(r.age30to54),
+                "age55plus": int(r.age55plus),
+            },
+            "wage": {
+                "low": int(r.wageLow),
+                "mid": int(r.wageMid),
+                "high": int(r.wageHigh),
+            },
+            "naics3": {
+                "goods": int(r.naicsGoods),
+                "tradeTransUtil": int(r.naicsTradeTransUtil),
+                "allOther": int(r.naicsAllOther),
+            },
+        }
+
     flows_inbound_out: list[dict] = []
     for r in od_latest[od_latest["w_zip"].isin(ANCHOR_ZIPS)].itertuples(index=False):
         denom = inbound_totals.get(r.w_zip, 0) or 1
@@ -447,6 +471,7 @@ def main() -> int:
             "percentage": round(int(r.totalJobs) / denom, 6),
             "year": int(r.year),
             "source": "LEHD",
+            "segments": _segments_for_row(r),
         })
 
     flows_outbound_out: list[dict] = []
@@ -461,6 +486,7 @@ def main() -> int:
             "percentage": round(int(r.totalJobs) / denom, 6),
             "year": int(r.year),
             "source": "LEHD",
+            "segments": _segments_for_row(r),
         })
 
     # Stable order — keeps build deterministic.
@@ -595,6 +621,43 @@ def main() -> int:
     if in_drift > 0.005:
         print(
             f"  ! inbound drift {in_drift:.2%} exceeds 0.5%; possible ingest bug",
+            file=sys.stderr,
+        )
+
+    # Per-pair segment sanity: each axis (age / wage / naics3) sums to within
+    # ±2 of workerCount. LODES uses noise infusion so exact equality won't
+    # hold, but drift > 2 on any single row indicates an ingest bug that
+    # broke segment column propagation.
+    SEG_TOL = 2
+    seg_violations = 0
+    for f in (flows_inbound_out + flows_outbound_out):
+        seg = f.get("segments")
+        if not seg:
+            continue
+        wc = f["workerCount"]
+        sums = {
+            "age": seg["age"]["u29"] + seg["age"]["age30to54"] + seg["age"]["age55plus"],
+            "wage": seg["wage"]["low"] + seg["wage"]["mid"] + seg["wage"]["high"],
+            "naics3": seg["naics3"]["goods"] + seg["naics3"]["tradeTransUtil"] + seg["naics3"]["allOther"],
+        }
+        for axis_name, s in sums.items():
+            if abs(s - wc) > SEG_TOL:
+                seg_violations += 1
+                if seg_violations <= 5:
+                    print(
+                        f"  ! segment drift on {f['originZip']}→{f['destZip']} "
+                        f"{axis_name}: sum={s} workerCount={wc}",
+                        file=sys.stderr,
+                    )
+                break
+    if seg_violations:
+        print(
+            f"  ! {seg_violations} flow rows with segment drift > ±{SEG_TOL}",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"  segment sanity ok — every axis sums to workerCount ±{SEG_TOL}",
             file=sys.stderr,
         )
 

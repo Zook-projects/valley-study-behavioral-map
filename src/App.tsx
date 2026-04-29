@@ -21,10 +21,12 @@ import type {
   DirectionFilter,
   FlowRow,
   Mode,
+  SegmentFilter,
   ZipMeta,
 } from './types/flow';
 import type { OdSummaryFile, RacFile, WacFile } from './types/lodes';
 import {
+  applySegmentFilter,
   detailForZip,
   filterByDirection,
   filterForSelection,
@@ -58,14 +60,51 @@ function placeLabel(zips: ZipMeta[], zip: string): string {
  * (inbound), sorted descending by worker count. Top-8 rows; remaining rows
  * roll up into a "+ X more" residual.
  */
+// Clamp a tooltip's anchor point so its rendered footprint stays inside the
+// viewport. The hover variant uses this to flip from below-right of the
+// cursor (default offset +14/+14) to above/left when the cursor is near the
+// right or bottom edge. Width/height are estimates — the tooltip's actual
+// box is a bit smaller, so the clamp is conservative.
+function clampTooltipAnchor(
+  clientX: number,
+  clientY: number,
+  estWidth: number,
+  estHeight: number,
+): { left: number; top: number } {
+  const margin = 12;
+  const offset = 14;
+  const vw =
+    typeof window !== 'undefined' ? window.innerWidth : estWidth + offset * 2;
+  const vh =
+    typeof window !== 'undefined' ? window.innerHeight : estHeight + offset * 2;
+  // Default: below-right of cursor. Flip to left when overflowing right edge,
+  // and to above when overflowing bottom edge.
+  let left = clientX + offset;
+  let top = clientY + offset;
+  if (left + estWidth + margin > vw) left = clientX - offset - estWidth;
+  if (top + estHeight + margin > vh) top = clientY - offset - estHeight;
+  // Final safety clamp so a small viewport never pushes the box off-screen.
+  left = Math.max(margin, Math.min(left, vw - estWidth - margin));
+  top = Math.max(margin, Math.min(top, vh - estHeight - margin));
+  return { left, top };
+}
+
 function TooltipBody({
   aggregation,
   mode,
   zips,
+  onSelectPartner,
+  selectedPartner,
 }: {
   aggregation: ActiveCorridorAggregation;
   mode: Mode;
   zips: ZipMeta[];
+  // When provided, ZIP rows in the breakdown table become clickable —
+  // tapping a row sets the partner filter via the same handler the left-rail
+  // "Top 10" list uses, scoping the map and stats to flows touching the
+  // chosen place.
+  onSelectPartner?: (p: { place: string; zips: string[] }) => void;
+  selectedPartner?: { place: string; zips: string[] } | null;
 }) {
   const map = mode === 'outbound' ? aggregation.byDestZip : aggregation.byOriginZip;
   const total = aggregation.total || 1;
@@ -94,23 +133,59 @@ function TooltipBody({
   const rest = rows.slice(TOP);
   const restCount = rest.reduce((s, r) => s + r.count, 0);
 
+  // ZIP-row click target: the entire grouped place (place + every ZIP that
+  // shares it, e.g., Eagle 81631 + 81637). Mirrors the left-rail "Top 10"
+  // list so the same partner filter shape is used everywhere.
+  const handleRowClick = onSelectPartner
+    ? (place: string, zipsInGroup: string[]) => {
+        onSelectPartner({ place, zips: zipsInGroup });
+      }
+    : undefined;
+
   return (
     <table className="w-full text-[11px] tnum mt-1">
       <tbody>
-        {top.map((r) => (
-          <tr key={r.place}>
-            <td className="pr-2 align-baseline" style={{ color: 'var(--text-h)' }}>
-              {r.place}{' '}
-              <span style={{ color: 'var(--text-dim)' }}>· {r.zips.length > 1 ? 'multiple' : r.zips[0]}</span>
-            </td>
-            <td className="text-right pr-2" style={{ color: 'var(--text)' }}>
-              {fmtInt(r.count)}
-            </td>
-            <td className="text-right" style={{ color: 'var(--text-dim)' }}>
-              {fmtPct(r.count / total)}
-            </td>
-          </tr>
-        ))}
+        {top.map((r) => {
+          const isSelected = selectedPartner?.place === r.place;
+          const rowClass =
+            'transition-colors' +
+            (handleRowClick ? ' cursor-pointer hover:bg-white/5' : '');
+          return (
+            <tr
+              key={r.place}
+              className={rowClass}
+              onClick={
+                handleRowClick ? () => handleRowClick(r.place, r.zips) : undefined
+              }
+              role={handleRowClick ? 'button' : undefined}
+              aria-pressed={handleRowClick ? isSelected : undefined}
+              aria-label={
+                handleRowClick
+                  ? `Filter to ${r.place} (${r.zips.length > 1 ? 'multiple ZIPs' : r.zips[0]})`
+                  : undefined
+              }
+              style={{
+                background: isSelected ? 'var(--accent-soft)' : undefined,
+              }}
+            >
+              <td
+                className="pr-2 align-baseline"
+                style={{ color: isSelected ? 'var(--accent)' : 'var(--text-h)' }}
+              >
+                {r.place}{' '}
+                <span style={{ color: 'var(--text-dim)' }}>
+                  · {r.zips.length > 1 ? 'multiple' : r.zips[0]}
+                </span>
+              </td>
+              <td className="text-right pr-2" style={{ color: 'var(--text)' }}>
+                {fmtInt(r.count)}
+              </td>
+              <td className="text-right" style={{ color: 'var(--text-dim)' }}>
+                {fmtPct(r.count / total)}
+              </td>
+            </tr>
+          );
+        })}
         {rest.length > 0 && (
           <tr>
             <td className="pr-2 align-baseline italic" style={{ color: 'var(--text-dim)' }}>
@@ -151,7 +226,39 @@ export default function App() {
     { place: string; zips: string[] } | null
   >(null);
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('all');
+  // Segment filter — slices every cross-LODES OD aggregation by one of three
+  // axes (age / wage / industry NAICS-3) at a time. LODES does not publish
+  // joint cells across axes, so the filter UX commits to one axis at a time.
+  // When axis === 'all' (or every bucket within an axis is selected), the
+  // filter is treated as inactive and the array passes through unchanged.
+  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>({
+    axis: 'all',
+    buckets: [],
+  });
   const [hover, setHover] = useState<HoverState | null>(null);
+  // Pinned tooltip state — set by clicking a corridor halo, cleared by clicking
+  // a different corridor or by clicking an empty area of the map. The pinned
+  // tooltip shows the full breakdown; the hover tooltip is a simplified
+  // header-only chip that prompts the user to click for more.
+  const [pinned, setPinned] = useState<HoverState | null>(null);
+  // When the user clicks empty map to dismiss both tooltips, the mouse may
+  // still be over a corridor — without this guard, the next mousemove would
+  // immediately re-show the simplified hover tooltip on the dismissed corridor.
+  // The guard suppresses the hover tooltip for one specific corridor until the
+  // user's mouse leaves it, at which point the suppression clears.
+  const [suppressedHover, setSuppressedHover] = useState<CorridorId | null>(null);
+
+  // Escape-key dismiss for the pinned tooltip. Listens at the document level
+  // so the user can close the pinned panel from anywhere on the page without
+  // having to target the small × button.
+  useEffect(() => {
+    if (!pinned) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPinned(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinned]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +288,17 @@ export default function App() {
         DriveDistanceMap | null,
       ]) => {
         if (cancelled) return;
+        // Guard against an old cached JSON (no per-pair segments block) —
+        // the segment filter would silently no-op on those rows. Dev-only
+        // warning; production builds skip the check.
+        if (import.meta.env.DEV) {
+          const missing = fi.find((f) => !f.segments) ?? fo.find((f) => !f.segments);
+          if (missing) {
+            console.warn(
+              'flow rows are missing per-pair segment breakdowns — segment filter will be inactive. Re-run scripts/build-data.py.',
+            );
+          }
+        }
         setFlowsInbound(fi);
         setFlowsOutbound(fo);
         setZips(z);
@@ -203,14 +321,26 @@ export default function App() {
   // stats panel renders side-by-side inbound + outbound figures (Option B)
   // so both filtered sets are needed regardless of the active mode. The
   // map and per-ZIP stats still consume only the active-mode set.
-  const directionFilteredInbound = useMemo(
-    () => (flowsInbound && zips ? filterByDirection(flowsInbound, zips, directionFilter) : []),
-    [flowsInbound, zips, directionFilter],
-  );
-  const directionFilteredOutbound = useMemo(
-    () => (flowsOutbound && zips ? filterByDirection(flowsOutbound, zips, directionFilter) : []),
-    [flowsOutbound, zips, directionFilter],
-  );
+  // The segment filter is then layered in — applySegmentFilter rewrites each
+  // FlowRow's workerCount to the sum of the selected buckets within the
+  // active axis, so every downstream consumer (corridor widths, stats panels,
+  // card headlines) re-aggregates against the filtered universe with no
+  // further plumbing. When the filter is inactive, the same array reference
+  // is returned and downstream memoization stays stable.
+  const directionFilteredInbound = useMemo(() => {
+    if (!flowsInbound || !zips) return [];
+    return applySegmentFilter(
+      filterByDirection(flowsInbound, zips, directionFilter),
+      segmentFilter,
+    );
+  }, [flowsInbound, zips, directionFilter, segmentFilter]);
+  const directionFilteredOutbound = useMemo(() => {
+    if (!flowsOutbound || !zips) return [];
+    return applySegmentFilter(
+      filterByDirection(flowsOutbound, zips, directionFilter),
+      segmentFilter,
+    );
+  }, [flowsOutbound, zips, directionFilter, segmentFilter]);
   const directionFilteredFlows =
     mode === 'inbound' ? directionFilteredInbound : directionFilteredOutbound;
 
@@ -332,6 +462,7 @@ export default function App() {
 
   const handleModeChange = (m: Mode) => {
     setHover(null);
+    setPinned(null);
     setMode(m);
     // Partner selection is anchored to a specific anchor + mode + direction
     // context — clear it when any of those change so we don't carry an
@@ -340,11 +471,13 @@ export default function App() {
   };
   const handleSelectZip = (z: string | null) => {
     setHover(null);
+    setPinned(null);
     setSelectedZip(z);
     setSelectedPartner(null);
   };
   const handleDirectionChange = (d: DirectionFilter) => {
     setHover(null);
+    setPinned(null);
     setDirectionFilter(d);
     setSelectedPartner(null);
   };
@@ -352,7 +485,13 @@ export default function App() {
     p: { place: string; zips: string[] } | null,
   ) => {
     setHover(null);
+    setPinned(null);
     setSelectedPartner(p);
+  };
+  const handleSegmentFilterChange = (next: SegmentFilter) => {
+    setHover(null);
+    setPinned(null);
+    setSegmentFilter(next);
   };
 
   if (
@@ -376,18 +515,22 @@ export default function App() {
     );
   }
 
-  const tooltipHeader = hover
-    ? `${hover.aggregation.corridor.label} — ${fmtInt(hover.aggregation.total)} workers`
-    : '';
-
-  const tooltipSubhead =
+  const headerFor = (s: HoverState) =>
+    `${s.aggregation.corridor.label} — ${fmtInt(s.aggregation.total)} workers`;
+  const subheadFor = (s: HoverState) =>
     mode === 'outbound'
-      ? `Workers travel through here to ${
-          hover ? hover.aggregation.byDestZip.size : 0
-        } work ZIP(s)`
-      : `Workers come from ${
-          hover ? hover.aggregation.byOriginZip.size : 0
-        } residence ZIP(s) through this segment`;
+      ? `Workers travel through here to ${s.aggregation.byDestZip.size} work ZIP(s)`
+      : `Workers come from ${s.aggregation.byOriginZip.size} residence ZIP(s) through this segment`;
+
+  // Suppress the simplified hover chip when:
+  //   (a) the user is hovering over the already-pinned corridor — the full
+  //       pinned tooltip already covers it, a duplicate chip would be noise.
+  //   (b) the user just dismissed the tooltip via empty-map click and hasn't
+  //       moved off the dismissed corridor yet (suppressedHover guard).
+  const showHover =
+    hover &&
+    (!pinned || hover.corridorId !== pinned.corridorId) &&
+    hover.corridorId !== suppressedHover;
 
   return (
     <div className="w-screen h-screen flex relative" style={{ background: 'var(--bg-base)' }}>
@@ -427,9 +570,24 @@ export default function App() {
           onHoverCorridor={(corridorId, payload) => {
             if (!corridorId || !payload) {
               setHover(null);
+              // Mouse left the corridor — clear any empty-click suppression
+              // so the next hover (on this or any corridor) shows normally.
+              setSuppressedHover(null);
               return;
             }
             setHover({ corridorId, ...payload });
+          }}
+          onClickCorridor={(corridorId, payload) => {
+            setPinned({ corridorId, ...payload });
+            // A click on a (different) corridor should never inherit a stale
+            // suppression from a prior empty-click dismissal.
+            setSuppressedHover(null);
+          }}
+          onClickEmpty={() => {
+            setPinned(null);
+            // If the mouse is still over a corridor, suppress its simplified
+            // hover until the user moves off so the dismissal sticks.
+            setSuppressedHover(hover?.corridorId ?? null);
           }}
         />
 
@@ -449,31 +607,119 @@ export default function App() {
           onClearPartner={() => handleSelectPartner(null)}
           directionNumerator={directionChipCounts.numerator}
           directionDenominator={directionChipCounts.denominator}
+          segmentFilter={segmentFilter}
+          onClearSegmentFilter={() =>
+            handleSegmentFilterChange({ axis: 'all', buckets: [] })
+          }
         />
 
-        {/* Hover tooltip */}
-        {hover && (
+        {/* Pinned tooltip — full breakdown, docked to the top-right of the
+            map area so reading position stays stable (does not chase the
+            click point). Persists until the user clicks another corridor,
+            clicks the × close button, presses Escape, or clicks empty map.
+            pointer-events: auto so the close button and clickable ZIP rows
+            are interactive; the rest of the body is text-selectable. */}
+        {pinned && (
           <div
-            className="fixed pointer-events-none glass rounded-md px-3 py-2 text-[11px] z-50"
+            className="fixed glass rounded-md px-3 py-2 text-[11px] z-50"
+            role="dialog"
+            aria-label="Corridor breakdown"
             style={{
-              left: hover.clientX + 14,
-              top: hover.clientY + 14,
-              maxWidth: 280,
+              top: 60,
+              right: 16,
+              width: 300,
+              maxHeight: 'calc(100vh - 280px)',
+              overflowY: 'auto',
+              border: '1px solid var(--accent)',
             }}
           >
-            <div className="mb-0.5" style={{ color: 'var(--text-h)' }}>
-              <span className="font-medium">{tooltipHeader}</span>
+            <div className="flex items-start justify-between gap-2 mb-0.5">
+              <div className="flex-1 min-w-0">
+                <div
+                  className="text-[9px] font-semibold uppercase tracking-wider mb-0.5"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  {selectedZip ? 'Pinned · click ZIP to filter' : 'Pinned'}
+                </div>
+                <span className="font-medium" style={{ color: 'var(--text-h)' }}>
+                  {headerFor(pinned)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPinned(null)}
+                aria-label="Close pinned tooltip"
+                className="shrink-0 -mr-1 -mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
+                style={{ color: 'var(--text-h)', lineHeight: 1 }}
+              >
+                ×
+              </button>
             </div>
             <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-              {tooltipSubhead}
+              {subheadFor(pinned)}
             </div>
-            <TooltipBody aggregation={hover.aggregation} mode={mode} zips={zips} />
+            <TooltipBody
+              aggregation={pinned.aggregation}
+              mode={mode}
+              zips={zips}
+              selectedPartner={selectedPartner}
+              // Partner filtering only makes sense within an anchor context —
+              // it scopes the partner→anchor (or anchor→partner) flow. In
+              // aggregate view (no anchor), leave rows informational rather
+              // than wiring a filter that has no anchor to scope against.
+              onSelectPartner={
+                selectedZip
+                  ? (p) => {
+                      const isSame = selectedPartner?.place === p.place;
+                      // Set partner state directly (rather than going through
+                      // handleSelectPartner) so the pinned tooltip stays open
+                      // and the user can keep exploring the breakdown while
+                      // the filter is active.
+                      setHover(null);
+                      setSelectedPartner(isSame ? null : p);
+                    }
+                  : undefined
+              }
+            />
             <div className="mt-1 text-[10px]" style={{ color: 'var(--text-dim)' }}>
-              {hover.aggregation.flows.length} flow
-              {hover.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
+              {pinned.aggregation.flows.length} flow
+              {pinned.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
             </div>
           </div>
         )}
+
+        {/* Simplified hover tooltip — header + subhead + click prompt only.
+            Edge-aware placement (clampTooltipAnchor) flips it above/left of
+            the cursor near the right/bottom edges so it never clips. Hidden
+            when hovering the already-pinned corridor. */}
+        {showHover && hover && (() => {
+          // Conservative footprint estimate — actual content is usually a
+          // bit smaller, so the clamp errs on the side of more clearance.
+          const anchor = clampTooltipAnchor(hover.clientX, hover.clientY, 280, 110);
+          return (
+            <div
+              className="fixed pointer-events-none glass rounded-md px-3 py-2 text-[11px] z-50"
+              style={{
+                left: anchor.left,
+                top: anchor.top,
+                maxWidth: 280,
+              }}
+            >
+              <div className="mb-0.5" style={{ color: 'var(--text-h)' }}>
+                <span className="font-medium">{headerFor(hover)}</span>
+              </div>
+              <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
+                {subheadFor(hover)}
+              </div>
+              <div
+                className="mt-1 text-[10px] italic"
+                style={{ color: 'var(--accent)' }}
+              >
+                Click on a road segment to view more +
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Bottom card strip — aggregate vs per-anchor LODES panels */}
         <BottomCardStrip
@@ -483,12 +729,14 @@ export default function App() {
           selectedZip={selectedZip}
           selectedPartner={selectedPartner}
           mode={mode}
-          flowsInbound={flowsInbound}
-          flowsOutbound={flowsOutbound}
+          flowsInbound={directionFilteredInbound}
+          flowsOutbound={directionFilteredOutbound}
           zips={zips}
           corridorIndex={corridorIndex}
           flowIndex={flowIndex}
           driveDistance={driveDistance}
+          segmentFilter={segmentFilter}
+          onSegmentFilterChange={handleSegmentFilterChange}
         />
       </main>
     </div>
