@@ -414,18 +414,19 @@ export function MapCanvas({
         if (!pathD) continue;
 
         // Hit halo — invisible, wide, captures pointer events on thin corridors.
-        // Stroke-width 36 gives every corridor a generous hover/click target;
-        // the visible path on top still renders at its bucket-derived width
-        // (visuals unchanged). The visible path is set to pointer-events:none
-        // below so clicks landing directly on the stroke fall through to this
-        // halo's click handler — without that, the visible path's default
+        // Stroke-width 64 gives every corridor a generous hover/click target
+        // (~32px reach on each side of the centerline); the visible path on
+        // top still renders at its bucket-derived width (visuals unchanged).
+        // The visible path is set to pointer-events:none below so clicks
+        // landing directly on the stroke fall through to this halo's click
+        // handler — without that, the visible path's default
         // pointer-events:auto swallows the click and pin-on-click breaks in
         // every browser when the cursor is *on* the corridor itself.
         const halo = document.createElementNS(NS, 'path');
         halo.setAttribute('d', pathD);
         halo.setAttribute('fill', 'none');
         halo.setAttribute('stroke', 'transparent');
-        halo.setAttribute('stroke-width', '36');
+        halo.setAttribute('stroke-width', '64');
         halo.setAttribute('stroke-linecap', 'round');
         halo.setAttribute('stroke-linejoin', 'round');
         // Explicit pointer-events: stroke ensures the transparent stroke is
@@ -660,18 +661,19 @@ export function MapCanvas({
       }
 
       // ---- Snap-to-nearest corridor on the map container (item 8) ----
-      // Per-halo mouseenter/mousemove handles direct hits. This handler
-      // covers the "cursor is *near* a thin corridor but not directly on
-      // its 18px halo" case by ring-sampling document.elementsFromPoint at
-      // ±8 and ±12 px around the cursor in 8 directions. First match wins.
-      // Skips when a halo is directly under the cursor (those listeners
-      // already fired). Clears the hover when the cursor moves into open
-      // map space, so the snap doesn't keep a stale tooltip alive.
+      // Per-halo mouseenter/mousemove handles direct hits inside the 64px
+      // halo. This handler extends reach further by ring-sampling
+      // document.elementsFromPoint at ±20 and ±32 px around the cursor in
+      // 8 directions, so a cursor up to ~64 px from a corridor centerline
+      // still triggers its tooltip. First match wins. Skips when a halo
+      // is directly under the cursor (those listeners already fired).
+      // Clears the hover when the cursor moves into open map space, so
+      // the snap doesn't keep a stale tooltip alive.
       const SNAP_OFFSETS: ReadonlyArray<readonly [number, number]> = [
-        [8, 0], [-8, 0], [0, 8], [0, -8],
-        [12, 0], [-12, 0], [0, 12], [0, -12],
-        [8, 8], [8, -8], [-8, 8], [-8, -8],
-        [12, 12], [12, -12], [-12, 12], [-12, -12],
+        [20, 0], [-20, 0], [0, 20], [0, -20],
+        [32, 0], [-32, 0], [0, 32], [0, -32],
+        [20, 20], [20, -20], [-20, 20], [-20, -20],
+        [32, 32], [32, -32], [-32, 32], [-32, -32],
       ];
       const container = map.getContainer();
       const snapMove = (e: MouseEvent) => {
