@@ -736,7 +736,6 @@ function CardsForRacWac({
   wacLatest,
   wacTrend,
   racLatest,
-  racTrend,
   mode,
   trendDomain,
   showWacTotal = true,
@@ -747,12 +746,11 @@ function CardsForRacWac({
   scope: string;
   wacLatest: RacWacLatest | null;
   wacTrend: RacWacTrend | null;
-  // RAC counterparts. In a per-anchor view the Workforce mix card switches
+  // RAC counterpart. In a per-anchor view the Workforce mix card switches
   // its data source by direction: inbound mode reads WAC (workers AT this
   // anchor), outbound mode reads RAC (residents OF this anchor commuting
   // out). Aggregate view keeps the original WAC charts for both modes.
   racLatest: RacWacLatest | null;
-  racTrend: RacWacTrend | null;
   mode: Mode;
   trendDomain?: [number, number];
   // When false, the standalone "Total jobs (WAC)" sparkline card is hidden.
@@ -1658,7 +1656,6 @@ function aggregateBlocks(
 ) {
   return {
     racLatest: rac.latest,
-    racTrend: rac.trend,
     wacLatest: wac.latest,
     wacTrend: wac.trend,
     // The OD dataset is a ring of pairs touching the 11 anchors (not a closed
@@ -1687,7 +1684,6 @@ function perZipBlocks(
 ) {
   return {
     racLatest: racEntry?.latest ?? null,
-    racTrend: racEntry?.trend ?? null,
     wacLatest: wacEntry?.latest ?? null,
     wacTrend: wacEntry?.trend ?? null,
     inflowLatest: odEntry?.inflow.latest
@@ -2019,7 +2015,6 @@ export function BottomCardStrip({
           wacLatest={blocks.wacLatest}
           wacTrend={blocks.wacTrend}
           racLatest={blocks.racLatest}
-          racTrend={blocks.racTrend}
           mode={mode}
           trendDomain={wacDomain}
           showWacTotal={!isPerZip}
