@@ -31,13 +31,12 @@ from __future__ import annotations
 import heapq
 import json
 import sys
-import urllib.request
-import zipfile
 from pathlib import Path
 
 import lodes
+from anchors import ANCHOR_ZIPS, ANCHOR_PLACE_NAMES, CITY_CENTROIDS
 from osrm import OsrmError, route_polyline
-from smoothing import haversine_length_meters
+from geo import haversine_length_meters, load_gazetteer
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -49,10 +48,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 CORRIDORS_GEOJSON = OUT_DIR / "corridors.geojson"
 OSRM_CACHE_PATH = HERE / ".osrm-corridor-cache.json"
-
-GAZ_URL = "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteer/2024_Gaz_zcta_national.zip"
-GAZ_LOCAL_TXT = Path("/tmp/2024_Gaz_zcta_national.txt")
-GAZ_LOCAL_ZIP = Path("/tmp/gaz_zcta_2024.zip")
+GAZETTEER_CACHE_DIR = PROJECT_ROOT / "data" / "lodes-cache" / "gazetteer"
 
 COORD_DECIMALS = 6
 OSRM_SNAP_RADIUS_M: int | None = None
@@ -61,80 +57,27 @@ OSRM_SNAP_RADIUS_M: int | None = None
 # the full 2002–2023 series; the corridor map renders this single year.
 LATEST_YEAR = lodes.LATEST_YEAR
 
-# Anchor ZIPs — appear as workplace (inbound) and residence (outbound).
-ANCHOR_ZIPS = {
-    "81601", "81611", "81615", "81621", "81623",
-    "81630", "81635", "81647", "81650", "81652", "81654",
-}
-
-# City-center coordinates for anchor ZIPs. Same overrides as the prior build —
-# gazetteer centroids are too far from downtown for sprawling resort/rural ZIPs.
-CITY_CENTROIDS: dict[str, tuple[float, float]] = {
-    "81601": (39.5505, -107.3248),
-    "81611": (39.1911, -106.8175),
-    "81615": (39.2130, -106.9378),
-    "81621": (39.3691, -107.0328),
-    "81623": (39.4019, -107.2117),
-    "81630": (39.3306, -108.2231),
-    "81635": (39.4519, -108.0531),
-    "81647": (39.5736, -107.5306),
-    "81650": (39.5347, -107.7831),
-    "81652": (39.5483, -107.6539),
-    "81654": (39.3310, -106.9849),
-}
-
-# Friendly place names for the 11 anchors. External CO ZIPs fall back to
-# whatever the gazetteer-derived seed map provides; if both miss, the UI
-# renders the bare ZIP code.
-ANCHOR_PLACE_NAMES: dict[str, str] = {
-    "81601": "Glenwood Springs",
-    "81611": "Aspen",
-    "81615": "Snowmass Village",
-    "81621": "Basalt",
-    "81623": "Carbondale",
-    "81630": "DeBeque",
-    "81635": "Battlement Mesa",
-    "81647": "New Castle",
-    "81650": "Rifle",
-    "81652": "Silt",
-    "81654": "Snowmass",
-}
+# Anchor constants (ANCHOR_ZIPS / CITY_CENTROIDS / ANCHOR_PLACE_NAMES) are
+# imported from anchors.py — the single source of truth shared with
+# build-passthrough.py.
 
 # Gateway routing rules (preserved from the prior build).
 GATEWAY_E_NODE = "GW_E"
 GATEWAY_W_NODE = "GW_W"
 GATEWAY_SPLIT_LNG = -107.3248
 
+# QA tolerances surfaced by the reconciliation block at end of run. Inbound
+# drift between WAC latest total and the sum of inbound flow workers is
+# warned (not fatal) above this fraction. Outbound drift is expected to be
+# larger because residents working out-of-state are absent from the CO-only
+# OD pull, so it's reported but never warned on.
+INBOUND_DRIFT_TOL_PCT = 0.005
 
-# ---------------------------------------------------------------------------
-# Gazetteer load
-# ---------------------------------------------------------------------------
-def load_gazetteer() -> dict[str, tuple[float, float]]:
-    if not GAZ_LOCAL_TXT.exists():
-        print(f"  fetching gazetteer → {GAZ_URL}", file=sys.stderr)
-        urllib.request.urlretrieve(GAZ_URL, GAZ_LOCAL_ZIP)
-        with zipfile.ZipFile(GAZ_LOCAL_ZIP) as zf:
-            zf.extractall("/tmp")
-
-    centroids: dict[str, tuple[float, float]] = {}
-    with open(GAZ_LOCAL_TXT, encoding="utf-8") as fh:
-        header = fh.readline().rstrip("\n").split("\t")
-        header = [h.strip() for h in header]
-        idx_geo = header.index("GEOID")
-        idx_lat = header.index("INTPTLAT")
-        idx_lng = header.index("INTPTLONG")
-        for line in fh:
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) <= idx_lng:
-                continue
-            zcta = parts[idx_geo].strip()
-            try:
-                lat = float(parts[idx_lat].strip())
-                lng = float(parts[idx_lng].strip())
-            except ValueError:
-                continue
-            centroids[zcta] = (lat, lng)
-    return centroids
+# Per-pair segment sanity tolerance. LODES uses noise infusion so segment
+# axes (age / wage / naics3) are not guaranteed to sum exactly to
+# workerCount, but drift greater than this on any single row indicates an
+# ingest bug that broke segment column propagation.
+SEG_AXIS_TOL = 2
 
 
 # ---------------------------------------------------------------------------
@@ -396,8 +339,8 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    rac = lodes.aggregate_rac_or_wac(rac_raw, "h_geocode")
-    wac = lodes.aggregate_rac_or_wac(wac_raw, "w_geocode")
+    rac = lodes.aggregate_rac_or_wac(rac_raw)
+    wac = lodes.aggregate_rac_or_wac(wac_raw)
     od_pairs = lodes.aggregate_od_to_zip_pairs(od_raw)
     print(
         f"  → RAC ZCTA-years {len(rac):,}; WAC ZCTA-years {len(wac):,}; "
@@ -415,7 +358,7 @@ def main() -> int:
     )
 
     print("loading ZCTA gazetteer…", file=sys.stderr)
-    centroids = load_gazetteer()
+    centroids = load_gazetteer(GAZETTEER_CACHE_DIR)
     print(f"  → {len(centroids):,} ZCTA centroids", file=sys.stderr)
 
     zip_to_place = load_place_name_seed()
@@ -618,17 +561,16 @@ def main() -> int:
     )
     # Outbound has an expected gap: residents working out-of-state are absent
     # from CO-only OD pulls. Warn but don't fail above the small expected gap.
-    if in_drift > 0.005:
+    if in_drift > INBOUND_DRIFT_TOL_PCT:
         print(
-            f"  ! inbound drift {in_drift:.2%} exceeds 0.5%; possible ingest bug",
+            f"  ! inbound drift {in_drift:.2%} exceeds "
+            f"{INBOUND_DRIFT_TOL_PCT:.1%}; possible ingest bug",
             file=sys.stderr,
         )
 
     # Per-pair segment sanity: each axis (age / wage / naics3) sums to within
-    # ±2 of workerCount. LODES uses noise infusion so exact equality won't
-    # hold, but drift > 2 on any single row indicates an ingest bug that
-    # broke segment column propagation.
-    SEG_TOL = 2
+    # SEG_AXIS_TOL of workerCount. Tolerance hoisted to the constants block
+    # at the top of the file.
     seg_violations = 0
     for f in (flows_inbound_out + flows_outbound_out):
         seg = f.get("segments")
@@ -641,7 +583,7 @@ def main() -> int:
             "naics3": seg["naics3"]["goods"] + seg["naics3"]["tradeTransUtil"] + seg["naics3"]["allOther"],
         }
         for axis_name, s in sums.items():
-            if abs(s - wc) > SEG_TOL:
+            if abs(s - wc) > SEG_AXIS_TOL:
                 seg_violations += 1
                 if seg_violations <= 5:
                     print(
@@ -652,12 +594,12 @@ def main() -> int:
                 break
     if seg_violations:
         print(
-            f"  ! {seg_violations} flow rows with segment drift > ±{SEG_TOL}",
+            f"  ! {seg_violations} flow rows with segment drift > ±{SEG_AXIS_TOL}",
             file=sys.stderr,
         )
     else:
         print(
-            f"  segment sanity ok — every axis sums to workerCount ±{SEG_TOL}",
+            f"  segment sanity ok — every axis sums to workerCount ±{SEG_AXIS_TOL}",
             file=sys.stderr,
         )
 

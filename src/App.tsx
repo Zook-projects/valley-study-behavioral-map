@@ -7,7 +7,7 @@
 // anchor's work-ZIP fan-out). The hover tooltip's aggregation, denominator,
 // and label set follow the active mode.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapCanvas } from './components/MapCanvas';
 import { DashboardTile } from './components/DashboardTile';
 import { BottomCardStrip } from './components/BottomCardStrip';
@@ -28,9 +28,11 @@ import type {
 import type { OdSummaryFile, RacFile, WacFile } from './types/lodes';
 import {
   applySegmentFilter,
+  detailForNonAnchorOrigin,
   detailForZip,
   filterByDirection,
   filterForSelection,
+  isAnchorZip,
   type DriveDistanceMap,
 } from './lib/flowQueries';
 import {
@@ -239,6 +241,13 @@ export default function App() {
   const [passThrough, setPassThrough] = useState<PassThroughFile | null>(null);
   const [mode, setMode] = useState<Mode>('inbound');
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
+  // Non-anchor place bundle. Set when the user selects a real ZIP that isn't
+  // in ANCHOR_ZIPS — gathers every ZIP that shares the place name so multi-
+  // ZIP places (Eagle, Grand Junction) aggregate across their full footprint.
+  // Null when the selection is the aggregate view, an anchor, or ALL_OTHER.
+  const [nonAnchorBundle, setNonAnchorBundle] = useState<
+    { place: string; zips: string[] } | null
+  >(null);
   // Optional secondary selection — a single partner location chosen from the
   // anchor's top-N list. When set, the map fades non-matching corridors and
   // the headline tiles + Workforce flows + Workplace Metrics scope to the
@@ -264,6 +273,14 @@ export default function App() {
   // tooltip shows the full breakdown; the hover tooltip is a simplified
   // header-only chip that prompts the user to click for more.
   const [pinned, setPinned] = useState<HoverState | null>(null);
+  // Bottom card strip height — tracked so the credit chip can sit just above
+  // it regardless of which view (aggregate / anchor / non-anchor) is active.
+  const bottomStripRef = useRef<HTMLDivElement>(null);
+  const [bottomStripHeight, setBottomStripHeight] = useState<number>(348);
+  // Credit chip height — measured so the chip can pin its TOP edge to the
+  // bottom card row's TOP edge regardless of chip line-wrap or font metrics.
+  const creditChipRef = useRef<HTMLDivElement>(null);
+  const [creditChipHeight, setCreditChipHeight] = useState<number>(28);
   // Cross-filter state for the pass-through traffic card. Either side can be
   // selected independently; when one is set the opposite section's list
   // narrows to ZIPs paired with the selection (and the map switches to
@@ -295,6 +312,38 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pinned]);
+
+  // Track BottomCardStrip height so the credit chip can hover just above it.
+  // Strip height changes with view type (aggregate / anchor / non-anchor) and
+  // with segment-filter expansion, so a static offset can't keep the chip
+  // pinned correctly across all states.
+  useEffect(() => {
+    const el = bottomStripRef.current;
+    console.log('[strip-ro] effect, el is', el ? 'present h=' + el.offsetHeight : 'NULL');
+    if (!el) return;
+    const update = () => {
+      const h = el.offsetHeight;
+      console.log('[strip-ro] update h=' + h);
+      setBottomStripHeight(h);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Track credit chip height so its top edge can be pinned to the bottom card
+  // row's top edge across view types (font metrics + line-wrap can shift the
+  // chip's actual height beyond the static fallback).
+  useEffect(() => {
+    const el = creditChipRef.current;
+    if (!el) return;
+    const update = () => setCreditChipHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,10 +437,43 @@ export default function App() {
   const directionFilteredFlows =
     mode === 'inbound' ? directionFilteredInbound : directionFilteredOutbound;
 
-  const visibleFlows = useMemo(
-    () => filterForSelection(directionFilteredFlows, selectedZip, mode),
-    [directionFilteredFlows, selectedZip, mode],
-  );
+  // selectionKind drives every branch that needs to know "is this a real
+  // anchor view vs the new non-anchor pivot vs aggregate". Derived from
+  // selectedZip + ANCHOR_ZIPS so the source of truth stays in one place.
+  const selectionKind: 'aggregate' | 'anchor' | 'non-anchor' = useMemo(() => {
+    if (!selectedZip || selectedZip === 'ALL_OTHER') return 'aggregate';
+    return isAnchorZip(selectedZip) ? 'anchor' : 'non-anchor';
+  }, [selectedZip]);
+
+  // Map-facing visible flows. For non-anchor selections the map keeps
+  // showing the aggregate inbound network so the user has the full corridor
+  // context around the highlighted bundle — the bundle's per-flow detail is
+  // surfaced on the off-corridor branching layer (see `bundleFlows` below)
+  // rather than narrowing the map to bundle-only corridors.
+  const visibleFlows = useMemo(() => {
+    if (selectionKind === 'non-anchor') {
+      return directionFilteredInbound;
+    }
+    return filterForSelection(directionFilteredFlows, selectedZip, mode);
+  }, [
+    selectionKind,
+    directionFilteredInbound,
+    directionFilteredFlows,
+    selectedZip,
+    mode,
+  ]);
+
+  // Bundle-pivoted flows — one row per (bundle ZIP × anchor destination),
+  // already aggregated by destination across the bundle's ZIPs. Drives the
+  // non-anchor stats panels and the map's branching off-corridor layer.
+  // Empty for anchor / aggregate selections.
+  const bundleFlows = useMemo(() => {
+    if (selectionKind !== 'non-anchor' || !nonAnchorBundle) return [];
+    return detailForNonAnchorOrigin(
+      directionFilteredInbound,
+      nonAnchorBundle.zips,
+    ).flows;
+  }, [selectionKind, nonAnchorBundle, directionFilteredInbound]);
 
   // Mode-aware aggregation lifted up so the corridor legend (in
   // DashboardTile) and the renderer (MapCanvas) share one set of breaks.
@@ -488,6 +570,20 @@ export default function App() {
         denominator: count(flowsInbound ?? []),
       };
     }
+    if (selectionKind === 'non-anchor' && nonAnchorBundle && flowsInbound) {
+      // Non-anchor pivot — count rows in the inbound dataset whose origin is
+      // any ZIP in the bundle. detailForZip would always return 0 here since
+      // it filters by destZip in inbound mode.
+      const num = detailForNonAnchorOrigin(
+        directionFilteredInbound,
+        nonAnchorBundle.zips,
+      ).flows.length;
+      const den = detailForNonAnchorOrigin(
+        flowsInbound,
+        nonAnchorBundle.zips,
+      ).flows.length;
+      return { numerator: num, denominator: den };
+    }
     const meta = zips?.find((z) => z.zip === selectedZip);
     if (!meta || !flows) return { numerator: 0, denominator: 0 };
     return {
@@ -496,6 +592,8 @@ export default function App() {
     };
   }, [
     selectedZip,
+    selectionKind,
+    nonAnchorBundle,
     zips,
     flows,
     mode,
@@ -512,6 +610,10 @@ export default function App() {
     setPassThroughDest(null);
   };
   const handleModeChange = (m: Mode) => {
+    // Defensive guard: when a non-anchor is selected the toggle is replaced
+    // by an inline notice (no UI path to call this), but a stale ref could
+    // still fire onModeChange. Ignore so we don't desync the lock.
+    if (nonAnchorBundle) return;
     setHover(null);
     // Pinned tooltip is intentionally preserved across mode toggles. Its
     // aggregation is re-derived from the active mode's visibleCorridorMap
@@ -530,6 +632,27 @@ export default function App() {
     setSelectedZip(z);
     setSelectedPartner(null);
     clearPassThrough();
+    // Resolve the non-anchor place bundle. If z is null, ALL_OTHER, or an
+    // anchor, clear the bundle. Otherwise gather every ZIP that shares the
+    // clicked ZIP's place name so multi-ZIP places aggregate as one unit,
+    // and force mode='inbound' so the toggle's underlying state is consistent
+    // with the locked notice the user sees.
+    if (!z || z === 'ALL_OTHER' || isAnchorZip(z)) {
+      setNonAnchorBundle(null);
+      return;
+    }
+    const meta = zips?.find((x) => x.zip === z);
+    if (!meta) {
+      setNonAnchorBundle(null);
+      return;
+    }
+    const place = meta.place;
+    const siblingZips = (zips ?? [])
+      .filter((x) => x.place === place && !x.isSynthetic)
+      .map((x) => x.zip)
+      .sort();
+    setNonAnchorBundle({ place, zips: siblingZips.length ? siblingZips : [z] });
+    setMode('inbound');
   };
   const handleDirectionChange = (d: DirectionFilter) => {
     setHover(null);
@@ -634,6 +757,10 @@ export default function App() {
         onModeChange={handleModeChange}
         selectedZip={selectedZip}
         onSelectZip={handleSelectZip}
+        selectionKind={selectionKind}
+        nonAnchorBundle={nonAnchorBundle}
+        visibleFlows={visibleFlows}
+        bundleFlows={bundleFlows}
         selectedPartner={selectedPartner}
         onSelectPartner={handleSelectPartner}
         directionFilter={directionFilter}
@@ -654,6 +781,8 @@ export default function App() {
           flows={flows}
           zips={zips}
           visibleFlows={visibleFlows}
+          bundleFlows={bundleFlows}
+          nonAnchorBundle={nonAnchorBundle}
           visibleCorridorMap={visibleCorridorMap}
           bucketBreaks={bucketBreaks}
           selectedZip={selectedZip}
@@ -685,13 +814,20 @@ export default function App() {
           }}
         />
 
-        {/* Credit chip — docked to the right edge just above the bottom
-            card strip. The strip is anchored to bottom: 0 with a variable
-            content height (~330px); the chip uses a slightly larger offset
-            so it always clears the cards. */}
+        {/* Credit chip — docked to the top-right corner of the bottom card
+            strip. The strip is anchored to bottom: 0 with a content height
+            that varies by view type (aggregate / anchor / non-anchor) and by
+            segment-filter expansion. Pinning the chip's TOP edge to the
+            strip's TOP edge keeps the chip seated in the corner across all
+            view types. Chip height is measured live so font metrics or
+            line-wrap don't break the alignment. */}
         <div
-          className="absolute right-4 bottom-2 md:bottom-[348px] glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
-          style={{ color: 'var(--text-h)' }}
+          ref={creditChipRef}
+          className="absolute right-4 glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
+          style={{
+            color: 'var(--text-h)',
+            bottom: bottomStripHeight - creditChipHeight,
+          }}
         >
           Created by Jacob Zook
         </div>
@@ -872,10 +1008,15 @@ export default function App() {
 
         {/* Bottom card strip — aggregate vs per-anchor LODES panels */}
         <BottomCardStrip
+          containerRef={bottomStripRef}
           racFile={racFile}
           wacFile={wacFile}
           odSummary={odSummary}
           selectedZip={selectedZip}
+          selectionKind={selectionKind}
+          nonAnchorBundle={nonAnchorBundle}
+          visibleFlows={visibleFlows}
+          bundleFlows={bundleFlows}
           selectedPartner={selectedPartner}
           mode={mode}
           flowsInbound={directionFilteredInbound}

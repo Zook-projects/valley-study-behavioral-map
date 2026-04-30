@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import maplibregl, { type Map as MLMap } from 'maplibre-gl';
 import { CORRIDOR_BUCKET_SEMANTIC, corridorStyle } from '../lib/arcMath';
 import { flowIdOf } from '../lib/corridors';
+import { ANCHOR_ZIPS } from '../lib/flowQueries';
 import type {
   ActiveCorridorAggregation,
   CorridorId,
@@ -20,6 +21,16 @@ interface Props {
   flows: FlowRow[];
   zips: ZipMeta[];
   visibleFlows: FlowRow[];          // filtered subset to draw
+  // Bundle-pivoted flows for the non-anchor selection (origin in bundle.zips,
+  // destination is an anchor). When non-empty, the off-corridor render layer
+  // draws an organic branching tree from each origin to its anchor
+  // destinations instead of falling back to the visibleFlows-minus-corridors
+  // straggler heuristic. Empty for anchor / aggregate selections.
+  bundleFlows: FlowRow[];
+  // Non-anchor bundle (or null). When set, the map fits its viewport to the
+  // union of the 11 anchor ZIP centroids + the bundle's ZIP centroids so
+  // both the residence and the anchor workplaces are in frame.
+  nonAnchorBundle: { place: string; zips: string[] } | null;
   visibleCorridorMap: Map<CorridorId, ActiveCorridorAggregation>;
   bucketBreaks: [number, number, number, number];
   selectedZip: string | null;
@@ -66,6 +77,8 @@ export function MapCanvas({
   flows,
   zips,
   visibleFlows,
+  bundleFlows,
+  nonAnchorBundle,
   visibleCorridorMap,
   bucketBreaks,
   selectedZip,
@@ -197,6 +210,60 @@ export function MapCanvas({
     };
   }, []);
 
+  // ---- Fit bounds when a non-anchor bundle is selected ---------------------
+  // Frame the bundle's ZIP centroids together with the 11 workplace anchors so
+  // the user sees both ends of the residence → workplace commute. Skips when
+  // any centroid is missing (synthetic ZIPs / unknown geography). When the
+  // bundle clears (back to anchor / aggregate), the map is left at the user's
+  // current view — no auto-resetting on every selection change.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    // Determine the set of ZIPs to fit:
+    //   non-anchor selected → bundle ZIPs ∪ ANCHOR_ZIPS (residence + anchor
+    //                          workplaces both in frame).
+    //   anchor selected     → ANCHOR_ZIPS (regional context — selected anchor
+    //                          plus the rest of the anchor cluster).
+    //   aggregate / ALL_OTHER → no auto-fit (user keeps manual viewport).
+    let targetZips: Set<string> | null = null;
+    if (nonAnchorBundle) {
+      targetZips = new Set<string>([
+        ...nonAnchorBundle.zips,
+        ...ANCHOR_ZIPS,
+      ]);
+    } else if (selectedZip && ANCHOR_ZIPS.includes(selectedZip)) {
+      targetZips = new Set<string>(ANCHOR_ZIPS);
+    }
+    if (!targetZips) return;
+    const lats: number[] = [];
+    const lngs: number[] = [];
+    for (const z of zips) {
+      if (!targetZips.has(z.zip)) continue;
+      if (z.lat == null || z.lng == null) continue;
+      lats.push(z.lat);
+      lngs.push(z.lng);
+    }
+    if (lats.length < 2) return;
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    // Bottom padding accounts for the ~250-px bottom card strip + breathing
+    // room. maxZoom 9 keeps the regional scale legible (10 pulled in too
+    // tightly on the smaller anchor pair geometries).
+    map.fitBounds(
+      [
+        [minLng, minLat],
+        [maxLng, maxLat],
+      ],
+      {
+        padding: { top: 100, right: 100, bottom: 300, left: 100 },
+        duration: 700,
+        maxZoom: 9,
+      },
+    );
+  }, [nonAnchorBundle, selectedZip, zips]);
+
   // ---- Render corridors + centroids on every map move and on data change ---
   useEffect(() => {
     const map = mapRef.current;
@@ -246,6 +313,16 @@ export function MapCanvas({
         </filter>
       `;
       svg.appendChild(defs);
+
+      // Group: off-corridor flows (rendered BELOW corridors so the curated
+      // corridor network stays the dominant primitive). Used for any flow
+      // that has no entry in visibleCorridorMap — typically non-anchor
+      // bundle flows whose endpoints sit off the Hwy 82 / I-70 axis, plus
+      // a small set of outlying anchor flows whose corridorPath was empty
+      // at build time.
+      const offCorridorGroup = document.createElementNS(NS, 'g');
+      offCorridorGroup.setAttribute('data-layer', 'off-corridor');
+      svg.appendChild(offCorridorGroup);
 
       // Group: corridors
       const arcGroup = document.createElementNS(NS, 'g');
@@ -504,6 +581,149 @@ export function MapCanvas({
         arcGroup.appendChild(path);
       }
 
+      // ---- Off-corridor flows ----
+      // Two sources feed this layer:
+      //   1. When `bundleFlows` is non-empty (non-anchor selection) we draw
+      //      a branching tree from each origin ZIP to every anchor it sends
+      //      workers to. Branches share a near-origin "trunk" so the read
+      //      is "this one place fans out to multiple anchors" rather than
+      //      a bag of independent arcs.
+      //   2. Otherwise we fall back to scanning visibleFlows for stragglers
+      //      whose corridorPath was empty at build time, drawn as the same
+      //      branching primitive (single-destination → single branch).
+      // Self-flows are excluded in both cases — they keep their ring render.
+      const corridorFlowIds = new Set<string>();
+      for (const agg of visibleCorridorMap.values()) {
+        for (const fr of agg.flows) corridorFlowIds.add(fr.flowId);
+      }
+
+      // Source-flow set: bundle flows when present, else off-corridor
+      // stragglers from visibleFlows. Prevents double-rendering when a
+      // bundle flow is also off-corridor.
+      const sourceFlows: FlowRow[] = bundleFlows.length > 0
+        ? bundleFlows.filter((f) => f.originZip !== f.destZip)
+        : visibleFlows.filter(
+            (f) =>
+              f.originZip !== f.destZip &&
+              !corridorFlowIds.has(flowIdOf(f)),
+          );
+
+      // Group by origin ZIP so each origin renders as one tree.
+      const flowsByOrigin = new Map<string, FlowRow[]>();
+      for (const f of sourceFlows) {
+        const list = flowsByOrigin.get(f.originZip);
+        if (list) list.push(f);
+        else flowsByOrigin.set(f.originZip, [f]);
+      }
+
+      for (const [originZip, originFlows] of flowsByOrigin.entries()) {
+        const o = projected.get(originZip);
+        if (!o) continue;
+
+        // Worker-weighted destination centroid — sets the "trunk direction"
+        // out of the origin so every branch leaves in roughly the same
+        // direction at first, then peels off toward its anchor.
+        let cxSum = 0;
+        let cySum = 0;
+        let wSum = 0;
+        const branches: Array<{ d: { x: number; y: number }; flow: FlowRow }> = [];
+        for (const f of originFlows) {
+          const d = projected.get(f.destZip);
+          if (!d) continue;
+          branches.push({ d, flow: f });
+          cxSum += d.x * f.workerCount;
+          cySum += d.y * f.workerCount;
+          wSum += f.workerCount;
+        }
+        if (branches.length === 0 || wSum <= 0) continue;
+        const cx = cxSum / wSum;
+        const cy = cySum / wSum;
+
+        // Junction point — 35% from origin toward weighted centroid. Sets
+        // the shared "trunk" anchor. Branches all bend through the same
+        // initial direction at the origin, giving the tree-like read.
+        const jx = o.x + (cx - o.x) * 0.35;
+        const jy = o.y + (cy - o.y) * 0.35;
+
+        for (const { d, flow } of branches) {
+          const ocStyle = corridorStyle(flow.workerCount, bucketBreaks);
+
+          // Per-branch organic perpendicular jitter so two branches with
+          // very similar destination vectors don't paint on top of each
+          // other. Hash combines origin+dest so the jitter is stable
+          // across renders.
+          const hashStr = `${flow.originZip}|${flow.destZip}`;
+          let hash = 0;
+          for (let i = 0; i < hashStr.length; i++) {
+            hash = (hash * 31 + hashStr.charCodeAt(i)) | 0;
+          }
+          const sign = hash & 1 ? 1 : -1;
+          const dxJD = d.x - jx;
+          const dyJD = d.y - jy;
+          const lenJD = Math.sqrt(dxJD * dxJD + dyJD * dyJD) || 1;
+          // Perpendicular offset for the second control point — small so
+          // branches stay coherent but not identical chords.
+          const perpFrac = 0.08 + ((Math.abs(hash) % 100) / 100) * 0.06;
+          const px = -dyJD / lenJD;
+          const py = dxJD / lenJD;
+
+          // Cubic bezier:
+          //   M  origin
+          //   C  c1 = junction (shared trunk direction)
+          //      c2 = approach toward dest with perpendicular bend
+          //      end = dest
+          // Pulling c2 partway back from dest toward the junction makes the
+          // tail flare smoothly out of the trunk rather than kinking.
+          const c2x = d.x - dxJD * 0.3 + px * lenJD * perpFrac * sign;
+          const c2y = d.y - dyJD * 0.3 + py * lenJD * perpFrac * sign;
+
+          const pathD =
+            `M ${o.x.toFixed(1)} ${o.y.toFixed(1)} ` +
+            `C ${jx.toFixed(1)} ${jy.toFixed(1)}, ` +
+            `${c2x.toFixed(1)} ${c2y.toFixed(1)}, ` +
+            `${d.x.toFixed(1)} ${d.y.toFixed(1)}`;
+
+          // Hit halo — wide transparent stroke for hover/click target.
+          const ocHalo = document.createElementNS(NS, 'path');
+          ocHalo.setAttribute('d', pathD);
+          ocHalo.setAttribute('fill', 'none');
+          ocHalo.setAttribute('stroke', 'transparent');
+          ocHalo.setAttribute('stroke-width', '20');
+          ocHalo.setAttribute('stroke-linecap', 'round');
+          ocHalo.setAttribute('stroke-linejoin', 'round');
+          ocHalo.style.pointerEvents = 'stroke';
+          ocHalo.style.cursor = 'default';
+          const ocTitle = document.createElementNS(NS, 'title');
+          ocTitle.textContent =
+            `${flow.originPlace || flow.originZip} → ${flow.destPlace || flow.destZip}: ` +
+            `${flow.workerCount.toLocaleString()} workers`;
+          ocHalo.appendChild(ocTitle);
+          offCorridorGroup.appendChild(ocHalo);
+
+          const ocPath = document.createElementNS(NS, 'path');
+          ocPath.setAttribute('d', pathD);
+          ocPath.setAttribute('fill', 'none');
+          ocPath.setAttribute('stroke', 'var(--accent)');
+          ocPath.setAttribute('stroke-width', String(ocStyle.width));
+          ocPath.setAttribute('stroke-linecap', 'round');
+          ocPath.setAttribute('stroke-linejoin', 'round');
+          // Dashed primitive distinguishes off-corridor branches from the
+          // continuous corridor strokes — same visual language as the
+          // existing dashed-arc highlight, scaled up for the longer branches
+          // so the dash cadence reads as deliberate rather than noisy.
+          ocPath.setAttribute('stroke-dasharray', '6 5');
+          ocPath.setAttribute('opacity', '0.85');
+          ocPath.style.pointerEvents = 'none';
+          ocPath.setAttribute('role', 'img');
+          ocPath.setAttribute(
+            'aria-label',
+            `${flow.originPlace || flow.originZip} to ${flow.destPlace || flow.destZip}: ` +
+              `${flow.workerCount.toLocaleString()} workers, off-corridor flow`,
+          );
+          offCorridorGroup.appendChild(ocPath);
+        }
+      }
+
       // ---- Self-flow rings ----
       // Rings inherit the same bucket palette as corridors so the encoding
       // is consistent across primitives. Ring count/radius logic is
@@ -543,6 +763,14 @@ export function MapCanvas({
       const overlaps = (a: Rect, b: Rect) =>
         !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
 
+      // ZIPs that belong to the active non-anchor bundle — they get a
+      // temporary marker + place label so the residence side is visible
+      // alongside the anchor workplaces. Empty set in anchor / aggregate
+      // views, where only anchors and the synthetic ALL_OTHER node render.
+      const bundleZipSet = nonAnchorBundle
+        ? new Set(nonAnchorBundle.zips)
+        : null;
+
       const nodeOrder = [...zips].sort((a, b) => {
         const aw = a.isSynthetic ? 0 : a.totalAsWorkplace;
         const bw = b.isSynthetic ? 0 : b.totalAsWorkplace;
@@ -555,14 +783,21 @@ export function MapCanvas({
         const isSelected = selectedZip === z.zip;
         const isAnchor = z.isAnchor;
         const isAllOther = z.isSynthetic;
-        // Render only anchor workplaces and the synthetic All-Other node.
-        // Non-anchor ZCTA centroids are routed through the corridor graph
-        // (or rolled into ALL_OTHER) — they don't need their own dot.
-        if (!isAnchor && !isAllOther) continue;
+        // Bundle ZIPs are rendered with the same marker + label primitive
+        // as anchors so the non-anchor residence side reads as a peer of
+        // the anchor workplaces in the same view.
+        const isBundleMember = bundleZipSet?.has(z.zip) ?? false;
+        // Render anchor workplaces, the synthetic All-Other node, and any
+        // non-anchor ZIPs in the active bundle. Other non-anchor ZCTA
+        // centroids are routed through the corridor graph and don't need
+        // their own dot.
+        if (!isAnchor && !isAllOther && !isBundleMember) continue;
         const r = isAllOther
           ? 7
           : isAnchor
           ? 4 + Math.log1p(z.totalAsWorkplace) * 0.55
+          : isBundleMember
+          ? 4 + Math.log1p(z.totalAsResidence) * 0.55
           : 1.8 + Math.log1p(z.totalAsResidence) * 0.35;
 
         if (isSelected) {
@@ -610,7 +845,7 @@ export function MapCanvas({
         }
         nodeGroup.appendChild(node);
 
-        if (isAnchor || isAllOther) {
+        if (isAnchor || isAllOther || isBundleMember) {
           const text = isAllOther ? 'All Other Locations' : z.place;
           const w = text.length * charW + 4;
           const pad = r + 5;
@@ -719,6 +954,8 @@ export function MapCanvas({
     flows,
     zips,
     visibleFlows,
+    bundleFlows,
+    nonAnchorBundle,
     visibleCorridorMap,
     bucketBreaks,
     selectedZip,

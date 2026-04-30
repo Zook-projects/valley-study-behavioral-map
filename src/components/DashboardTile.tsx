@@ -31,6 +31,21 @@ interface Props {
   onModeChange: (m: Mode) => void;
   selectedZip: string | null;
   onSelectZip: (z: string | null) => void;
+  // Selection class — drives the toggle/notice swap and the StatsForZip
+  // origin-pivot branch. Source of truth lives in App.tsx.
+  selectionKind: 'aggregate' | 'anchor' | 'non-anchor';
+  // Set when selectionKind === 'non-anchor'. Carries the place name and
+  // every ZIP that shares it (e.g. Eagle 81631+81637).
+  nonAnchorBundle: { place: string; zips: string[] } | null;
+  // Visible flows from App — the map-facing dataset. For non-anchor it's
+  // the aggregate inbound network (so the map keeps its full context); for
+  // anchor / aggregate it's the selection-narrowed flows. Stats panels use
+  // `bundleFlows` (below) for non-anchor pivots instead of redoing the work.
+  visibleFlows: FlowRow[];
+  // Origin-pivot rows for the non-anchor selection — one row per anchor
+  // destination, already aggregated by destination across the bundle's ZIPs.
+  // Empty array for anchor / aggregate selections.
+  bundleFlows: FlowRow[];
   // Optional secondary partner selection (a single row from the anchor's
   // top-N list). Plumbed through to StatsForZip; null in aggregate view.
   selectedPartner: { place: string; zips: string[] } | null;
@@ -62,6 +77,10 @@ export function DashboardTile({
   onModeChange,
   selectedZip,
   onSelectZip,
+  selectionKind,
+  nonAnchorBundle,
+  visibleFlows,
+  bundleFlows,
   selectedPartner,
   onSelectPartner,
   directionFilter,
@@ -103,8 +122,29 @@ export function DashboardTile({
           </div>
         </div>
 
-        {/* Mode toggle */}
-        <ModeToggle mode={mode} onChange={onModeChange} />
+        {/* Mode toggle. When a non-anchor place is selected the toggle stays
+            in place but renders disabled and pinned to 'inbound' — the
+            anchor-inbound dataset is the only one that contains rows whose
+            origin is the selected place, so outbound has no meaning here.
+            A "Back to aggregate view" link sits directly beneath so the
+            user can clear the lock without having to re-target the selector. */}
+        <ModeToggle
+          mode={mode}
+          onChange={onModeChange}
+          disabled={selectionKind === 'non-anchor'}
+        />
+        {selectionKind === 'non-anchor' && nonAnchorBundle && (
+          <div className="-mt-2">
+            <button
+              type="button"
+              onClick={() => onSelectZip(null)}
+              className="text-[11px] underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+              style={{ color: 'var(--accent)' }}
+            >
+              ← Back to aggregate view
+            </button>
+          </div>
+        )}
 
         {/* Direction toggle (independent — composes with mode) */}
         <DirectionToggle value={directionFilter} onChange={onDirectionChange} />
@@ -126,6 +166,10 @@ export function DashboardTile({
               directionFilter={directionFilter}
               zips={zips}
               selectedZip={selectedZip}
+              selectionKind={selectionKind}
+              nonAnchorBundle={nonAnchorBundle}
+              visibleFlows={visibleFlows}
+              bundleFlows={bundleFlows}
               mode={mode}
               selectedPartner={selectedPartner}
               onSelectPartner={onSelectPartner}

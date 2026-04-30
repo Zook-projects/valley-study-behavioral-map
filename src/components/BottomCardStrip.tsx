@@ -674,7 +674,10 @@ function WageBarChart({
     !!bucket && !!activeBuckets?.includes(bucket);
   const interactive = !!onBucketClick;
   return (
-    <div ref={wrapperRef} className="relative flex flex-col gap-2">
+    <div
+      ref={wrapperRef}
+      className="relative flex flex-col flex-1 justify-around py-2"
+    >
       {rows.map((r, i) => {
         const w = (r.value / max) * 100;
         const active = isActive(r.bucket);
@@ -698,7 +701,7 @@ function WageBarChart({
                 <span style={{ color: 'var(--text-dim)' }}>{fmtPct(r.value / denom)}</span>
               </span>
             </div>
-            <div className="w-full h-2 rounded-sm" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="w-full h-4 rounded-sm" style={{ background: 'rgba(255,255,255,0.06)' }}>
               <div
                 className="h-full rounded-sm"
                 style={{
@@ -749,7 +752,10 @@ function NaicsPieChart({
 }) {
   const denom = total || rows.reduce((s, r) => s + r.value, 0) || 1;
   const colors = ['#ffffff', '#888888', 'var(--accent)'];
-  const size = 96;
+  // Card layout flips to a vertical stack — pie centered above, legend
+  // below — so the chart gets more visual weight than the previous
+  // pie-beside-legend strip allowed.
+  const size = 115;
   const radius = size / 2;
   const innerRadius = radius * 0.45; // donut hole, keeps the small slices legible
   const pieGen = d3Pie<SegmentChartRow>()
@@ -771,8 +777,18 @@ function NaicsPieChart({
     !!bucket && !!activeBuckets?.includes(bucket);
   const interactive = !!onBucketClick;
   return (
-    <div ref={wrapperRef} className="relative flex items-center gap-3">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Industry mix pie chart">
+    <div
+      ref={wrapperRef}
+      className="relative flex flex-1 items-center justify-center gap-3"
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-label="Industry mix pie chart"
+        className="block"
+      >
         <g transform={`translate(${radius}, ${radius})`}>
           {slices.map((s, i) => {
             const r = rows[i];
@@ -799,14 +815,18 @@ function NaicsPieChart({
           })}
         </g>
       </svg>
-      <div className="flex flex-col gap-1 flex-1 min-w-0">
+      {/* Legend — pinned to the right of the pie. One row per slice with
+          the swatch + label on the first line and the percent value
+          stacked beneath, so a narrow card never has to truncate the label
+          to make room for an inline percent. */}
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
         {rows.map((r, i) => {
           const active = isActive(r.bucket);
           const clickable = interactive && r.bucket;
           return (
             <div
               key={r.label}
-              className={`flex items-center gap-1.5 text-[10px] leading-tight ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+              className={`flex flex-col text-[10px] leading-tight ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
               onMouseMove={onSliceMove(i)}
               onMouseLeave={() => setHover(null)}
               onClick={
@@ -817,17 +837,22 @@ function NaicsPieChart({
               style={{
                 outline: active ? '1px solid var(--accent)' : 'none',
                 borderRadius: 2,
-                padding: active ? '0 2px' : 0,
+                padding: active ? '1px 2px' : 0,
               }}
             >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className="inline-block w-2 h-2 rounded-sm shrink-0"
+                  style={{ background: colors[i] ?? colors[colors.length - 1] }}
+                />
+                <span className="truncate" style={{ color: 'var(--text-dim)' }}>
+                  {r.label}
+                </span>
+              </div>
               <span
-                className="inline-block w-2 h-2 rounded-sm shrink-0"
-                style={{ background: colors[i] ?? colors[colors.length - 1] }}
-              />
-              <span className="truncate" style={{ color: 'var(--text-dim)' }}>
-                {r.label}
-              </span>
-              <span className="ml-auto tnum" style={{ color: 'var(--text-h)' }}>
+                className="tnum pl-[14px]"
+                style={{ color: 'var(--text-h)' }}
+              >
                 {fmtPct(r.value / denom)}
               </span>
             </div>
@@ -1721,6 +1746,103 @@ function WorkplaceMetricsCard({
 }
 
 // ---------------------------------------------------------------------------
+// Workplace Metrics — non-anchor variant
+// ---------------------------------------------------------------------------
+// Trimmed metrics card for the non-anchor branch. The selection is a
+// residence-side place bundle (one or more ZIPs sharing a place name). The
+// universe is the bundle's residents commuting to one of the 11 anchor
+// workplaces (inbound dataset, originZip ∈ bundle.zips). LODES does not
+// publish a workplace-side rollup for non-anchor ZIPs, so the "Total
+// Workforce" + "Cross-ZIP commute share" treatment used for anchors is
+// not meaningful here — those rows are dropped per spec.
+function NonAnchorMetricsCard({
+  scope,
+  bundle,
+  visibleFlows,
+  zips,
+  corridorIndex,
+  flowIndex,
+  driveDistance,
+}: {
+  scope: string;
+  bundle: { place: string; zips: string[] };
+  visibleFlows: FlowRow[];
+  zips: ZipMeta[];
+  corridorIndex: Map<CorridorId, CorridorRecord>;
+  flowIndex: Map<CorridorId, CorridorFlowEntry[]>;
+  driveDistance: DriveDistanceMap | null;
+}) {
+  // Bundle residents commuting to anchors. visibleFlows is already pivoted
+  // upstream (App.tsx · detailForNonAnchorOrigin) so each row is
+  // bundle-origin → anchor-dest.
+  const inboundWorkers = useMemo(
+    () => visibleFlows.reduce((s, f) => s + f.workerCount, 0),
+    [visibleFlows],
+  );
+
+  const avgMiles = useMemo(
+    () => meanCommuteMiles(visibleFlows, zips, driveDistance ?? undefined),
+    [visibleFlows, zips, driveDistance],
+  );
+
+  // Highest-volume corridor among the bundle's flows (mode forced inbound).
+  const topCorridor = useMemo<{ label: string; total: number } | null>(() => {
+    const map = buildVisibleCorridorMap(corridorIndex, flowIndex, visibleFlows, 'inbound');
+    if (map.size === 0) return null;
+    let best: ActiveCorridorAggregation | null = null;
+    for (const agg of map.values()) {
+      if (!best || agg.total > best.total) best = agg;
+    }
+    return best ? { label: best.corridor.label, total: best.total } : null;
+  }, [corridorIndex, flowIndex, visibleFlows]);
+
+  // Top destination anchor — collapse to single highest-worker pair across
+  // the bundle. For multi-anchor cities (Aspen 81611+81612), label flips
+  // to the place name; for single-ZIP anchors, just the place.
+  const topAnchor = useMemo<{ place: string; workers: number } | null>(() => {
+    const placeByZip = new Map<string, string>();
+    for (const z of zips) placeByZip.set(z.zip, z.place);
+    const totals = new Map<string, number>();
+    for (const f of visibleFlows) {
+      const place = placeByZip.get(f.destZip) ?? f.destZip;
+      totals.set(place, (totals.get(place) ?? 0) + f.workerCount);
+    }
+    let best: { place: string; workers: number } | null = null;
+    for (const [place, workers] of totals) {
+      if (!best || workers > best.workers) best = { place, workers };
+    }
+    return best;
+  }, [visibleFlows, zips]);
+
+  const topPairArrow = topAnchor ? `${bundle.place} → ${topAnchor.place}` : '—';
+
+  return (
+    <Card
+      title={`${scope} · Workplace Metrics`}
+      subtitle="Residents commuting to anchors · latest year"
+      width={280}
+    >
+      <MetricRow label="Inbound Workers" value={fmtInt(inboundWorkers)} />
+      <MetricRow
+        label="Average commute distance"
+        value={avgMiles > 0 ? `${avgMiles.toFixed(1)} mi` : '—'}
+        sub="Worker-weighted · to anchors"
+      />
+      <MetricRow
+        label="Top corridor"
+        value={topCorridor?.label ?? '—'}
+        sub={topCorridor ? `${fmtInt(topCorridor.total)} workers` : undefined}
+      />
+      <MetricRow
+        label="Top O–D pair"
+        value={topPairArrow}
+        sub={topAnchor ? `${fmtInt(topAnchor.workers)} workers` : undefined}
+      />
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Top-level switch
 // ---------------------------------------------------------------------------
 interface Props {
@@ -1728,6 +1850,26 @@ interface Props {
   wacFile: WacFile;
   odSummary: OdSummaryFile;
   selectedZip: string | null;
+  // Selection class — surfaced from App.tsx so the strip can drop into a
+  // trimmed two-card layout when a non-anchor place is selected (no LODES
+  // workplace dataset exists for non-anchors, so the OD/Top-N/Pass-Through
+  // cards have nothing to render).
+  selectionKind: 'aggregate' | 'anchor' | 'non-anchor';
+  // Place + ZIP bundle for the active non-anchor selection. Drives the
+  // origin-pivot recomputation of the Workforce Mix and Workplace Metrics
+  // cards. null in aggregate / anchor views.
+  nonAnchorBundle: { place: string; zips: string[] } | null;
+  // Pre-computed visible flow set from App.tsx — the map-facing dataset.
+  // In non-anchor mode this is the aggregate inbound network so the map
+  // keeps full context; in anchor / aggregate it's the selection-narrowed
+  // flows. Stats panels reach for `bundleFlows` (below) when non-anchor.
+  visibleFlows: FlowRow[];
+  // Origin-pivot rows for the non-anchor selection — one row per anchor
+  // destination, already aggregated by destination across the bundle's ZIPs.
+  // Drives the non-anchor "Top outflow" card (synthesized OdPartner list)
+  // and seeds the latest-year value for the workforce-flows timeseries.
+  // Empty array for anchor / aggregate selections.
+  bundleFlows: FlowRow[];
   // Optional secondary partner selection — when set, the OD flows card and
   // the Workplace Metrics card narrow their scope from the anchor's full
   // workforce universe to the single partner→anchor (inbound mode) or
@@ -1766,6 +1908,11 @@ interface Props {
   onPassThroughDestChange: (
     sel: { place: string; zips: string[] } | null,
   ) => void;
+  // Optional ref on the outer strip container — App.tsx attaches a
+  // ResizeObserver here so the credit chip can dock just above the strip's
+  // current rendered height (which varies by selection type and segment
+  // filter expansion).
+  containerRef?: React.RefObject<HTMLDivElement>;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {
@@ -2285,6 +2432,10 @@ export function BottomCardStrip({
   wacFile,
   odSummary,
   selectedZip,
+  selectionKind,
+  nonAnchorBundle,
+  visibleFlows,
+  bundleFlows,
   selectedPartner,
   mode,
   flowsInbound,
@@ -2301,8 +2452,15 @@ export function BottomCardStrip({
   passThroughDest,
   onPassThroughOriginChange,
   onPassThroughDestChange,
+  containerRef,
 }: Props) {
-  const isPerZip = selectedZip != null && selectedZip !== 'ALL_OTHER';
+  const isNonAnchor = selectionKind === 'non-anchor' && nonAnchorBundle != null;
+  // Anchor selections only — keeps the existing per-anchor card logic gated
+  // off non-anchor (whose selectedZip is the residence side and isn't keyed
+  // in RAC/WAC/OD files). Aggregate (selectedZip null or ALL_OTHER) still
+  // falls through to the aggregate path below.
+  const isPerZip =
+    selectedZip != null && selectedZip !== 'ALL_OTHER' && !isNonAnchor;
   // Direction filter forces the partner list to re-derive from the
   // already-direction-filtered flowsInbound/flowsOutbound arrays. Combined
   // below with the segment-filter trigger (`filterActive`).
@@ -2364,18 +2522,36 @@ export function BottomCardStrip({
   const odEntry = isPerZip ? findEntry(odSummary.entries, selectedZip) : null;
   const filterActive = !isSegmentFilterAll(segmentFilter);
 
-  const blocks = isPerZip
-    ? perZipBlocks(racEntry, wacEntry, odEntry, segmentFilter)
-    : aggregateBlocks(
-        racFile.aggregate,
-        wacFile.aggregate,
-        odSummary.aggregate,
-        segmentFilter,
-      );
+  // Non-anchor selections have no LODES workplace-side dataset (RAC/WAC/OD
+  // are anchor-only), so synthesize an all-null block bag and let the
+  // segment-driven mix override carry the mix card on its own.
+  const emptyBlocks = {
+    racLatest: null,
+    wacLatest: null,
+    wacTrend: null,
+    inflowLatest: null,
+    inflowTrend: [] as TrendPoint[],
+    outflowLatest: null,
+    outflowTrend: [] as TrendPoint[],
+    withinLatest: null,
+    withinTrend: [] as TrendPoint[],
+  };
+  const blocks = isNonAnchor
+    ? emptyBlocks
+    : isPerZip
+      ? perZipBlocks(racEntry, wacEntry, odEntry, segmentFilter)
+      : aggregateBlocks(
+          racFile.aggregate,
+          wacFile.aggregate,
+          odSummary.aggregate,
+          segmentFilter,
+        );
 
-  const scope = isPerZip
-    ? `${odEntry?.place || racEntry?.place || wacEntry?.place || selectedZip}`
-    : aggregateScope();
+  const scope = isNonAnchor
+    ? nonAnchorBundle!.place
+    : isPerZip
+      ? `${odEntry?.place || racEntry?.place || wacEntry?.place || selectedZip}`
+      : aggregateScope();
 
   // Y-domains for the trend cards. Both are zero-based so visual height is
   // proportional to the actual values (no compressed-range exaggeration).
@@ -2451,6 +2627,45 @@ export function BottomCardStrip({
     title: string;
     subtitle: string;
   } | null>(() => {
+    // Non-anchor branch: pivot on origin (residence) ZIP bundle. Mode is
+    // forced inbound upstream; every matching row's destZip is one of the
+    // 11 anchors by inbound-dataset construction.
+    if (isNonAnchor && nonAnchorBundle) {
+      const originSet = new Set(nonAnchorBundle.zips);
+      const age: AgeBlock = { u29: 0, age30to54: 0, age55plus: 0 };
+      const wage: WageBlock = { low: 0, mid: 0, high: 0 };
+      const naics3: Naics3Block = { goods: 0, tradeTransUtil: 0, allOther: 0 };
+      let rowsWithSegments = 0;
+      let rowsTotal = 0;
+      for (const f of flowsInbound) {
+        if (!originSet.has(f.originZip)) continue;
+        if (f.originZip === f.destZip) continue;
+        rowsTotal += 1;
+        if (!f.segments) continue;
+        rowsWithSegments += 1;
+        age.u29 += f.segments.age.u29;
+        age.age30to54 += f.segments.age.age30to54;
+        age.age55plus += f.segments.age.age55plus;
+        wage.low += f.segments.wage.low;
+        wage.mid += f.segments.wage.mid;
+        wage.high += f.segments.wage.high;
+        naics3.goods += f.segments.naics3.goods;
+        naics3.tradeTransUtil += f.segments.naics3.tradeTransUtil;
+        naics3.allOther += f.segments.naics3.allOther;
+      }
+      if (rowsTotal === 0 || rowsWithSegments === 0) return null;
+      const total = age.u29 + age.age30to54 + age.age55plus;
+      if (total === 0) return null;
+      return {
+        age,
+        wage,
+        naics3,
+        total,
+        title: `${nonAnchorBundle.place} · Workforce mix`,
+        subtitle: 'OD · residents commuting to anchors · latest year',
+      };
+    }
+
     if (!isPerZip || !selectedZip) return null;
     const dataset = mode === 'inbound' ? flowsInbound : flowsOutbound;
     const partnerSet = selectedPartner ? new Set(selectedPartner.zips) : null;
@@ -2515,6 +2730,8 @@ export function BottomCardStrip({
 
     return { age, wage, naics3, total, title, subtitle };
   }, [
+    isNonAnchor,
+    nonAnchorBundle,
     isPerZip,
     selectedZip,
     mode,
@@ -2524,8 +2741,88 @@ export function BottomCardStrip({
     scope,
   ]);
 
+  // Non-anchor "outflow" timeseries: residents of the bundle commuting OUT
+  // to anchor workplaces, aggregated across all 11 anchors and across all
+  // bundle ZIPs. Source is each anchor entry's inflow partners — partners
+  // whose `zips` intersect the bundle's ZIPs are this bundle's contribution
+  // to that anchor's inbound workforce. Summing those trends across anchors
+  // gives the total year-by-year flow from the bundle into the anchor set.
+  // ALL_OTHER partners are skipped — they aggregate non-named ZIPs and the
+  // bundle is by definition a named ZIP set.
+  const nonAnchorOutflowTrend = useMemo<TrendPoint[]>(() => {
+    if (!isNonAnchor || !nonAnchorBundle) return [];
+    const bundleSet = new Set(nonAnchorBundle.zips);
+    const yearSums = new Map<number, number>();
+    for (const entry of odSummary.entries) {
+      for (const partner of entry.topPartners.inflow) {
+        if (partner.zip === 'ALL_OTHER') continue;
+        // Match if any of the partner's ZIPs are in the bundle. od-summary's
+        // partner rows are non-overlapping per anchor, so no double-counting
+        // within a single anchor; cross-anchor sums are intentional.
+        let intersects = false;
+        for (const z of partner.zips ?? []) {
+          if (bundleSet.has(z)) {
+            intersects = true;
+            break;
+          }
+        }
+        if (!intersects) continue;
+        for (const t of partner.trend ?? []) {
+          yearSums.set(t.year, (yearSums.get(t.year) ?? 0) + t.value);
+        }
+      }
+    }
+    return Array.from(yearSums.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([year, value]) => ({ year, value }));
+  }, [isNonAnchor, nonAnchorBundle, odSummary]);
+
+  // Latest-year outflow value — pulled from bundleFlows (one row per anchor
+  // destination, already summed across the bundle's origin ZIPs upstream).
+  // Falls back to the trend's last point if bundleFlows is empty.
+  const nonAnchorOutflowLatest = useMemo<{ totalJobs: number } | null>(() => {
+    if (!isNonAnchor) return null;
+    if (bundleFlows.length > 0) {
+      let total = 0;
+      for (const f of bundleFlows) total += f.workerCount;
+      return { totalJobs: total };
+    }
+    if (nonAnchorOutflowTrend.length === 0) return null;
+    return {
+      totalJobs: nonAnchorOutflowTrend[nonAnchorOutflowTrend.length - 1].value,
+    };
+  }, [isNonAnchor, bundleFlows, nonAnchorOutflowTrend]);
+
+  // Y-domain for the non-anchor outflow sparkline — zero-based, scaled to the
+  // trend's max so the line uses the full canvas height.
+  const nonAnchorOdDomain = useMemo<[number, number] | undefined>(() => {
+    if (!isNonAnchor) return undefined;
+    if (nonAnchorOutflowTrend.length === 0) return undefined;
+    return [0, Math.max(...nonAnchorOutflowTrend.map((p) => p.value))];
+  }, [isNonAnchor, nonAnchorOutflowTrend]);
+
+  // Synthesized "Top outflow" partner list for the non-anchor view. Each
+  // anchor destination in bundleFlows becomes one OdPartner row; sorted desc
+  // by worker count. Trend per row is empty — PartnerList tolerates this and
+  // the workforce-flows card already carries the year-over-year story.
+  const nonAnchorTopOutflow = useMemo<OdPartner[]>(() => {
+    if (!isNonAnchor) return [];
+    return bundleFlows
+      .filter((f) => f.workerCount > 0)
+      .slice()
+      .sort((a, b) => b.workerCount - a.workerCount)
+      .map<OdPartner>((f) => ({
+        zip: f.destZip,
+        place: f.destPlace || zipPlaces.get(f.destZip) || f.destZip,
+        workers: f.workerCount,
+        zips: [f.destZip],
+        trend: [],
+      }));
+  }, [isNonAnchor, bundleFlows, zipPlaces]);
+
   return (
     <div
+      ref={containerRef}
       className="absolute left-0 right-0 bottom-0 z-20 pointer-events-auto"
       style={{ paddingBottom: 16 }}
     >
@@ -2539,7 +2836,7 @@ export function BottomCardStrip({
         <SegmentFilterPanel
           value={segmentFilter}
           onChange={onSegmentFilterChange}
-          compact={isPerZip}
+          compact={isPerZip || isNonAnchor}
         />
         {isPerZip && (
           <CardsForOd
@@ -2608,6 +2905,33 @@ export function BottomCardStrip({
             segmentFilter={segmentFilter}
           />
         )}
+        {isNonAnchor && nonAnchorBundle && (
+          <CardsForOd
+            scope={scope}
+            // Non-anchor view = bundle residents commuting OUT to anchor
+            // workplaces. Inbound is meaningless here (no anchor sends
+            // workers to a non-anchor residence ZIP) and within-ZIP is by
+            // construction zero (destinations are anchors only).
+            inflowLatest={null}
+            inflowTrend={[]}
+            outflowLatest={nonAnchorOutflowLatest}
+            outflowTrend={nonAnchorOutflowTrend}
+            withinLatest={null}
+            withinTrend={[]}
+            trendDomain={nonAnchorOdDomain}
+          />
+        )}
+        {isNonAnchor && nonAnchorBundle && (
+          <NonAnchorMetricsCard
+            scope={scope}
+            bundle={nonAnchorBundle}
+            visibleFlows={visibleFlows}
+            zips={zips}
+            corridorIndex={corridorIndex}
+            flowIndex={flowIndex}
+            driveDistance={driveDistance}
+          />
+        )}
         <CardsForRacWac
           scope={scope}
           wacLatest={blocks.wacLatest}
@@ -2615,12 +2939,25 @@ export function BottomCardStrip({
           racLatest={blocks.racLatest}
           mode={mode}
           trendDomain={wacDomain}
-          showWacTotal={!isPerZip}
-          isAggregate={!isPerZip}
+          showWacTotal={!isPerZip && !isNonAnchor}
+          isAggregate={!isPerZip && !isNonAnchor}
           segmentFilter={segmentFilter}
           onSegmentFilterChange={onSegmentFilterChange}
           odMixOverride={odMixOverride}
         />
+        {isNonAnchor && nonAnchorBundle && (
+          <Card
+            title={`${scope} · Top outflow`}
+            subtitle="Anchor workplaces · latest year"
+            width={260}
+            maxHeight={320}
+          >
+            <PartnerList
+              partners={nonAnchorTopOutflow}
+              denominator={nonAnchorOutflowLatest?.totalJobs ?? 0}
+            />
+          </Card>
+        )}
         {isPerZip && odEntry && (
           <>
             <Card

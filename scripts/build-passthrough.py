@@ -17,7 +17,8 @@ mode.
 Reads:
   - data/lodes-cache/raw/co_od_main_JT00_{LATEST_YEAR}.csv.gz
   - data/lodes-cache/raw/co_xwalk.csv.gz
-  - 2024 ZCTA Gazetteer (cached to /tmp by build-data.py)
+  - 2024 ZCTA Gazetteer (cached under data/lodes-cache/gazetteer/; downloaded
+    on first call via geo.load_gazetteer)
 
 Writes public/data/flows-passthrough.json with shape:
   {
@@ -44,35 +45,16 @@ from pathlib import Path
 import pandas as pd
 
 import lodes  # for LATEST_YEAR
+from anchors import ANCHOR_ZIPS, CITY_CENTROIDS
+from geo import load_gazetteer
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 RAW_DIR = PROJECT_ROOT / "data" / "lodes-cache" / "raw"
 OUT_PATH = PROJECT_ROOT / "public" / "data" / "flows-passthrough.json"
-GAZ_LOCAL_TXT = Path("/tmp/2024_Gaz_zcta_national.txt")
+GAZETTEER_CACHE_DIR = PROJECT_ROOT / "data" / "lodes-cache" / "gazetteer"
 
 LATEST_YEAR = lodes.LATEST_YEAR
-
-# Same anchor set + centroids as build-data.py. Kept inline so the two scripts
-# can be run independently. If the anchor list ever drifts, both files must
-# be updated in lockstep.
-ANCHOR_ZIPS = {
-    "81601", "81611", "81615", "81621", "81623",
-    "81630", "81635", "81647", "81650", "81652", "81654",
-}
-CITY_CENTROIDS: dict[str, tuple[float, float]] = {
-    "81601": (39.5505, -107.3248),
-    "81611": (39.1911, -106.8175),
-    "81615": (39.2130, -106.9378),
-    "81621": (39.3691, -107.0328),
-    "81623": (39.4019, -107.2117),
-    "81630": (39.3306, -108.2231),
-    "81635": (39.4519, -108.0531),
-    "81647": (39.5736, -107.5306),
-    "81650": (39.5347, -107.7831),
-    "81652": (39.5483, -107.6539),
-    "81654": (39.3310, -106.9849),
-}
 
 # Per-anchor, per-mode pair cap. Top N pairs by worker count are emitted
 # explicitly; the remaining tail collapses into a single residual integer
@@ -85,29 +67,9 @@ PAIRS_PER_ANCHOR_PER_MODE = 5000
 
 def load_gazetteer_lng() -> dict[str, float]:
     """Return ZCTA → centroid longitude. Pass-through is E/W-only so the
-    latitude is unused here."""
-    if not GAZ_LOCAL_TXT.exists():
-        print(
-            f"missing gazetteer at {GAZ_LOCAL_TXT}. Run build-data.py once "
-            f"first to download it.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    out: dict[str, float] = {}
-    with open(GAZ_LOCAL_TXT, encoding="utf-8") as fh:
-        header = [h.strip() for h in fh.readline().rstrip("\n").split("\t")]
-        idx_geo = header.index("GEOID")
-        idx_lng = header.index("INTPTLONG")
-        for line in fh:
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) <= idx_lng:
-                continue
-            zcta = parts[idx_geo].strip()
-            try:
-                out[zcta] = float(parts[idx_lng].strip())
-            except ValueError:
-                continue
-    return out
+    latitude is unused — derive from the shared loader and drop lat."""
+    centroids = load_gazetteer(GAZETTEER_CACHE_DIR)
+    return {z: lng for z, (_lat, lng) in centroids.items()}
 
 
 def slice_top_and_residual(

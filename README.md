@@ -269,12 +269,16 @@ data/
   lodes-cache/                  ← gitignored; populated by fetch-lodes.py
     raw/                        ← raw .csv.gz from lehd.ces.census.gov
     filtered/                   ← per-year filtered CSVs feeding build-data.py
+    gazetteer/                  ← cached 2024 Census ZCTA Gazetteer (auto-fetched)
 scripts/
   fetch-lodes.py                ← one-time LODES8 bulk download + anchor-block filter
   lodes.py                      ← LODES code mappings + (zcta, year) aggregators
+  anchors.py                    ← shared ANCHOR_ZIPS / CITY_CENTROIDS / place names
   build-data.py                 ← LODES + corridors.geojson → 7 JSON outputs
-  osrm.py                       ← OSRM corridor-routing helper (build-time)
-  smoothing.py                  ← haversine length helper
+  build-passthrough.py          ← per-anchor pass-through OD flows (latest year)
+  build-drive-distance.py       ← OSRM table → ZIP-pair drive distance JSON
+  osrm.py                       ← OSRM request shim + corridor routing (build-time)
+  geo.py                        ← haversine length + gazetteer loader
 src/
   components/
     MapCanvas.tsx        ← MapLibre + SVG overlay, per-corridor rendering

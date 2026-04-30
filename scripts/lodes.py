@@ -141,15 +141,18 @@ def load_od_all_years() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Aggregation helpers
 # ---------------------------------------------------------------------------
-def aggregate_rac_or_wac(df: pd.DataFrame, geocode_col: str) -> pd.DataFrame:
+def aggregate_rac_or_wac(df: pd.DataFrame) -> pd.DataFrame:
     """
     Aggregate block-level RAC/WAC rows up to (zcta, year) totals across every
     LODES variable plus the rolled-up NAICS-3 columns.
 
-    Output columns: zcta, year + every value column in RAC_WAC_COLS + NAICS_20_COLS
-    + naicsGoods + naicsTradeTransUtil + naicsAllOther.
+    Output columns: zcta, year + every value column in RAC_WAC_COLS
+    + naicsGoods + naicsTradeTransUtil + naicsAllOther. NAICS-20 columns are
+    summed only as inputs to the NAICS-3 rollup and are dropped from the
+    returned frame — no downstream consumer reads them.
     """
-    value_cols = list(RAC_WAC_COLS.keys()) + list(NAICS_20_COLS.keys())
+    naics20_cols = list(NAICS_20_COLS.keys())
+    value_cols = list(RAC_WAC_COLS.keys()) + naics20_cols
     # Drop any rows whose ZCTA mapping failed — should not happen given the
     # fetch-time filter, but be defensive.
     df = df[df["zcta"].notna()].copy()
@@ -165,10 +168,12 @@ def aggregate_rac_or_wac(df: pd.DataFrame, geocode_col: str) -> pd.DataFrame:
     grouped["naicsTradeTransUtil"] = grouped[NAICS_TTU].sum(axis=1)
     grouped["naicsAllOther"] = grouped[NAICS_OTHER].sum(axis=1)
 
-    # Rename LODES codes → human keys (NAICS-20 stays as informational columns).
-    grouped = grouped.rename(columns={**RAC_WAC_COLS, **NAICS_20_COLS})
+    # Rename LODES codes → human keys, then drop the now-unused NAICS-20
+    # columns. The NAICS_20_COLS dict stays as documentation but the data
+    # path keeps only the 3-bucket rollup that downstream code actually uses.
+    grouped = grouped.rename(columns=RAC_WAC_COLS)
+    grouped = grouped.drop(columns=naics20_cols)
 
-    # Drop the geocode column used for filtering (we keep ZCTA-level only).
     return grouped
 
 
@@ -388,6 +393,111 @@ def build_od_summary(
         .rename(columns={"h_zip": "zip"})
     )
 
+    # Pre-compute (anchor, partner, year) totals once for both directions.
+    # The per-anchor loop below indexes into these instead of re-filtering
+    # od_pairs on every iteration. Multi-ZIP places (Grand Junction's 81501
+    # + 81504, Denver's many ZIPs) are consolidated into a single ranked
+    # row downstream so a city counts once and doesn't burn multiple top-N
+    # slots. Top-N named rows are followed by a pinned "All Other Locations"
+    # residual = scope total − sum of top-N (incl. native LODES ALL_OTHER
+    # rolled in). This guarantees the listed values sum to the card's total.
+    inflow_by_partner_year = (
+        od_pairs.groupby(["w_zip", "h_zip", "year"], as_index=False)["totalJobs"]
+        .sum()
+    )
+    outflow_by_partner_year = (
+        od_pairs.groupby(["h_zip", "w_zip", "year"], as_index=False)["totalJobs"]
+        .sum()
+    )
+
+    def _split_top(
+        scope_by_partner_year: pd.DataFrame,
+        partner_col: str,
+        anchor: str,
+    ) -> list[dict]:
+        scope = scope_by_partner_year[scope_by_partner_year.iloc[:, 0] == anchor]
+        if scope.empty:
+            return []
+        latest = scope[scope["year"] == LATEST_YEAR]
+        grand_total = int(latest["totalJobs"].sum())
+
+        # Roll named rows up by place, falling back to ZIP when the ZIP has
+        # no place mapping. ALL_OTHER is excluded from this pass — it's
+        # reconstructed below as the residual.
+        consolidated: dict[str, dict] = {}
+        for _, row in latest.sort_values("totalJobs", ascending=False).iterrows():
+            zip_val = str(row[partner_col])
+            if zip_val == "ALL_OTHER":
+                continue
+            place = zip_to_place.get(zip_val, "")
+            key = f"place:{place}" if place else f"zip:{zip_val}"
+            if key in consolidated:
+                consolidated[key]["totalJobs"] += int(row["totalJobs"])
+                consolidated[key]["zips"].append(zip_val)
+            else:
+                consolidated[key] = {
+                    "place": place,
+                    "zips": [zip_val],
+                    "totalJobs": int(row["totalJobs"]),
+                }
+
+        ranked = sorted(consolidated.values(), key=lambda r: -r["totalJobs"])
+        top_named = ranked[:top_n]
+        residual_total = grand_total - sum(r["totalJobs"] for r in top_named)
+
+        def _trend_for_zips(zips: list[str]) -> list[dict]:
+            rows = scope[scope[partner_col].isin(zips)]
+            if rows.empty:
+                return []
+            yearly = (
+                rows.groupby("year", as_index=False)["totalJobs"]
+                .sum()
+                .sort_values("year")
+            )
+            return [
+                {"year": int(r["year"]), "value": int(r["totalJobs"])}
+                for _, r in yearly.iterrows()
+            ]
+
+        output: list[dict] = []
+        for r in top_named:
+            # Multi-ZIP places (e.g., Denver, Grand Junction) collapse to
+            # the literal "multiple" so the UI still renders a ZIP suffix
+            # without ballooning the row width.
+            zip_str = r["zips"][0] if len(r["zips"]) == 1 else "multiple"
+            output.append({
+                "zip": zip_str,
+                "place": r["place"],
+                "workers": r["totalJobs"],
+                "zips": sorted(r["zips"]),
+                "trend": _trend_for_zips(r["zips"]),
+            })
+        if residual_total > 0:
+            # Residual trend = scope total − sum of top-N trends per year.
+            # Native ALL_OTHER is rolled in so the line matches the latest-
+            # year residual figure.
+            top_zip_set = {z for r in top_named for z in r["zips"]}
+            resid_rows = scope[~scope[partner_col].isin(top_zip_set)]
+            resid_trend: list[dict] = []
+            if not resid_rows.empty:
+                yearly = (
+                    resid_rows.groupby("year", as_index=False)["totalJobs"]
+                    .sum()
+                    .sort_values("year")
+                )
+                resid_trend = [
+                    {"year": int(r["year"]), "value": int(r["totalJobs"])}
+                    for _, r in yearly.iterrows()
+                ]
+            output.append({
+                "zip": "ALL_OTHER",
+                "place": "All Other Locations",
+                "workers": residual_total,
+                "zips": [],
+                "trend": resid_trend,
+            })
+        return output
+
     entries: list[dict] = []
     for zcta in sorted(anchor_zips):
         in_rows = inflow_by_year[inflow_by_year["zip"] == zcta].sort_values("year")
@@ -398,132 +508,8 @@ def build_od_summary(
         in_latest = in_rows[in_rows["year"] == LATEST_YEAR]
         out_latest = out_rows[out_rows["year"] == LATEST_YEAR]
 
-        # Top sending / receiving partners (latest year).
-        #
-        # Multi-ZIP places: ZIPs sharing the same non-empty place name (e.g.,
-        # Grand Junction's 81501 + 81504) are consolidated into one row before
-        # ranking, so a city counts once and doesn't burn multiple top-N slots.
-        # The combined ZIP string is emitted as " / ".join(zips) so the UI
-        # retains the suffix.
-        #
-        # Both directions then emit top-N named rows followed by a single
-        # pinned "All Other Locations" residual = total (incl. native LODES
-        # ALL_OTHER if present) minus the sum of the top-N named rows. This
-        # guarantees the listed values sum to the card's total.
-        latest_pairs = od_pairs[od_pairs["year"] == LATEST_YEAR]
-
-        def _split_top(group_col: str, scope_col: str) -> list[dict]:
-            grouped = (
-                latest_pairs[latest_pairs[scope_col] == zcta]
-                .groupby(group_col, as_index=False)["totalJobs"].sum()
-                .sort_values("totalJobs", ascending=False)
-            )
-            grand_total = int(grouped["totalJobs"].sum())
-
-            # Roll named rows up by place, falling back to ZIP when the ZIP
-            # has no place mapping. ALL_OTHER is excluded from this pass —
-            # it's reconstructed below as the residual.
-            consolidated: dict[str, dict] = {}
-            order: list[str] = []
-            for _, row in grouped.iterrows():
-                zip_val = str(row[group_col])
-                if zip_val == "ALL_OTHER":
-                    continue
-                place = zip_to_place.get(zip_val, "")
-                key = f"place:{place}" if place else f"zip:{zip_val}"
-                if key in consolidated:
-                    consolidated[key]["totalJobs"] += int(row["totalJobs"])
-                    consolidated[key]["zips"].append(zip_val)
-                else:
-                    consolidated[key] = {
-                        "place": place,
-                        "zips": [zip_val],
-                        "totalJobs": int(row["totalJobs"]),
-                    }
-                    order.append(key)
-
-            ranked = sorted(
-                consolidated.values(),
-                key=lambda r: -r["totalJobs"],
-            )
-            top_named = ranked[:top_n]
-            top_total = sum(r["totalJobs"] for r in top_named)
-            residual_total = grand_total - top_total
-
-            # Per-partner inflow/outflow trend — year-by-year sum across the
-            # ZIP set that consolidates into each top-N partner row. The
-            # group_col side carries the partner's ZIP(s); the scope_col side
-            # is pinned to the current anchor (zcta). Returns [{year,value}].
-            scope_pairs = od_pairs[od_pairs[scope_col] == zcta]
-            scope_by_partner_year = (
-                scope_pairs.groupby([group_col, "year"], as_index=False)["totalJobs"]
-                .sum()
-            )
-
-            def _trend_for_zips(zips: list[str]) -> list[dict]:
-                rows = scope_by_partner_year[
-                    scope_by_partner_year[group_col].isin(zips)
-                ]
-                if rows.empty:
-                    return []
-                yearly = (
-                    rows.groupby("year", as_index=False)["totalJobs"]
-                    .sum()
-                    .sort_values("year")
-                )
-                return [
-                    {"year": int(r["year"]), "value": int(r["totalJobs"])}
-                    for _, r in yearly.iterrows()
-                ]
-
-            output: list[dict] = []
-            for r in top_named:
-                # Multi-ZIP places (e.g., Denver, Grand Junction) collapse to
-                # the literal "multiple" so the UI still renders a ZIP suffix
-                # without ballooning the row width.
-                zip_str = r["zips"][0] if len(r["zips"]) == 1 else "multiple"
-                output.append({
-                    "zip": zip_str,
-                    "place": r["place"],
-                    "workers": r["totalJobs"],
-                    "zips": sorted(r["zips"]),
-                    "trend": _trend_for_zips(r["zips"]),
-                })
-            if residual_total > 0:
-                # Residual trend = scope total − sum of top-N trends per year.
-                top_zip_set = {z for r in top_named for z in r["zips"]}
-                resid_rows = scope_by_partner_year[
-                    (~scope_by_partner_year[group_col].isin(top_zip_set))
-                    & (scope_by_partner_year[group_col] != "ALL_OTHER")
-                ]
-                # Native ALL_OTHER residual is also rolled into this bucket so
-                # the line matches the latest-year residual figure.
-                allother_rows = scope_by_partner_year[
-                    scope_by_partner_year[group_col] == "ALL_OTHER"
-                ]
-                combined = pd.concat([resid_rows, allother_rows], ignore_index=True)
-                resid_trend: list[dict] = []
-                if not combined.empty:
-                    yearly = (
-                        combined.groupby("year", as_index=False)["totalJobs"]
-                        .sum()
-                        .sort_values("year")
-                    )
-                    resid_trend = [
-                        {"year": int(r["year"]), "value": int(r["totalJobs"])}
-                        for _, r in yearly.iterrows()
-                    ]
-                output.append({
-                    "zip": "ALL_OTHER",
-                    "place": "All Other Locations",
-                    "workers": residual_total,
-                    "zips": [],
-                    "trend": resid_trend,
-                })
-            return output
-
-        in_partners = _split_top("h_zip", "w_zip")
-        out_partners = _split_top("w_zip", "h_zip")
+        in_partners = _split_top(inflow_by_partner_year, "h_zip", zcta)
+        out_partners = _split_top(outflow_by_partner_year, "w_zip", zcta)
 
         # Within-ZIP series (people who live AND work in this anchor).
         # Latest carries the full OdLatest shape (totalJobs + age/wage/naics3
@@ -623,11 +609,11 @@ def build_od_summary(
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":  # pragma: no cover
     print("loading RAC…", file=sys.stderr)
-    rac = aggregate_rac_or_wac(load_rac_all_years(), "h_geocode")
+    rac = aggregate_rac_or_wac(load_rac_all_years())
     print(f"  → {len(rac)} (zcta,year) rows", file=sys.stderr)
 
     print("loading WAC…", file=sys.stderr)
-    wac = aggregate_rac_or_wac(load_wac_all_years(), "w_geocode")
+    wac = aggregate_rac_or_wac(load_wac_all_years())
     print(f"  → {len(wac)} (zcta,year) rows", file=sys.stderr)
 
     print("loading OD…", file=sys.stderr)

@@ -21,6 +21,20 @@ interface Props {
   directionFilter: DirectionFilter;
   zips: ZipMeta[];
   selectedZip: string;
+  // Selection class — when 'non-anchor', the panel pivots on origin (the
+  // searched residence ZIP/place) and shows its workers' anchor destinations.
+  selectionKind: 'aggregate' | 'anchor' | 'non-anchor';
+  // Set when selectionKind === 'non-anchor'. Carries the place name and
+  // every ZIP that shares it.
+  nonAnchorBundle: { place: string; zips: string[] } | null;
+  // Map-facing visible flows — for non-anchor this is the aggregate inbound
+  // network (so the map shows full context). Stats panels read `bundleFlows`
+  // for the non-anchor pivot instead.
+  visibleFlows: FlowRow[];
+  // Origin-pivot rows for the non-anchor selection (one row per anchor
+  // destination, aggregated across the bundle's ZIPs). Empty for anchor /
+  // aggregate views.
+  bundleFlows: FlowRow[];
   mode: Mode;
   // Optional secondary partner selection — a row from the top-N list. When
   // set, the headline tiles scope to the partner→anchor (inbound) or
@@ -37,6 +51,10 @@ export function StatsForZip({
   directionFilter,
   zips,
   selectedZip,
+  selectionKind,
+  nonAnchorBundle,
+  visibleFlows,
+  bundleFlows,
   mode,
   selectedPartner,
   onSelectPartner,
@@ -44,6 +62,24 @@ export function StatsForZip({
 }: Props) {
   const meta = zips.find((z) => z.zip === selectedZip);
   if (!meta) return null;
+
+  // Non-anchor branch — the searched ZIP isn't a workplace anchor, so the
+  // panel pivots on origin and shows where this place's residents work
+  // among the 11 anchors. The headline, top-N, and residual row come
+  // straight from `visibleFlows` (already aggregated upstream); we don't
+  // render the Total Workforce tile or within-ZIP row here because non-
+  // anchor ZIPs aren't in the LODES anchor universe.
+  if (selectionKind === 'non-anchor' && nonAnchorBundle) {
+    return (
+      <NonAnchorStats
+        bundle={nonAnchorBundle}
+        visibleFlows={bundleFlows}
+        selectedPartner={selectedPartner}
+        onSelectPartner={onSelectPartner}
+        onReset={onReset}
+      />
+    );
+  }
 
   // Two details: filtered for top-N flows + headline; unfiltered for self,
   // ALL_OTHER, the anchor universe denominator, and the chip denominator.
@@ -336,6 +372,227 @@ export function StatsForZip({
         </ul>
       </div>
 
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Non-anchor stats panel — rendered when the searched place is a residential
+// ZIP (or multi-ZIP place) outside the 11 workplace anchors. Layout mirrors
+// the anchor StatsForZip (headline + top-N) but:
+//   - No "Total Workforce" tile (non-anchor ZIPs aren't in the LODES anchor
+//     workplace universe).
+//   - No within-ZIP commute row (non-anchor → anchor is always cross-ZIP by
+//     construction).
+//   - Top-N rolls up by destination anchor place. Cities split across multiple
+//     anchor ZIPs (e.g. Aspen 81611+81612) collapse into one row.
+//   - Residual row = "All other anchor workplaces" only when the top-10
+//     truncation drops something.
+// -----------------------------------------------------------------------------
+interface NonAnchorStatsProps {
+  bundle: { place: string; zips: string[] };
+  visibleFlows: FlowRow[];
+  selectedPartner: { place: string; zips: string[] } | null;
+  onSelectPartner: (p: { place: string; zips: string[] } | null) => void;
+  onReset: () => void;
+}
+
+function NonAnchorStats({
+  bundle,
+  visibleFlows,
+  selectedPartner,
+  onSelectPartner,
+  onReset,
+}: NonAnchorStatsProps) {
+  // Aggregate by destination place (anchor cities like Aspen span 81611 +
+  // 81612; we want them to read as one row).
+  type AggRow = { place: string; zips: string[]; workerCount: number };
+  const aggregatedFlows: AggRow[] = (() => {
+    const map = new Map<string, AggRow>();
+    for (const f of visibleFlows) {
+      const place = f.destPlace;
+      if (!place) continue;
+      const existing = map.get(place);
+      if (existing) {
+        existing.workerCount += f.workerCount;
+        if (!existing.zips.includes(f.destZip)) existing.zips.push(f.destZip);
+      } else {
+        map.set(place, { place, zips: [f.destZip], workerCount: f.workerCount });
+      }
+    }
+    const rows = Array.from(map.values());
+    for (const r of rows) r.zips.sort();
+    rows.sort((a, b) => b.workerCount - a.workerCount);
+    return rows;
+  })();
+  const top10 = aggregatedFlows.slice(0, 10);
+  const remainderCount = aggregatedFlows
+    .slice(10)
+    .reduce((acc, r) => acc + r.workerCount, 0);
+  const headlineTotal = aggregatedFlows.reduce(
+    (acc, r) => acc + r.workerCount,
+    0,
+  );
+
+  // Partner-scoped flow value — workers in the single partner→bundle pair.
+  const partnerSet = selectedPartner ? new Set(selectedPartner.zips) : null;
+  const partnerWorkers = partnerSet
+    ? visibleFlows.reduce(
+        (acc, f) => (partnerSet.has(f.destZip) ? acc + f.workerCount : acc),
+        0,
+      )
+    : 0;
+
+  const maxCount = Math.max(
+    1,
+    ...top10.map((r) => r.workerCount),
+    remainderCount,
+  );
+
+  const zipLabel =
+    bundle.zips.length === 1 ? bundle.zips[0] : `${bundle.zips.length} ZIPs`;
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <div>
+          <div className="text-base font-semibold" style={{ color: 'var(--text-h)' }}>
+            {bundle.place}
+          </div>
+          <div className="text-[11px] tnum" style={{ color: 'var(--text-dim)' }}>
+            {bundle.zips.length === 1
+              ? `ZIP ${bundle.zips[0]}`
+              : `ZIPs ${bundle.zips.join(' · ')}`}
+          </div>
+        </div>
+        <button
+          onClick={onReset}
+          className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-md transition-colors"
+          style={{
+            color: 'var(--text-dim)',
+            border: '1px solid var(--panel-border)',
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
+      <div className="py-2.5 border-b" style={{ borderColor: 'var(--rule)' }}>
+        <div
+          className="text-[10px] font-medium uppercase tracking-wider"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          Inbound Workers to Anchor Workplaces
+        </div>
+        <div className="mt-1 flex items-baseline gap-2">
+          <span
+            className="text-xl font-semibold tnum"
+            style={{ color: 'var(--text-h)' }}
+          >
+            {fmtInt(selectedPartner ? partnerWorkers : headlineTotal)}
+          </span>
+          <span className="text-[11px] tnum" style={{ color: 'var(--text-dim)' }}>
+            {selectedPartner
+              ? `${fmtPct(partnerWorkers / Math.max(1, headlineTotal))} of ${bundle.place} → anchor commuters`
+              : `${bundle.place} residents employed at anchors`}
+          </span>
+        </div>
+        <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-dim)' }}>
+          {selectedPartner
+            ? `${fmtInt(partnerWorkers)} ${bundle.place} residents commute to ${selectedPartner.place}`
+            : `${fmtInt(headlineTotal)} ${bundle.place} residents (${zipLabel}) commute to one of the 11 workplace anchors`}
+        </div>
+      </div>
+
+      <div className="py-2.5 border-b" style={{ borderColor: 'var(--rule)' }}>
+        <div
+          className="text-[10px] font-medium uppercase tracking-wider mb-2"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          Top anchor destinations of {bundle.place} residents
+        </div>
+        <ul className="space-y-1.5">
+          {top10.map((r) => {
+            const share = r.workerCount / Math.max(1, headlineTotal);
+            const barW = (r.workerCount / maxCount) * 100;
+            const isSelected = selectedPartner?.place === r.place;
+            const isOtherSelected = selectedPartner != null && !isSelected;
+            return (
+              <li key={r.place} className="text-xs">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectPartner(
+                      isSelected ? null : { place: r.place, zips: r.zips },
+                    )
+                  }
+                  aria-pressed={isSelected}
+                  className="w-full text-left rounded-md px-1.5 py-1 transition-colors"
+                  style={{
+                    background: isSelected ? 'var(--accent-soft)' : 'transparent',
+                    border: `1px solid ${isSelected ? 'var(--accent)' : 'transparent'}`,
+                    opacity: isOtherSelected ? 0.45 : 1,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div className="flex justify-between mb-0.5">
+                    <span style={{ color: isSelected ? 'var(--accent)' : 'var(--text-h)' }}>
+                      {r.place}{' '}
+                      <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                        · {r.zips.length > 1 ? 'multiple' : r.zips[0]}
+                      </span>
+                    </span>
+                    <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                      {fmtInt(r.workerCount)} · {fmtPct(share)}
+                    </span>
+                  </div>
+                  <div
+                    className="h-[3px] rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,0.05)' }}
+                  >
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${barW}%`,
+                        background: 'var(--accent)',
+                        opacity: isSelected ? 1 : 0.8,
+                      }}
+                    />
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+          {remainderCount > 0 && (
+            <li className="text-xs">
+              <div className="flex justify-between mb-0.5">
+                <span style={{ color: 'var(--text-h)' }}>All other anchor workplaces</span>
+                <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                  {fmtInt(remainderCount)} ·{' '}
+                  {fmtPct(remainderCount / Math.max(1, headlineTotal))}
+                </span>
+              </div>
+              <div
+                className="h-[3px] rounded-full overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.05)' }}
+              >
+                <div
+                  className="h-full"
+                  style={{
+                    width: `${(remainderCount / maxCount) * 100}%`,
+                    background: 'rgba(200,205,215,0.55)',
+                  }}
+                />
+              </div>
+            </li>
+          )}
+          {top10.length === 0 && (
+            <li className="text-xs italic" style={{ color: 'var(--text-dim)' }}>
+              No anchor commute flows from {bundle.place} in this view.
+            </li>
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

@@ -46,6 +46,53 @@ class OsrmError(RuntimeError):
     """Raised when OSRM returns a non-`Ok` response after all retries."""
 
 
+def osrm_get(
+    url: str,
+    label: str = "",
+    request_delay_s: float = REQUEST_DELAY_S,
+    max_retries: int = MAX_RETRIES,
+    backoff_base_s: float = BACKOFF_BASE_S,
+    timeout_s: float = 30.0,
+) -> dict:
+    """
+    Issue a single OSRM GET with retry/backoff and a final code="Ok" check.
+
+    Shared by the corridor router (`route_polyline`) and the distance-table
+    builder (`build-drive-distance.py`). Each caller composes its own cache
+    around this shim — the cache schemes differ (sha1 of payload vs.
+    sorted ZIP-pair key) but the network shim is identical.
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            time.sleep(request_delay_s)
+            with urllib.request.urlopen(url, timeout=timeout_s) as resp:
+                body = resp.read()
+            data = json.loads(body)
+            if data.get("code") != "Ok":
+                raise OsrmError(
+                    f"OSRM responded code={data.get('code')!r} "
+                    f"message={data.get('message')!r} for {label!r}"
+                )
+            return data
+        except (urllib.error.HTTPError, urllib.error.URLError, OsrmError, TimeoutError) as e:
+            last_err = e
+            if attempt < max_retries:
+                wait = backoff_base_s ** attempt
+                print(
+                    f"  ! OSRM attempt {attempt}/{max_retries} failed for "
+                    f"{label!r}: {e}; retrying in {wait:.1f}s",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+            else:
+                break
+
+    raise OsrmError(
+        f"OSRM failed after {max_retries} attempts for {label!r}: {last_err}"
+    )
+
+
 def _coords_path(coords: list[list[float]]) -> str:
     """Format an ordered list of [lng, lat] pairs into the OSRM URL path segment."""
     return ";".join(f"{c[0]:.6f},{c[1]:.6f}" for c in coords)
@@ -119,39 +166,12 @@ def route_polyline(
         qs = f"{qs}&radiuses={radii}"
     url = f"{OSRM_BASE_URL}/{_coords_path(coords)}?{qs}"
 
-    last_err: Exception | None = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            time.sleep(REQUEST_DELAY_S)
-            with urllib.request.urlopen(url, timeout=30) as resp:
-                body = resp.read()
-            data = json.loads(body)
-            if data.get("code") != "Ok":
-                raise OsrmError(
-                    f"OSRM responded code={data.get('code')!r} "
-                    f"message={data.get('message')!r} for {label or coords[0]}…{coords[-1]}"
-                )
-            routes = data.get("routes") or []
-            if not routes:
-                raise OsrmError(f"OSRM returned no routes for {label!r}")
-            geometry = routes[0]["geometry"]["coordinates"]
-            polyline = [[round(float(p[0]), 6), round(float(p[1]), 6)] for p in geometry]
-            cache[key] = {"geometry": polyline, "label": label}
-            _write_cache(cache_path, cache)
-            return polyline
-        except (urllib.error.HTTPError, urllib.error.URLError, OsrmError, TimeoutError) as e:
-            last_err = e
-            if attempt < MAX_RETRIES:
-                wait = BACKOFF_BASE_S ** attempt
-                print(
-                    f"  ! OSRM attempt {attempt}/{MAX_RETRIES} failed for "
-                    f"{label!r}: {e}; retrying in {wait:.1f}s",
-                    file=sys.stderr,
-                )
-                time.sleep(wait)
-            else:
-                break
-
-    raise OsrmError(
-        f"OSRM failed after {MAX_RETRIES} attempts for {label!r}: {last_err}"
-    )
+    data = osrm_get(url, label=label or f"{coords[0]}…{coords[-1]}")
+    routes = data.get("routes") or []
+    if not routes:
+        raise OsrmError(f"OSRM returned no routes for {label!r}")
+    geometry = routes[0]["geometry"]["coordinates"]
+    polyline = [[round(float(p[0]), 6), round(float(p[1]), 6)] for p in geometry]
+    cache[key] = {"geometry": polyline, "label": label}
+    _write_cache(cache_path, cache)
+    return polyline

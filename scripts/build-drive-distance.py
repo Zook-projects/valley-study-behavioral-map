@@ -29,17 +29,18 @@ sorted pair and store one row.
 from __future__ import annotations
 
 import json
+import os
 import sys
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
+
+from osrm import osrm_get
 
 OSRM_BASE = "https://router.project-osrm.org/table/v1/driving"
 TABLE_CHUNK = 50  # 50 src + 50 dst = 100 coords per request — within demo limit
 REQUEST_DELAY_S = 1.0
 MAX_RETRIES = 3
 BACKOFF_BASE_S = 2.0
+TABLE_TIMEOUT_S = 120.0
 METERS_PER_MILE = 1609.344
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -58,7 +59,11 @@ def _load_cache() -> dict:
 
 
 def _save_cache(cache: dict) -> None:
-    CACHE_PATH.write_text(json.dumps(cache, sort_keys=True))
+    """Atomic write — tmp file + rename so an interrupted run can never leave
+    a half-written cache. The cache is checkpointed after every chunk."""
+    tmp = CACHE_PATH.with_suffix(CACHE_PATH.suffix + ".part")
+    tmp.write_text(json.dumps(cache, sort_keys=True))
+    os.replace(tmp, CACHE_PATH)
 
 
 def _fetch_table(
@@ -75,29 +80,14 @@ def _fetch_table(
         f"?annotations=distance,duration"
         f"&sources={src_str}&destinations={dst_str}"
     )
-
-    last_err: Exception | None = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            time.sleep(REQUEST_DELAY_S)
-            with urllib.request.urlopen(url, timeout=120) as resp:
-                body = resp.read()
-            data = json.loads(body)
-            if data.get("code") != "Ok":
-                raise RuntimeError(
-                    f"OSRM code={data.get('code')!r} message={data.get('message')!r}"
-                )
-            return data
-        except (urllib.error.HTTPError, urllib.error.URLError, RuntimeError, TimeoutError) as e:
-            last_err = e
-            if attempt < MAX_RETRIES:
-                wait = BACKOFF_BASE_S ** attempt
-                print(
-                    f"  ! {label} attempt {attempt}/{MAX_RETRIES} failed: {e}; retry in {wait:.1f}s",
-                    file=sys.stderr,
-                )
-                time.sleep(wait)
-    raise RuntimeError(f"OSRM table failed {label}: {last_err}")
+    return osrm_get(
+        url,
+        label=label,
+        request_delay_s=REQUEST_DELAY_S,
+        max_retries=MAX_RETRIES,
+        backoff_base_s=BACKOFF_BASE_S,
+        timeout_s=TABLE_TIMEOUT_S,
+    )
 
 
 def main() -> None:
@@ -192,7 +182,9 @@ def main() -> None:
                 _save_cache(cache)
 
     # Filter cache to just the pairs we care about for the published file.
-    out = {f"{a}|{b}": cache[f"{a}|{b}"] for (a, b) in pairs if f"{a}|{b}" in cache}
+    # Sort by key for deterministic output across runs (pairs is a set, so its
+    # iteration order varies per-process via PYTHONHASHSEED).
+    out = {k: cache[k] for k in sorted(f"{a}|{b}" for (a, b) in pairs if f"{a}|{b}" in cache)}
     print(f"Resolved: {len(out)}/{len(pairs)} pairs")
 
     if len(out) < len(pairs):

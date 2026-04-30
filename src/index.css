@@ -82,10 +82,28 @@ html, body, #root {
 .maplibregl-ctrl-attrib { display: none !important; }
 .maplibregl-canvas-container { background: var(--bg-base); }
 
+/* Off-corridor flow animation. Applied to dashed amber arcs that connect
+   ZIPs which sit off the curated corridor network (typically non-anchor
+   place bundles). Scrolling stroke-dashoffset gives a subtle "flowing"
+   read so the arc registers as a movement primitive, not just a static
+   line. The dasharray on the path itself is set inline (6 6); offset
+   animates 0 → -24 (= 2 × period) for a seamless loop. */
+@keyframes flow-dash {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -24; }
+}
+
+.off-corridor-flow {
+  animation: flow-dash 1.6s linear infinite;
+}
+
 /* Reduce motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+  .off-corridor-flow {
+    animation: none !important;
   }
 }

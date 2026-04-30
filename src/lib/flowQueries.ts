@@ -36,6 +36,11 @@ export const ANCHOR_ZIPS = [
   '81630', '81635', '81647', '81650', '81652', '81654',
 ];
 
+/** True when zip is in the workplace anchor set. ALL_OTHER and unknown ZIPs return false. */
+export function isAnchorZip(zip: string): boolean {
+  return ANCHOR_ZIPS.includes(zip);
+}
+
 export interface AggregatedSummary {
   totalWorkers: number;
   crossZipShare: number;          // fraction of workers commuting across ZIP boundary
@@ -143,6 +148,80 @@ export function detailForZip(
 
   out.sort((a, b) => b.workerCount - a.workerCount);
   return { zip, total, flows: out, selfFlow, allOther };
+}
+
+/**
+ * For one or more non-anchor residence ZIPs (a "place bundle" that may
+ * span multiple ZCTAs — e.g., Eagle 81631+81637, Grand Junction 81501+81505),
+ * return the breakdown of workers across anchor workplaces using the inbound
+ * dataset.
+ *
+ *   - originZips: array of ZIPs that share a place name. Single-element when
+ *     the place maps to one ZIP.
+ *   - Resulting flows are summed across the bundle and grouped by destination
+ *     so each anchor appears at most once. workerCount is summed; segments
+ *     are merged additively where present. originZip/originPlace on the
+ *     returned rows are taken from the bundle (first member of `originZips`)
+ *     so downstream consumers have a stable handle, but `total` reflects the
+ *     full bundle aggregation.
+ *   - selfFlow stays 0 (a non-anchor origin can't equal an anchor dest).
+ *     allOther stays 0 (destinations are anchors only in the inbound dataset).
+ */
+export function detailForNonAnchorOrigin(
+  flowsInbound: FlowRow[],
+  originZips: string[],
+): { total: number; flows: FlowRow[] } {
+  const originSet = new Set(originZips);
+  // Group by destination anchor so a multi-ZIP origin bundle collapses into
+  // one row per anchor in the top-N list.
+  const byDest = new Map<string, FlowRow>();
+  let total = 0;
+
+  for (const f of flowsInbound) {
+    if (!originSet.has(f.originZip)) continue;
+    total += f.workerCount;
+    const existing = byDest.get(f.destZip);
+    if (!existing) {
+      // Clone so we can safely mutate workerCount/segments without polluting
+      // the source array shared by the rest of the app.
+      byDest.set(f.destZip, {
+        ...f,
+        // Keep originZip/originPlace as the bundle's primary handle. When
+        // multi-ZIP, callers refer to the bundle directly via nonAnchorBundle.
+        originZip: originZips[0],
+        originPlace: f.originPlace,
+        segments: f.segments
+          ? {
+              age: { ...f.segments.age },
+              wage: { ...f.segments.wage },
+              naics3: { ...f.segments.naics3 },
+            }
+          : undefined,
+        // Per-pair corridorPath only makes sense for single OD rows; clear it
+        // on the merged row so downstream corridor-routing code defers to the
+        // off-corridor render path (which is what we want for non-anchor flows).
+        corridorPath: f.corridorPath.slice(),
+      });
+    } else {
+      existing.workerCount += f.workerCount;
+      if (existing.segments && f.segments) {
+        existing.segments.age.u29 += f.segments.age.u29;
+        existing.segments.age.age30to54 += f.segments.age.age30to54;
+        existing.segments.age.age55plus += f.segments.age.age55plus;
+        existing.segments.wage.low += f.segments.wage.low;
+        existing.segments.wage.mid += f.segments.wage.mid;
+        existing.segments.wage.high += f.segments.wage.high;
+        existing.segments.naics3.goods += f.segments.naics3.goods;
+        existing.segments.naics3.tradeTransUtil += f.segments.naics3.tradeTransUtil;
+        existing.segments.naics3.allOther += f.segments.naics3.allOther;
+      }
+    }
+  }
+
+  const flows = Array.from(byDest.values()).sort(
+    (a, b) => b.workerCount - a.workerCount,
+  );
+  return { total, flows };
 }
 
 // Earth radius in miles — Haversine constant.

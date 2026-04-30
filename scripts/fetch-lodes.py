@@ -33,6 +33,8 @@ from pathlib import Path
 
 import pandas as pd
 
+import lodes
+
 # ---------------------------------------------------------------------------
 # Paths / config
 # ---------------------------------------------------------------------------
@@ -57,7 +59,7 @@ ANCHOR_XWALK = (
 
 STATE = "co"
 BASE_URL = f"https://lehd.ces.census.gov/data/lodes/LODES8/{STATE}"
-YEARS = list(range(2002, 2024))  # 22 vintages, inclusive
+YEARS = lodes.YEARS  # 22 LODES8 vintages, inclusive — single source of truth
 
 
 # ---------------------------------------------------------------------------
@@ -82,34 +84,28 @@ def download(url: str, dest: Path) -> bool:
 # ---------------------------------------------------------------------------
 # Per-year filters
 # ---------------------------------------------------------------------------
-def filter_rac(year: int, anchor_blocks: set[str], state_b2z: dict[str, str]) -> None:
-    raw = RAW_DIR / f"{STATE}_rac_S000_JT00_{year}.csv.gz"
-    out = FILTERED_DIR / f"rac-{year}.csv"
-    download(f"{BASE_URL}/rac/{raw.name}", raw)
+def filter_rac_or_wac(
+    kind: str,
+    geo_col: str,
+    year: int,
+    anchor_blocks: set[str],
+    state_b2z: dict[str, str],
+) -> None:
+    """RAC and WAC differ only in path component and geocode column. The OD
+    pass is genuinely different (two source files + state derivation) and
+    stays as its own helper."""
+    raw = RAW_DIR / f"{STATE}_{kind}_S000_JT00_{year}.csv.gz"
+    out = FILTERED_DIR / f"{kind}-{year}.csv"
+    download(f"{BASE_URL}/{kind}/{raw.name}", raw)
     if out.exists():
         return
-    df = pd.read_csv(raw, dtype={"h_geocode": str})
-    sub = df[df["h_geocode"].isin(anchor_blocks)].copy()
+    df = pd.read_csv(raw, dtype={geo_col: str})
+    sub = df[df[geo_col].isin(anchor_blocks)].copy()
     sub.insert(0, "year", year)
-    sub.insert(2, "zcta", sub["h_geocode"].map(state_b2z))
-    sub = sub.sort_values(["zcta", "h_geocode"]).reset_index(drop=True)
+    sub.insert(2, "zcta", sub[geo_col].map(state_b2z))
+    sub = sub.sort_values(["zcta", geo_col]).reset_index(drop=True)
     sub.to_csv(out, index=False)
-    print(f"  RAC {year}: {len(df):,}→{len(sub):,} rows", file=sys.stderr)
-
-
-def filter_wac(year: int, anchor_blocks: set[str], state_b2z: dict[str, str]) -> None:
-    raw = RAW_DIR / f"{STATE}_wac_S000_JT00_{year}.csv.gz"
-    out = FILTERED_DIR / f"wac-{year}.csv"
-    download(f"{BASE_URL}/wac/{raw.name}", raw)
-    if out.exists():
-        return
-    df = pd.read_csv(raw, dtype={"w_geocode": str})
-    sub = df[df["w_geocode"].isin(anchor_blocks)].copy()
-    sub.insert(0, "year", year)
-    sub.insert(2, "zcta", sub["w_geocode"].map(state_b2z))
-    sub = sub.sort_values(["zcta", "w_geocode"]).reset_index(drop=True)
-    sub.to_csv(out, index=False)
-    print(f"  WAC {year}: {len(df):,}→{len(sub):,} rows", file=sys.stderr)
+    print(f"  {kind.upper()} {year}: {len(df):,}→{len(sub):,} rows", file=sys.stderr)
 
 
 def filter_od(year: int, anchor_blocks: set[str], state_b2z: dict[str, str]) -> None:
@@ -187,8 +183,8 @@ def main() -> int:
 
     for year in YEARS:
         print(f"\n--- {year} ---", file=sys.stderr)
-        filter_rac(year, anchor_blocks, state_b2z)
-        filter_wac(year, anchor_blocks, state_b2z)
+        filter_rac_or_wac("rac", "h_geocode", year, anchor_blocks, state_b2z)
+        filter_rac_or_wac("wac", "w_geocode", year, anchor_blocks, state_b2z)
         filter_od(year, anchor_blocks, state_b2z)
 
     print("\nfetch-lodes.py done.", file=sys.stderr)
