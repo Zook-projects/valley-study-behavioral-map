@@ -277,10 +277,6 @@ export default function App() {
   // it regardless of which view (aggregate / anchor / non-anchor) is active.
   const bottomStripRef = useRef<HTMLDivElement>(null);
   const [bottomStripHeight, setBottomStripHeight] = useState<number>(348);
-  // Credit chip height — measured so the chip can pin its TOP edge to the
-  // bottom card row's TOP edge regardless of chip line-wrap or font metrics.
-  const creditChipRef = useRef<HTMLDivElement>(null);
-  const [creditChipHeight, setCreditChipHeight] = useState<number>(28);
   // Cross-filter state for the pass-through traffic card. Either side can be
   // selected independently; when one is set the opposite section's list
   // narrows to ZIPs paired with the selection (and the map switches to
@@ -323,21 +319,6 @@ export default function App() {
     const el = bottomStripRef.current;
     if (!el) return;
     const update = () => setBottomStripHeight(el.offsetHeight);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [flowsInbound]);
-
-  // Track credit chip height so its top edge can be pinned to the bottom card
-  // row's top edge across view types (font metrics + line-wrap can shift the
-  // chip's actual height beyond the static fallback). Same loading-gate
-  // dependency as the strip effect — the chip lives inside the post-loading
-  // tree, so the ref only resolves after data is available.
-  useEffect(() => {
-    const el = creditChipRef.current;
-    if (!el) return;
-    const update = () => setCreditChipHeight(el.offsetHeight);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -813,19 +794,15 @@ export default function App() {
           }}
         />
 
-        {/* Credit chip — docked to the top-right corner of the bottom card
-            strip. The strip is anchored to bottom: 0 with a content height
-            that varies by view type (aggregate / anchor / non-anchor) and by
-            segment-filter expansion. Pinning the chip's TOP edge to the
-            strip's TOP edge keeps the chip seated in the corner across all
-            view types. Chip height is measured live so font metrics or
-            line-wrap don't break the alignment. */}
+        {/* Credit chip — docked to the right edge just above the bottom
+            card strip. Strip height varies by view type (aggregate / anchor
+            / non-anchor) and by segment-filter expansion; the chip's bottom
+            edge sits 8px above the strip's top edge across all states. */}
         <div
-          ref={creditChipRef}
           className="absolute right-4 glass rounded-md px-3 py-1.5 text-[11px] z-30 pointer-events-none"
           style={{
             color: 'var(--text-h)',
-            bottom: bottomStripHeight - creditChipHeight,
+            bottom: bottomStripHeight + 8,
           }}
         >
           Created by Jacob Zook
