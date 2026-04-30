@@ -316,25 +316,24 @@ export default function App() {
   // Track BottomCardStrip height so the credit chip can hover just above it.
   // Strip height changes with view type (aggregate / anchor / non-anchor) and
   // with segment-filter expansion, so a static offset can't keep the chip
-  // pinned correctly across all states.
+  // pinned correctly across all states. Depends on `flowsInbound` because the
+  // strip is gated behind a loading guard — the ref is null on first mount
+  // and only populates after data resolves and the post-loading tree renders.
   useEffect(() => {
     const el = bottomStripRef.current;
-    console.log('[strip-ro] effect, el is', el ? 'present h=' + el.offsetHeight : 'NULL');
     if (!el) return;
-    const update = () => {
-      const h = el.offsetHeight;
-      console.log('[strip-ro] update h=' + h);
-      setBottomStripHeight(h);
-    };
+    const update = () => setBottomStripHeight(el.offsetHeight);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [flowsInbound]);
 
   // Track credit chip height so its top edge can be pinned to the bottom card
   // row's top edge across view types (font metrics + line-wrap can shift the
-  // chip's actual height beyond the static fallback).
+  // chip's actual height beyond the static fallback). Same loading-gate
+  // dependency as the strip effect — the chip lives inside the post-loading
+  // tree, so the ref only resolves after data is available.
   useEffect(() => {
     const el = creditChipRef.current;
     if (!el) return;
@@ -343,7 +342,7 @@ export default function App() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [flowsInbound]);
 
   useEffect(() => {
     let cancelled = false;
