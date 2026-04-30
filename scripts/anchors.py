@@ -38,10 +38,14 @@ ANCHOR_PLACE_NAMES: dict[str, str] = {
     "81615": "Snowmass Village",
     "81621": "Basalt",
     "81623": "Carbondale",
-    "81630": "DeBeque",
+    "81630": "De Beque",
     "81635": "Battlement Mesa",
     "81647": "New Castle",
     "81650": "Rifle",
     "81652": "Silt",
-    "81654": "Snowmass",
+    # 81654 covers the Old Snowmass / non-Village portion of the Snowmass
+    # area — distinct from 81615 Snowmass Village (the resort village).
+    # Labeling it "Old Snowmass" prevents conflation in stat callouts and
+    # tooltips.
+    "81654": "Old Snowmass",
 }

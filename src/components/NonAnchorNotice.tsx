@@ -40,7 +40,7 @@ export function NonAnchorNotice({ bundle, onClear }: Props) {
             {' '}(<span style={{ color: 'var(--text-dim)' }}>{zipLabel}</span>)
           </>
         )}
-        {' '}commuting to the 11 workplace anchors.
+        {' '}commuting to the 11 workplace ZIP codes.
       </div>
       <button
         type="button"

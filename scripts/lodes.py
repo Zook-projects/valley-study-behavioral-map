@@ -38,6 +38,9 @@ RAC_WAC_COLS: dict[str, str] = {
     "CR03": "raceAmInd",
     "CR04": "raceAsian",
     "CR05": "raceNhpi",
+    # NOTE: LODES8 omits a CR06 column. The race code set runs CR01..CR05
+    # then jumps to CR07 ("Two or More Race Groups") — this is per the LEHD
+    # LODES tech doc, not a missing extract. No race count is dropped.
     "CR07": "raceTwoOrMore",
     "CT01": "ethnicityNotHispanic",
     "CT02": "ethnicityHispanic",
@@ -496,6 +499,12 @@ def build_od_summary(
                 "zips": [],
                 "trend": resid_trend,
             })
+        # Final sort by workers desc — ensures the ALL_OTHER residual takes
+        # its true rank among the named partners rather than always sitting
+        # at the end. Any external consumer of od-summary.json that trusts
+        # array order now sees a correctly ranked list. Frontend filters
+        # like `p.zip !== 'ALL_OTHER'` continue to work.
+        output.sort(key=lambda r: -r["workers"])
         return output
 
     entries: list[dict] = []

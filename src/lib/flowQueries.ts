@@ -43,15 +43,24 @@ export function isAnchorZip(zip: string): boolean {
 
 export interface AggregatedSummary {
   totalWorkers: number;
+  crossZipCommuters: number;      // absolute count of workers commuting across
+                                  // a ZIP boundary (total − self-flows)
   crossZipShare: number;          // fraction of workers commuting across ZIP boundary
   topOutbound: FlowRow | null;    // highest-volume residence-ZIP origin overall
-  allOtherShare: number;          // share of total mapped workers in ALL_OTHER bucket
+  outsideAnchorsShare: number;    // share of workers whose origin (inbound) or
+                                  // destination (outbound) is NOT one of the 11
+                                  // anchor ZIPs (named non-anchor CO ZIPs +
+                                  // ALL_OTHER residual)
+  outsideStateShare: number;      // share of workers in the ALL_OTHER residual,
+                                  // which captures out-of-state residences and
+                                  // unmappable LEHD blocks
 }
 
 export function computeAggregated(flows: FlowRow[]): AggregatedSummary {
   let total = 0;
   let selfFlow = 0;
   let allOther = 0;
+  let outsideAnchors = 0;
   // For "top sender ZIP" we want the largest non-self flow whose origin is the
   // residence ZIP that sends the most workers in aggregate.
   let topOutbound: FlowRow | null = null;
@@ -59,13 +68,27 @@ export function computeAggregated(flows: FlowRow[]): AggregatedSummary {
   // Accumulate residence-ZIP totals to find the largest sender across the network.
   const senderTotals = new Map<string, number>();
 
+  const anchorSet = new Set(ANCHOR_ZIPS);
+
   for (const f of flows) {
     total += f.workerCount;
     if (f.originZip === f.destZip) selfFlow += f.workerCount;
     // ALL_OTHER lives on the origin side for inbound flows and the destination
-    // side for outbound flows — count either.
+    // side for outbound flows — count either. ALL_OTHER captures the LEHD
+    // residual: out-of-state residences (or destinations) and census blocks
+    // that did not crosswalk to a ZCTA.
     if (f.originZip === 'ALL_OTHER' || f.destZip === 'ALL_OTHER') {
       allOther += f.workerCount;
+    }
+    // "Outside the anchors" is a strictly larger set: any flow where the
+    // non-anchor side (origin for inbound, destination for outbound) is not
+    // one of the 11 anchor ZIPs. Includes named non-anchor Colorado ZIPs
+    // (Eagle, Vail, Denver, Steamboat, etc.) AND the ALL_OTHER residual.
+    // For a given flow we check whichever endpoint is not an anchor.
+    const originIsAnchor = anchorSet.has(f.originZip);
+    const destIsAnchor = anchorSet.has(f.destZip);
+    if (!originIsAnchor || !destIsAnchor) {
+      outsideAnchors += f.workerCount;
     }
 
     if (f.originZip !== 'ALL_OTHER' && f.originZip !== f.destZip) {
@@ -96,10 +119,75 @@ export function computeAggregated(flows: FlowRow[]): AggregatedSummary {
 
   return {
     totalWorkers: total,
+    crossZipCommuters: total - selfFlow,
     crossZipShare: total > 0 ? (total - selfFlow) / total : 0,
     topOutbound,
-    allOtherShare: total > 0 ? allOther / total : 0,
+    outsideAnchorsShare: total > 0 ? outsideAnchors / total : 0,
+    outsideStateShare: total > 0 ? allOther / total : 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Per-anchor rankings — three ranked views over the 11 workplace anchors:
+//   - outboundCommuters: residents of the anchor working elsewhere (commute out)
+//   - inboundCommuters:  workers from elsewhere who work in the anchor
+//   - withinZip:         live-and-work-here count (anchor's local residents
+//                        who also work in the anchor)
+//   - localShare:        withinZip / (inboundCommuters + withinZip) — the
+//                        share of the anchor's workforce filled by its own
+//                        residents.
+// All counts are computed against the *unfiltered* inbound/outbound flow sets
+// so the rankings stay stable across direction-filter toggles.
+// ---------------------------------------------------------------------------
+export interface AnchorRanking {
+  zip: string;
+  place: string;
+  inboundCommuters: number;
+  outboundCommuters: number;
+  withinZip: number;
+  localShare: number;
+}
+
+export function computeAnchorRankings(
+  flowsInbound: FlowRow[],
+  flowsOutbound: FlowRow[],
+  zips: ZipMeta[],
+): AnchorRanking[] {
+  const placeMap = new Map(zips.map((z) => [z.zip, z.place]));
+  const anchorSet = new Set(ANCHOR_ZIPS);
+
+  // Initialise an entry for every anchor so anchors with zero flows still
+  // appear in the ranking (consistent column length).
+  const accum = new Map<string, { inbound: number; outbound: number; within: number }>();
+  for (const a of ANCHOR_ZIPS) {
+    accum.set(a, { inbound: 0, outbound: 0, within: 0 });
+  }
+
+  for (const f of flowsInbound) {
+    if (!anchorSet.has(f.destZip)) continue;
+    const acc = accum.get(f.destZip)!;
+    if (f.originZip === f.destZip) acc.within += f.workerCount;
+    else acc.inbound += f.workerCount;
+  }
+  for (const f of flowsOutbound) {
+    if (!anchorSet.has(f.originZip)) continue;
+    if (f.originZip === f.destZip) continue;     // self captured via inbound side
+    const acc = accum.get(f.originZip)!;
+    acc.outbound += f.workerCount;
+  }
+
+  return ANCHOR_ZIPS.map((zip) => {
+    const a = accum.get(zip)!;
+    const denom = a.inbound + a.within;
+    return {
+      zip,
+      place: placeMap.get(zip) ?? zip,
+      inboundCommuters: a.inbound,
+      outboundCommuters: a.outbound,
+      withinZip: a.within,
+      localShare: denom > 0 ? a.within / denom : 0,
+    };
+  });
 }
 
 export interface ZipDetail {

@@ -1819,14 +1819,14 @@ function NonAnchorMetricsCard({
   return (
     <Card
       title={`${scope} · Workplace Metrics`}
-      subtitle="Residents commuting to anchors · latest year"
+      subtitle="Residents commuting to workplace ZIP codes · latest year"
       width={280}
     >
       <MetricRow label="Inbound Workers" value={fmtInt(inboundWorkers)} />
       <MetricRow
         label="Average commute distance"
         value={avgMiles > 0 ? `${avgMiles.toFixed(1)} mi` : '—'}
-        sub="Worker-weighted · to anchors"
+        sub="Worker-weighted · to workplace ZIP codes"
       />
       <MetricRow
         label="Top corridor"
@@ -2662,7 +2662,7 @@ export function BottomCardStrip({
         naics3,
         total,
         title: `${nonAnchorBundle.place} · Workforce mix`,
-        subtitle: 'OD · residents commuting to anchors · latest year',
+        subtitle: 'OD · residents commuting to workplace ZIP codes · latest year',
       };
     }
 

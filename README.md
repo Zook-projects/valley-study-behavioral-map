@@ -92,16 +92,19 @@ the single source of truth for what gets drawn.
 
 The graph contains:
 
-- **14 nodes** — 10 anchor towns (ASP, SMV, BAS, CARB, GWS, NCT, SLT, RFL,
-  PCT, DBQ), 2 junctions (J_BC where the Snowmass spur leaves Hwy 82,
+- **15 nodes** — 11 named towns (ASP, SMV, BAS, CARB, GWS, NCT, SLT, RFL,
+  PCT, DBQ, MKR), 2 junctions (J_BC where the Snowmass spur leaves Hwy 82,
   J_OS where the El Jebel/Old Snowmass cluster sits), and 2 synthetic
   gateways (GW_E / GW_W) representing east-of-state and west-of-state
-  external origins/destinations.
-- **13 corridors** — each a named edge between two nodes with a `roadName`,
+  external origins/destinations. The 11 anchor ZCTAs from `anchors.py`
+  bind to 10 distinct anchor nodes — 81654 (Old Snowmass) collapses onto
+  the J_OS junction rather than carrying its own anchor node.
+- **14 corridors** — each a named edge between two nodes with a `roadName`,
   a long-form label, and an ordered list of `controlPoints` shaping the
   visible polyline. Two corridors (`I70_RFL_PCT`, `C82_BAS_CARB`) carry
   extra control points to round visible bends; this affects rendering only
-  and does not split the corridor for analysis.
+  and does not split the corridor for analysis. The Hwy 13 corridor
+  (`C13_RFL_MKR`) extends the graph north from Rifle to Meeker.
 
 ZCTA-to-node bindings are declared per-node (e.g., `81601 → GWS`,
 `81654 → J_OS`). At build time every flow's origin and destination ZIP is

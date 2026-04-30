@@ -50,13 +50,27 @@ export function ZipSelector({ zips, selectedZip, onSelectZip }: Props) {
 
   return (
     <div className="space-y-2">
-      <label
-        className="block text-[10px] font-medium uppercase tracking-wider"
-        style={{ color: 'var(--text-dim)' }}
-      >
-        Anchor Workplaces - Zip Codes
-      </label>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Anchor workplace ZIPs">
+      <div className="flex items-center justify-between gap-2">
+        <label
+          className="block text-[10px] font-medium uppercase tracking-wider"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          Workplaces - Zip Codes
+        </label>
+        {selectedZip && (
+          <button
+            type="button"
+            onClick={() => onSelectZip(null)}
+            aria-label="Reset workplace selection"
+            className="text-[10px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded transition-colors focus:outline-none focus-visible:ring-1"
+            style={{ color: 'var(--accent)' }}
+            title="Clear the selected workplace"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Workplace ZIPs">
         {anchorZips.map((z) => {
           const active = selectedZip === z.zip;
           return (

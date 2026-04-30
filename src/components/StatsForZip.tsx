@@ -565,7 +565,7 @@ function NonAnchorStats({
           {remainderCount > 0 && (
             <li className="text-xs">
               <div className="flex justify-between mb-0.5">
-                <span style={{ color: 'var(--text-h)' }}>All other anchor workplaces</span>
+                <span style={{ color: 'var(--text-h)' }}>All other workplace ZIP codes</span>
                 <span className="tnum" style={{ color: 'var(--text-dim)' }}>
                   {fmtInt(remainderCount)} ·{' '}
                   {fmtPct(remainderCount / Math.max(1, headlineTotal))}

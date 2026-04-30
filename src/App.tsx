@@ -756,7 +756,7 @@ export default function App() {
             BottomCardStrip can sit beneath it in document flow. On desktop
             the wrapper fills main (md:absolute md:inset-0), restoring the
             pre-mobile layout where overlays and the strip stack via z-index. */}
-        <div className="relative w-full h-[60vh] md:h-auto md:absolute md:inset-0">
+        <div className="relative w-full h-[80vh] md:h-auto md:absolute md:inset-0">
         <MapCanvas
           flows={flows}
           zips={zips}

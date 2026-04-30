@@ -118,7 +118,7 @@ export function DashboardTile({
             Valley Commuters
           </h1>
           <div className="text-[11px]" style={{ color: 'var(--text-dim)' }}>
-            2002–2023 LEHD LODES8 · 11 workplace anchors
+            2002–2023 LEHD LODES8 · 11 workplace ZIP codes
           </div>
         </div>
 
@@ -187,6 +187,7 @@ export function DashboardTile({
               topCorridorOutbound={topCorridorOutbound}
               zips={zips}
               driveDistance={driveDistance}
+              onSelectZip={onSelectZip}
             />
           )}
         </div>

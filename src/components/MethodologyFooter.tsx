@@ -40,22 +40,39 @@ export function MethodologyFooter({ bucketBreaks, amberSwatches }: Props) {
             <CorridorLegend breaks={bucketBreaks} amberSwatches={amberSwatches} />
           </div>
           <p className="mb-1.5">
-            Source: U.S. Census Bureau, LEHD OnTheMap — Zip Code Work Area Analysis,
-            All Jobs, 2023 vintage.
+            Source: U.S. Census Bureau, LEHD LODES8 — Origin–Destination,
+            Workplace Area Characteristics, and Residence Area Characteristics;
+            Colorado, 2002–2023, JT00 (All Jobs). Latest year: 2023.
           </p>
           <p className="mb-1.5">
-            Each anchor workplace ZIP shows its top-25 home ZIPs plus an
-            "All Other Locations" residual. The residual is rendered as an
-            off-map node and surfaced explicitly in stat callouts. LEHD applies
+            Each workplace ZIP code shows its top-10 home ZIPs in the side
+            panel (top-8 in corridor tooltips) plus an "All Other Locations"
+            residual aggregating every smaller origin and the off-map balance.
+            The residual is rendered as an off-map node and surfaced explicitly
+            in stat callouts. The full top-25 partner table is available in the
+            underlying <code>od-summary.json</code> data file. LEHD applies
             noise injection and small-cell suppression for confidentiality.
           </p>
           <p className="mb-1.5">
+            Industry buckets follow LODES's published SI01–SI03 axis: "Goods"
+            includes Agriculture, Mining, Construction, and Manufacturing
+            (NAICS 11, 21, 23, 31–33); "Trade · Trans · Util" combines NAICS
+            22, 42, 44–45, 48–49; "All Other Services" rolls up NAICS 51–92.
+            This differs from the BLS supersector convention, which separates
+            Agriculture into "Natural Resources & Mining."
+          </p>
+          <p className="mb-1.5">
             Outbound view ("Where do residents work?") resolves only to the 11
-            valley anchor ZIPs. Non-valley work destinations are outside this slice.
+            valley ZIP codes. Non-valley work destinations are outside this
+            slice. Outbound counts also exclude residents working in another
+            state, since LEHD publishes those flows in other states' files
+            which are not pulled here — regionally this gap is ~1–2% of total
+            residents, rising to ~3–4% near state borders (De Beque).
           </p>
           <p>
             Basemap © CARTO · Hillshade © Mapzen Terrain Tiles (AWS Open
-            Data) · Map data © OpenStreetMap contributors
+            Data; terrarium-encoded DEM blending JAXA AW3D30, USGS NED, ETOPO1,
+            and others — see <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer" className="underline">joerd attribution</a>) · Map data © OpenStreetMap contributors
           </p>
         </div>
       )}
