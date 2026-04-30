@@ -345,7 +345,7 @@ def build_od_summary(
     od_pairs: pd.DataFrame,
     anchor_zips: set[str],
     zip_to_place: dict[str, str],
-    top_n: int = 10,
+    top_n: int = 25,
 ) -> tuple[list[dict], dict]:
     """
     Build (per-zip OD summary entries, aggregate OD roll-up).

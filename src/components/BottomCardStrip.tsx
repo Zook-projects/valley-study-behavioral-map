@@ -41,6 +41,7 @@ import type {
   FlowRow,
   Mode,
   PassThroughFile,
+  SegmentBucket,
   SegmentFilter,
   ZipMeta,
 } from '../types/flow';
@@ -64,12 +65,13 @@ import { SegmentFilterPanel } from './SegmentFilterPanel';
 // SVG is rendered with width=100% so it stretches to fill its container; the
 // viewBox below defines the internal coordinate space. preserveAspectRatio
 // "none" lets the line scale horizontally with the card while keeping the
-// fixed pixel height. The line is constrained to the top band (LINE_BAND_H);
-// the gradient area extends from the line down to SPARK_VB_H so the fill
-// fades out into the empty card space below.
+// fixed pixel height. The line spans the full viewBox height (LINE_BAND_H ===
+// SPARK_VB_H) so the chart reads as a true proportional line chart; the
+// gradient area extends from the line down to SPARK_VB_H so the fill fades
+// naturally into the card background.
 const SPARK_VB_W = 200;
 const SPARK_VB_H = 84;
-const LINE_BAND_H = 38;
+const LINE_BAND_H = SPARK_VB_H;
 
 // ---------------------------------------------------------------------------
 // Shared sparkline hover plumbing
@@ -334,16 +336,32 @@ function Card({
   subtitle,
   children,
   width = 220,
+  grow = false,
+  maxHeight,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   width?: number;
+  // When true, the card uses its `width` as a min-width floor and expands to
+  // fill remaining space in the strip's flex row (used in the aggregate view
+  // so the four cards take up the full width to the right of the dashboard
+  // tile on wider screens). When false (default), the card sticks to its
+  // fixed width and the strip horizontally scrolls.
+  grow?: boolean;
+  // Optional cap on the card's height. Used by the long partner-list cards
+  // so they don't push the whole strip taller as the row count grows — the
+  // list inside scrolls instead.
+  maxHeight?: number;
 }) {
+  const sizeStyle: React.CSSProperties = grow
+    ? { minWidth: width }
+    : { width };
+  if (maxHeight !== undefined) sizeStyle.maxHeight = maxHeight;
   return (
     <div
-      className="glass rounded-md p-3 shrink-0 flex flex-col gap-2"
-      style={{ width }}
+      className={`glass rounded-md p-3 flex flex-col gap-2 min-h-0 ${grow ? 'flex-1' : 'shrink-0'}`}
+      style={sizeStyle}
     >
       <div>
         <div
@@ -428,25 +446,34 @@ function Breakdown({ rows, total }: { rows: { label: string; value: number }[]; 
 // ---------------------------------------------------------------------------
 // Card content helpers
 // ---------------------------------------------------------------------------
-function ageRows(b: AgeBlock) {
+// Each row carries the `SegmentBucket` key so the aggregate charts can wire
+// bar/slice clicks straight into the segment filter. The key is optional for
+// callers that just want a label/value series (e.g., the per-zip Breakdown
+// table where filter wiring would conflict with per-anchor partner scoping).
+type SegmentChartRow = {
+  label: string;
+  value: number;
+  bucket?: SegmentBucket;
+};
+function ageRows(b: AgeBlock): SegmentChartRow[] {
   return [
-    { label: 'Under 30', value: b.u29 },
-    { label: '30 – 54', value: b.age30to54 },
-    { label: '55 +', value: b.age55plus },
+    { label: 'Under 30', value: b.u29, bucket: 'u29' },
+    { label: '30 – 54', value: b.age30to54, bucket: 'age30to54' },
+    { label: '55 +', value: b.age55plus, bucket: 'age55plus' },
   ];
 }
-function wageRows(b: WageBlock) {
+function wageRows(b: WageBlock): SegmentChartRow[] {
   return [
-    { label: '≤ $1,250/mo', value: b.low },
-    { label: '$1,251 – $3,333', value: b.mid },
-    { label: '> $3,333/mo', value: b.high },
+    { label: '≤ $1,250/mo', value: b.low, bucket: 'low' },
+    { label: '$1,251 – $3,333', value: b.mid, bucket: 'mid' },
+    { label: '> $3,333/mo', value: b.high, bucket: 'high' },
   ];
 }
-function naicsRows(b: Naics3Block) {
+function naicsRows(b: Naics3Block): SegmentChartRow[] {
   return [
-    { label: 'Goods', value: b.goods },
-    { label: 'Trade · Trans · Util', value: b.tradeTransUtil },
-    { label: 'All other services', value: b.allOther },
+    { label: 'Goods', value: b.goods, bucket: 'goods' },
+    { label: 'Trade · Trans · Util', value: b.tradeTransUtil, bucket: 'tradeTransUtil' },
+    { label: 'All other services', value: b.allOther, bucket: 'allOther' },
   ];
 }
 // ---------------------------------------------------------------------------
@@ -518,7 +545,21 @@ function ChartTooltip({
 // the plot area; shorter cohorts read as relative proportions of that peak.
 // Color treatment is "shades of white" — pure white grading down to a dimmer
 // off-white so bars stay legible on the dark glass card background.
-function AgeBarChart({ rows, total }: { rows: { label: string; value: number }[]; total: number }) {
+function AgeBarChart({
+  rows,
+  total,
+  activeBuckets,
+  onBucketClick,
+}: {
+  rows: SegmentChartRow[];
+  total: number;
+  // When set, bars whose `bucket` is in this list render an amber-accented
+  // outline so the chart visually mirrors the SegmentFilterPanel's selection.
+  activeBuckets?: SegmentBucket[];
+  // When provided, bars become clickable and toggle their bucket through
+  // this handler. Skipped in views where filter wiring would be ambiguous.
+  onBucketClick?: (bucket: SegmentBucket) => void;
+}) {
   const denom = total || rows.reduce((s, r) => s + r.value, 0) || 1;
   const max = Math.max(...rows.map((r) => r.value), 1);
   const colors = ['rgba(255,255,255,1)', 'rgba(255,255,255,0.72)', 'rgba(255,255,255,0.46)'];
@@ -530,17 +571,29 @@ function AgeBarChart({ rows, total }: { rows: { label: string; value: number }[]
     const rect = el.getBoundingClientRect();
     setHover({ idx, x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
+  const isActive = (bucket: SegmentBucket | undefined) =>
+    !!bucket && !!activeBuckets?.includes(bucket);
+  const interactive = !!onBucketClick;
   return (
     <div ref={wrapperRef} className="relative flex flex-col gap-2">
       <div className="flex items-end justify-around gap-2 h-24">
         {rows.map((r, i) => {
           const h = (r.value / max) * 100;
+          const active = isActive(r.bucket);
+          const clickable = interactive && r.bucket;
           return (
             <div
               key={r.label}
-              className="flex flex-col items-center justify-end flex-1 h-full gap-1 cursor-default"
+              className={`flex flex-col items-center justify-end flex-1 h-full gap-1 ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
               onMouseMove={onMove(i)}
               onMouseLeave={() => setHover(null)}
+              onClick={
+                clickable && r.bucket
+                  ? () => onBucketClick!(r.bucket!)
+                  : undefined
+              }
+              role={clickable ? 'button' : undefined}
+              aria-pressed={clickable ? active : undefined}
             >
               <div className="text-[10px] tnum" style={{ color: 'var(--text-h)' }}>
                 {fmtInt(r.value)}
@@ -551,7 +604,11 @@ function AgeBarChart({ rows, total }: { rows: { label: string; value: number }[]
                   height: `${h}%`,
                   background: colors[i] ?? colors[colors.length - 1],
                   minHeight: 2,
-                  outline: hover?.idx === i ? '1px solid var(--text-h)' : 'none',
+                  outline: active
+                    ? '2px solid var(--accent)'
+                    : hover?.idx === i
+                      ? '1px solid var(--text-h)'
+                      : 'none',
                 }}
               />
             </div>
@@ -591,7 +648,17 @@ function AgeBarChart({ rows, total }: { rows: { label: string; value: number }[]
 // row; bar length scales relative to the largest tier (>$3,333/mo, in
 // practice). Color treatment is shades of grey — light to dark to evoke the
 // "low / mid / high" ramp without competing with the amber accent.
-function WageBarChart({ rows, total }: { rows: { label: string; value: number }[]; total: number }) {
+function WageBarChart({
+  rows,
+  total,
+  activeBuckets,
+  onBucketClick,
+}: {
+  rows: SegmentChartRow[];
+  total: number;
+  activeBuckets?: SegmentBucket[];
+  onBucketClick?: (bucket: SegmentBucket) => void;
+}) {
   const denom = total || rows.reduce((s, r) => s + r.value, 0) || 1;
   const max = Math.max(...rows.map((r) => r.value), 1);
   const colors = ['#d0d0d0', '#9a9a9a', '#6a6a6a'];
@@ -603,16 +670,26 @@ function WageBarChart({ rows, total }: { rows: { label: string; value: number }[
     const rect = el.getBoundingClientRect();
     setHover({ idx, x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
+  const isActive = (bucket: SegmentBucket | undefined) =>
+    !!bucket && !!activeBuckets?.includes(bucket);
+  const interactive = !!onBucketClick;
   return (
     <div ref={wrapperRef} className="relative flex flex-col gap-2">
       {rows.map((r, i) => {
         const w = (r.value / max) * 100;
+        const active = isActive(r.bucket);
+        const clickable = interactive && r.bucket;
         return (
           <div
             key={r.label}
-            className="flex flex-col gap-0.5 cursor-default"
+            className={`flex flex-col gap-0.5 ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
             onMouseMove={onMove(i)}
             onMouseLeave={() => setHover(null)}
+            onClick={
+              clickable && r.bucket ? () => onBucketClick!(r.bucket!) : undefined
+            }
+            role={clickable ? 'button' : undefined}
+            aria-pressed={clickable ? active : undefined}
           >
             <div className="flex items-baseline justify-between text-[10px]">
               <span style={{ color: 'var(--text-dim)' }}>{r.label}</span>
@@ -628,7 +705,11 @@ function WageBarChart({ rows, total }: { rows: { label: string; value: number }[
                   width: `${w}%`,
                   background: colors[i] ?? colors[colors.length - 1],
                   minWidth: 2,
-                  outline: hover?.idx === i ? '1px solid var(--text-h)' : 'none',
+                  outline: active
+                    ? '2px solid var(--accent)'
+                    : hover?.idx === i
+                      ? '1px solid var(--text-h)'
+                      : 'none',
                 }}
               />
             </div>
@@ -655,16 +736,26 @@ function WageBarChart({ rows, total }: { rows: { label: string; value: number }[
 // "all other services" slice gets the amber accent because it's the
 // dominant category and the editorial focal point; goods + trade are
 // rendered as white and grey respectively.
-function NaicsPieChart({ rows, total }: { rows: { label: string; value: number }[]; total: number }) {
+function NaicsPieChart({
+  rows,
+  total,
+  activeBuckets,
+  onBucketClick,
+}: {
+  rows: SegmentChartRow[];
+  total: number;
+  activeBuckets?: SegmentBucket[];
+  onBucketClick?: (bucket: SegmentBucket) => void;
+}) {
   const denom = total || rows.reduce((s, r) => s + r.value, 0) || 1;
   const colors = ['#ffffff', '#888888', 'var(--accent)'];
   const size = 96;
   const radius = size / 2;
   const innerRadius = radius * 0.45; // donut hole, keeps the small slices legible
-  const pieGen = d3Pie<{ label: string; value: number }>()
+  const pieGen = d3Pie<SegmentChartRow>()
     .value((d) => d.value)
     .sort(null);
-  const arcGen = d3Arc<PieArcDatum<{ label: string; value: number }>>()
+  const arcGen = d3Arc<PieArcDatum<SegmentChartRow>>()
     .innerRadius(innerRadius)
     .outerRadius(radius);
   const slices = pieGen(rows);
@@ -676,45 +767,72 @@ function NaicsPieChart({ rows, total }: { rows: { label: string; value: number }
     const rect = el.getBoundingClientRect();
     setHover({ idx, x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
+  const isActive = (bucket: SegmentBucket | undefined) =>
+    !!bucket && !!activeBuckets?.includes(bucket);
+  const interactive = !!onBucketClick;
   return (
     <div ref={wrapperRef} className="relative flex items-center gap-3">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Industry mix pie chart">
         <g transform={`translate(${radius}, ${radius})`}>
-          {slices.map((s, i) => (
-            <path
-              key={s.data.label}
-              d={arcGen(s) ?? ''}
-              fill={colors[i] ?? colors[colors.length - 1]}
-              stroke="var(--bg)"
-              strokeWidth={hover?.idx === i ? 2 : 1}
-              opacity={hover && hover.idx !== i ? 0.55 : 1}
-              style={{ cursor: 'default' }}
-              onMouseMove={onSliceMove(i)}
-              onMouseLeave={() => setHover(null)}
-            />
-          ))}
+          {slices.map((s, i) => {
+            const r = rows[i];
+            const active = isActive(r.bucket);
+            const clickable = interactive && r.bucket;
+            return (
+              <path
+                key={s.data.label}
+                d={arcGen(s) ?? ''}
+                fill={colors[i] ?? colors[colors.length - 1]}
+                stroke={active ? 'var(--accent)' : 'var(--bg)'}
+                strokeWidth={active ? 3 : hover?.idx === i ? 2 : 1}
+                opacity={hover && hover.idx !== i ? 0.55 : 1}
+                style={{ cursor: clickable ? 'pointer' : 'default' }}
+                onMouseMove={onSliceMove(i)}
+                onMouseLeave={() => setHover(null)}
+                onClick={
+                  clickable && r.bucket ? () => onBucketClick!(r.bucket!) : undefined
+                }
+                role={clickable ? 'button' : undefined}
+                aria-pressed={clickable ? active : undefined}
+              />
+            );
+          })}
         </g>
       </svg>
       <div className="flex flex-col gap-1 flex-1 min-w-0">
-        {rows.map((r, i) => (
-          <div
-            key={r.label}
-            className="flex items-center gap-1.5 text-[10px] leading-tight cursor-default"
-            onMouseMove={onSliceMove(i)}
-            onMouseLeave={() => setHover(null)}
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-sm shrink-0"
-              style={{ background: colors[i] ?? colors[colors.length - 1] }}
-            />
-            <span className="truncate" style={{ color: 'var(--text-dim)' }}>
-              {r.label}
-            </span>
-            <span className="ml-auto tnum" style={{ color: 'var(--text-h)' }}>
-              {fmtPct(r.value / denom)}
-            </span>
-          </div>
-        ))}
+        {rows.map((r, i) => {
+          const active = isActive(r.bucket);
+          const clickable = interactive && r.bucket;
+          return (
+            <div
+              key={r.label}
+              className={`flex items-center gap-1.5 text-[10px] leading-tight ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+              onMouseMove={onSliceMove(i)}
+              onMouseLeave={() => setHover(null)}
+              onClick={
+                clickable && r.bucket ? () => onBucketClick!(r.bucket!) : undefined
+              }
+              role={clickable ? 'button' : undefined}
+              aria-pressed={clickable ? active : undefined}
+              style={{
+                outline: active ? '1px solid var(--accent)' : 'none',
+                borderRadius: 2,
+                padding: active ? '0 2px' : 0,
+              }}
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-sm shrink-0"
+                style={{ background: colors[i] ?? colors[colors.length - 1] }}
+              />
+              <span className="truncate" style={{ color: 'var(--text-dim)' }}>
+                {r.label}
+              </span>
+              <span className="ml-auto tnum" style={{ color: 'var(--text-h)' }}>
+                {fmtPct(r.value / denom)}
+              </span>
+            </div>
+          );
+        })}
       </div>
       {hover && wrapperRef.current && (
         <ChartTooltip
@@ -744,6 +862,7 @@ function CardsForRacWac({
   showWacTotal = true,
   isAggregate = false,
   segmentFilter,
+  onSegmentFilterChange,
   odMixOverride,
 }: {
   scope: string;
@@ -770,6 +889,10 @@ function CardsForRacWac({
   // The breakdown cards (age/wage/industry/race/etc.) keep their full-totals
   // visual treatment per spec.
   segmentFilter: SegmentFilter;
+  // Callback to update the segment filter — wired through so the aggregate
+  // chart cards (Age / Wages / Industry) can act as click-to-filter controls.
+  // When omitted, charts render in non-interactive (display-only) mode.
+  onSegmentFilterChange?: (next: SegmentFilter) => void;
   // OD-derived workforce mix override for per-anchor view. When present, the
   // Workforce mix card is built from per-pair LODES OD segment cells summed
   // across the anchor's mode-active flows (and narrowed to selectedPartner
@@ -827,12 +950,43 @@ function CardsForRacWac({
       ? racLatest?.totalJobs ?? 0
       : wacLatest?.totalJobs ?? 0;
 
+  // Toggle handler factory for the click-to-filter chart bars / slices.
+  // - Switching axes: replace the filter with a single-bucket selection on
+  //   the new axis.
+  // - Same axis, bucket already active: remove it. If that empties the
+  //   selection, fall back to `axis: 'all'` (clears the filter entirely).
+  // - Same axis, bucket not active: add it to the existing buckets.
+  const makeBucketToggle = (
+    chartAxis: 'age' | 'wage' | 'naics3',
+  ): ((bucket: SegmentBucket) => void) | undefined => {
+    if (!onSegmentFilterChange) return undefined;
+    return (bucket: SegmentBucket) => {
+      if (segmentFilter.axis !== chartAxis) {
+        onSegmentFilterChange({ axis: chartAxis, buckets: [bucket] } as SegmentFilter);
+        return;
+      }
+      const current = segmentFilter.buckets as SegmentBucket[];
+      const has = current.includes(bucket);
+      const next = has ? current.filter((b) => b !== bucket) : [...current, bucket];
+      if (next.length === 0) {
+        onSegmentFilterChange({ axis: 'all', buckets: [] } as SegmentFilter);
+        return;
+      }
+      onSegmentFilterChange({ axis: chartAxis, buckets: next } as SegmentFilter);
+    };
+  };
+  const activeBucketsFor = (chartAxis: 'age' | 'wage' | 'naics3') =>
+    segmentFilter.axis === chartAxis
+      ? (segmentFilter.buckets as SegmentBucket[])
+      : undefined;
+
   return (
     <>
       {showWacTotal && wacLatest && wacTrend && (
         <Card
           title={`${scope} · Total jobs (WAC)`}
           subtitle="Workplace total jobs · 2002–2023"
+          grow={isAggregate}
         >
           <HeadlineNumber value={filteredWacTotalLatest} />
           <div className="flex-1 min-h-0">
@@ -848,14 +1002,29 @@ function CardsForRacWac({
       )}
       {wacLatest && isAggregate && (
         <>
-          <Card title={`${scope} · Age`} subtitle="WAC · latest year" width={220}>
-            <AgeBarChart rows={ageRows(wacLatest.age)} total={wacLatest.totalJobs} />
+          <Card title={`${scope} · Age`} subtitle="WAC · latest year" width={220} grow>
+            <AgeBarChart
+              rows={ageRows(wacLatest.age)}
+              total={wacLatest.totalJobs}
+              activeBuckets={activeBucketsFor('age')}
+              onBucketClick={makeBucketToggle('age')}
+            />
           </Card>
-          <Card title={`${scope} · Wages`} subtitle="WAC · latest year" width={240}>
-            <WageBarChart rows={wageRows(wacLatest.wage)} total={wacLatest.totalJobs} />
+          <Card title={`${scope} · Wages`} subtitle="WAC · latest year" width={240} grow>
+            <WageBarChart
+              rows={wageRows(wacLatest.wage)}
+              total={wacLatest.totalJobs}
+              activeBuckets={activeBucketsFor('wage')}
+              onBucketClick={makeBucketToggle('wage')}
+            />
           </Card>
-          <Card title={`${scope} · Industry · NAICS-3`} subtitle="WAC · latest year" width={240}>
-            <NaicsPieChart rows={naicsRows(wacLatest.naics3)} total={wacLatest.totalJobs} />
+          <Card title={`${scope} · Industry · NAICS-3`} subtitle="WAC · latest year" width={240} grow>
+            <NaicsPieChart
+              rows={naicsRows(wacLatest.naics3)}
+              total={wacLatest.totalJobs}
+              activeBuckets={activeBucketsFor('naics3')}
+              onBucketClick={makeBucketToggle('naics3')}
+            />
           </Card>
         </>
       )}
@@ -1226,57 +1395,74 @@ function PartnerList({
     denominator && denominator > 0
       ? denominator
       : partners.reduce((s, p) => s + p.workers, 0) || 1;
-  // Split named partners from the ALL_OTHER residual so the within-ZIP row
-  // can be inserted between them.
+  // Split named partners from the ALL_OTHER residual so within-ZIP and
+  // ALL_OTHER can be pinned to the card's bottom while the named partners
+  // list scrolls within the card's existing height.
   const namedPartners = partners.filter((p) => p.zip !== 'ALL_OTHER');
   const allOther = partners.find((p) => p.zip === 'ALL_OTHER');
+  const showFooter = (withinZip && withinZip.workers > 0) || !!allOther;
   return (
-    <table className="w-full text-[11px] tnum">
-      <tbody>
-        {namedPartners.map((p) => (
-          <tr key={`${p.place}|${p.zip}`}>
-            <td className="pr-2 truncate" style={{ color: 'var(--text-h)' }}>
-              {p.place || p.zip}
-              <span className="ml-1" style={{ color: 'var(--text-dim)' }}>
-                · {p.zip}
-              </span>
-            </td>
-            <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
-              {fmtInt(p.workers)}
-            </td>
-            <td className="text-right" style={{ color: 'var(--text-dim)' }}>
-              {fmtPct(p.workers / total)}
-            </td>
-          </tr>
-        ))}
-        {withinZip && withinZip.workers > 0 && (
-          <tr>
-            <td className="pr-2 truncate" style={{ color: 'var(--text-h)' }}>
-              Within-ZIP commute
-            </td>
-            <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
-              {fmtInt(withinZip.workers)}
-            </td>
-            <td className="text-right" style={{ color: 'var(--text-dim)' }}>
-              {fmtPct(withinZip.workers / total)}
-            </td>
-          </tr>
-        )}
-        {allOther && (
-          <tr>
-            <td className="pr-2 truncate" style={{ color: 'var(--text-h)' }}>
-              {allOther.place || 'All Other Locations'}
-            </td>
-            <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
-              {fmtInt(allOther.workers)}
-            </td>
-            <td className="text-right" style={{ color: 'var(--text-dim)' }}>
-              {fmtPct(allOther.workers / total)}
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+    <div className="flex flex-col h-full min-h-0 text-[11px] tnum">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <table className="w-full">
+          <tbody>
+            {namedPartners.map((p) => (
+              <tr key={`${p.place}|${p.zip}`}>
+                <td className="pr-2 truncate" style={{ color: 'var(--text-h)' }}>
+                  {p.place || p.zip}
+                  <span className="ml-1" style={{ color: 'var(--text-dim)' }}>
+                    · {p.zip}
+                  </span>
+                </td>
+                <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
+                  {fmtInt(p.workers)}
+                </td>
+                <td className="text-right" style={{ color: 'var(--text-dim)' }}>
+                  {fmtPct(p.workers / total)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {showFooter && (
+        <div
+          className="pt-1 mt-1 border-t"
+          style={{ borderColor: 'var(--rule)' }}
+        >
+          <table className="w-full">
+            <tbody>
+              {withinZip && withinZip.workers > 0 && (
+                <tr>
+                  <td className="pr-2 truncate" style={{ color: 'var(--text-h)' }}>
+                    Within-ZIP commute
+                  </td>
+                  <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
+                    {fmtInt(withinZip.workers)}
+                  </td>
+                  <td className="text-right" style={{ color: 'var(--text-dim)' }}>
+                    {fmtPct(withinZip.workers / total)}
+                  </td>
+                </tr>
+              )}
+              {allOther && (
+                <tr>
+                  <td className="pr-2 truncate" style={{ color: 'var(--text-h)' }}>
+                    {allOther.place || 'All Other Locations'}
+                  </td>
+                  <td className="text-right pr-2" style={{ color: 'var(--text-h)' }}>
+                    {fmtInt(allOther.workers)}
+                  </td>
+                  <td className="text-right" style={{ color: 'var(--text-dim)' }}>
+                    {fmtPct(allOther.workers / total)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2432,14 +2618,16 @@ export function BottomCardStrip({
           showWacTotal={!isPerZip}
           isAggregate={!isPerZip}
           segmentFilter={segmentFilter}
+          onSegmentFilterChange={onSegmentFilterChange}
           odMixOverride={odMixOverride}
         />
         {isPerZip && odEntry && (
           <>
             <Card
-              title={`${scope} · Top inflow partners`}
+              title={`${scope} · Top inflow`}
               subtitle="Where workers commute from · latest year"
               width={260}
+              maxHeight={320}
             >
               <PartnerList
                 partners={
@@ -2464,9 +2652,10 @@ export function BottomCardStrip({
               />
             </Card>
             <Card
-              title={`${scope} · Top outflow partners`}
+              title={`${scope} · Top outflow`}
               subtitle="Where residents commute to · latest year"
               width={260}
+              maxHeight={320}
             >
               <PartnerList
                 partners={

@@ -204,6 +204,23 @@ function TooltipBody({
             </td>
           </tr>
         )}
+        <tr style={{ borderTop: '1px solid var(--rule)' }}>
+          <td
+            className="pr-2 align-baseline pt-1 text-[10px] font-semibold uppercase tracking-wider"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            Total
+          </td>
+          <td
+            className="text-right pr-2 pt-1"
+            style={{ color: 'var(--text-h)' }}
+          >
+            {fmtInt(aggregation.total)}
+          </td>
+          <td className="text-right pt-1" style={{ color: 'var(--text-dim)' }}>
+            100%
+          </td>
+        </tr>
       </tbody>
     </table>
   );
@@ -496,7 +513,10 @@ export default function App() {
   };
   const handleModeChange = (m: Mode) => {
     setHover(null);
-    setPinned(null);
+    // Pinned tooltip is intentionally preserved across mode toggles. Its
+    // aggregation is re-derived from the active mode's visibleCorridorMap
+    // at render time so the breakdown stays in sync without dismissing the
+    // panel out from under the user.
     setMode(m);
     // Partner selection is anchored to a specific anchor + mode + direction
     // context — clear it when any of those change so we don't carry an
@@ -513,7 +533,8 @@ export default function App() {
   };
   const handleDirectionChange = (d: DirectionFilter) => {
     setHover(null);
-    setPinned(null);
+    // Pinned tooltip persists across direction toggles — its aggregation is
+    // re-derived from the filtered visibleCorridorMap on render.
     setDirectionFilter(d);
     setSelectedPartner(null);
     clearPassThrough();
@@ -702,6 +723,15 @@ export default function App() {
             pointer-events: auto so the close button and clickable ZIP rows
             are interactive; the rest of the body is text-selectable. */}
         {pinned && (() => {
+          // Re-derive the corridor's aggregation from the active mode +
+          // direction filter's visibleCorridorMap so a mode/direction toggle
+          // updates the pinned panel's content without dismissing it. If the
+          // pinned corridor was filtered out (no visible flows under the new
+          // filter state), fall back to the snapshot from click time so the
+          // panel still has something to show until the user dismisses it.
+          const liveAggregation =
+            visibleCorridorMap.get(pinned.corridorId) ?? pinned.aggregation;
+          const pinnedView: HoverState = { ...pinned, aggregation: liveAggregation };
           // Click handler shared by whichever card matches the active mode's
           // partner axis. In aggregate view (no anchor) partner filtering has
           // nothing to scope against, so rows are left informational.
@@ -734,7 +764,7 @@ export default function App() {
                     {selectedZip ? 'Pinned · click ZIP to filter' : 'Pinned'}
                   </div>
                   <span className="font-medium" style={{ color: 'var(--text-h)' }}>
-                    {headerFor(pinned)}
+                    {headerFor(pinnedView)}
                   </span>
                 </div>
                 <button
@@ -763,10 +793,10 @@ export default function App() {
                   Places of Residence
                 </div>
                 <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                  {subheadForDirection(pinned, 'residence')}
+                  {subheadForDirection(pinnedView, 'residence')}
                 </div>
                 <TooltipBody
-                  aggregation={pinned.aggregation}
+                  aggregation={pinnedView.aggregation}
                   direction="residence"
                   zips={zips}
                   selectedPartner={selectedPartner}
@@ -791,10 +821,10 @@ export default function App() {
                   Places of Work
                 </div>
                 <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                  {subheadForDirection(pinned, 'workplace')}
+                  {subheadForDirection(pinnedView, 'workplace')}
                 </div>
                 <TooltipBody
-                  aggregation={pinned.aggregation}
+                  aggregation={pinnedView.aggregation}
                   direction="workplace"
                   zips={zips}
                   selectedPartner={selectedPartner}
@@ -805,8 +835,8 @@ export default function App() {
               </div>
 
               <div className="mt-2 text-[10px]" style={{ color: 'var(--text-dim)' }}>
-                {pinned.aggregation.flows.length} flow
-                {pinned.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
+                {pinnedView.aggregation.flows.length} flow
+                {pinnedView.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
               </div>
             </div>
           );
