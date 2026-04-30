@@ -1912,7 +1912,7 @@ interface Props {
   // ResizeObserver here so the credit chip can dock just above the strip's
   // current rendered height (which varies by selection type and segment
   // filter expansion).
-  containerRef?: React.RefObject<HTMLDivElement>;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {

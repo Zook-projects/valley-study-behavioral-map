@@ -53,7 +53,6 @@ export function StatsForZip({
   selectedZip,
   selectionKind,
   nonAnchorBundle,
-  visibleFlows,
   bundleFlows,
   mode,
   selectedPartner,
