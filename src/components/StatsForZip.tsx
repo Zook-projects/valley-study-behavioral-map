@@ -252,7 +252,7 @@ export function StatsForZip({
           <span className="text-[11px]" style={{ color: 'var(--text-dim)' }}>
             {selectedPartner
               ? `from ${selectedPartner.place} (${fmtPct(partnerWorkers / Math.max(1, workforce))} of ${meta.place} workforce)`
-              : `workers in ${meta.place}`}
+              : `workers employed in ${meta.place}`}
           </span>
         </div>
         <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-dim)' }}>

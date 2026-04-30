@@ -69,6 +69,22 @@ export function MethodologyFooter({ bucketBreaks, amberSwatches }: Props) {
             which are not pulled here — regionally this gap is ~1–2% of total
             residents, rising to ~3–4% near state borders (De Beque).
           </p>
+          <p className="mb-1.5">
+            ZIP code → city labels for ZIPs outside the 11 study anchors are
+            sourced from a U.S. Census Bureau ZCTA-to-place crosswalk (public
+            domain), distributed via{' '}
+            <a
+              href="https://github.com/scpike/us-state-county-zip"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              scpike/us-state-county-zip
+            </a>
+            . Anchor place names use the project's curated overrides; ZCTAs
+            the Census source has no named place for fall back to the bare
+            ZIP code in the export.
+          </p>
           <p>
             Basemap © CARTO · Hillshade © Mapzen Terrain Tiles (AWS Open
             Data; terrarium-encoded DEM blending JAXA AW3D30, USGS NED, ETOPO1,

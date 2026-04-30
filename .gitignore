@@ -20,6 +20,9 @@ scripts/__pycache__
 # LODES bulk download + filtered cache (pulled by scripts/fetch-lodes.py)
 data/lodes-cache/
 
+# Census ZIP→city crosswalk cache (pulled by scripts/zip_places.py)
+data/uszips-cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

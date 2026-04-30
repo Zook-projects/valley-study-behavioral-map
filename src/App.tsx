@@ -40,6 +40,11 @@ import {
   buildVisibleCorridorMap,
   indexCorridors,
 } from './lib/corridors';
+import {
+  exportCorridor,
+  exportRegion,
+  exportWorkplace,
+} from './lib/exportXlsx';
 import { computeBucketBreaks } from './lib/arcMath';
 import { fmtInt, fmtPct } from './lib/format';
 
@@ -821,6 +826,70 @@ export default function App() {
             handleSegmentFilterChange({ axis: 'all', buckets: [] })
           }
         />
+
+        {/* Region / Workplace export — top-right of the map. Renders for
+            aggregate view (Region) and any anchor/non-anchor selection
+            (Workplace). Hidden when no export is available. */}
+        {(selectionKind === 'aggregate' || selectedZip) && (
+          <div className="absolute top-2 right-2 md:top-3 md:right-4 z-30">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectionKind === 'aggregate') {
+                  if (!flowsInbound || !flowsOutbound || !zips || !corridorIndex || !flowIndex) return;
+                  exportRegion({
+                    flowsInbound,
+                    flowsOutbound,
+                    zips,
+                    driveDistance,
+                    racFile,
+                    wacFile,
+                    corridorIndex,
+                    flowIndex,
+                  });
+                } else if (selectedZip) {
+                  if (!flowsInbound || !flowsOutbound || !zips) return;
+                  exportWorkplace({
+                    selectedZip,
+                    zips,
+                    flowsInbound,
+                    flowsOutbound,
+                    racFile,
+                    wacFile,
+                    odSummary,
+                    passThrough,
+                    selectionKind,
+                    nonAnchorBundle,
+                  });
+                }
+              }}
+              aria-label={selectionKind === 'aggregate' ? 'Region Export' : 'Workplace Export'}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors hover:bg-white/10 focus:outline-none focus-visible:ring-1"
+              style={{
+                color: 'var(--accent)',
+                border: '1px solid var(--accent)',
+                background: 'transparent',
+              }}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M8 2v9" />
+                <path d="M4 7l4 4 4-4" />
+                <path d="M2 13h12" />
+              </svg>
+              {selectionKind === 'aggregate' ? 'Region Export' : 'Workplace Export'}
+            </button>
+          </div>
+        )}
         </div>
         {/* End map area wrapper. Pinned + hover tooltips below are position:fixed
             so they live outside the wrapper and don't affect document flow. The
@@ -859,7 +928,7 @@ export default function App() {
             : undefined;
           return (
             <div
-              className="fixed glass rounded-md px-3 py-2 text-[11px] z-50 top-2 left-2 right-2 md:top-[60px] md:right-4 md:left-auto md:w-[320px] max-h-[70vh] md:max-h-[calc(100vh-280px)] overflow-y-auto"
+              className="fixed glass rounded-md px-3 py-2 text-[11px] z-50 top-12 left-2 right-2 md:top-[60px] md:right-4 md:left-auto md:w-[320px] max-h-[70vh] md:max-h-[calc(100vh-280px)] overflow-y-auto"
               role="dialog"
               aria-label="Corridor breakdown"
               style={{
@@ -883,7 +952,7 @@ export default function App() {
                   type="button"
                   onClick={() => setPinned(null)}
                   aria-label="Close pinned tooltip"
-                  className="shrink-0 -mr-1 -mt-1 px-1.5 py-0.5 rounded hover:bg-white/10"
+                  className="-mr-1 -mt-1 px-1.5 py-0.5 rounded hover:bg-white/10 shrink-0"
                   style={{ color: 'var(--text-h)', lineHeight: 1 }}
                 >
                   ×
@@ -949,6 +1018,56 @@ export default function App() {
               <div className="mt-2 text-[10px]" style={{ color: 'var(--text-dim)' }}>
                 {pinnedView.aggregation.flows.length} flow
                 {pinnedView.aggregation.flows.length === 1 ? '' : 's'} traverse this corridor
+              </div>
+
+              {/* Corridor export — bottom-right of the pinned tooltip. */}
+              <div className="flex justify-end mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!corridorIndex || !flowIndex || !flowsInbound || !flowsOutbound || !zips) return;
+                    exportCorridor({
+                      corridorId: pinnedView.corridorId,
+                      corridorIndex,
+                      flowIndex,
+                      flowsInbound,
+                      flowsOutbound,
+                      zips,
+                      mode,
+                      directionFilter,
+                      selectedPartner,
+                      passThroughOrigin,
+                      passThroughDest,
+                      selectedZip,
+                      selectionKind,
+                      nonAnchorBundle,
+                    });
+                  }}
+                  aria-label="Corridor Export"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider transition-colors hover:bg-white/10 focus:outline-none focus-visible:ring-1"
+                  style={{
+                    color: 'var(--accent)',
+                    border: '1px solid var(--accent)',
+                    background: 'transparent',
+                  }}
+                >
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M8 2v9" />
+                    <path d="M4 7l4 4 4-4" />
+                    <path d="M2 13h12" />
+                  </svg>
+                  Corridor Export
+                </button>
               </div>
             </div>
           );

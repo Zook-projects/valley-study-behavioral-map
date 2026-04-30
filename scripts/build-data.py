@@ -6,6 +6,7 @@ Reads:
   - data/lodes-cache/filtered/{rac,wac,od}-YYYY.csv (built by fetch-lodes.py)
   - public/data/corridors.geojson — hand-authored canonical corridor graph
   - 2024 Census ZCTA Gazetteer (downloaded to /tmp on first run)
+  - Census ZIP→city crosswalk (downloaded once to data/uszips-cache/, see zip_places.py)
 
 Writes (all under public/data/):
   - flows-inbound.json    workplace-anchored flows (latest year, corridorPath baked in)
@@ -37,6 +38,7 @@ import lodes
 from anchors import ANCHOR_ZIPS, ANCHOR_PLACE_NAMES, CITY_CENTROIDS
 from osrm import OsrmError, route_polyline
 from geo import haversine_length_meters, load_gazetteer
+from zip_places import load_census_zip_places, merge_place_seed
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -49,6 +51,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 CORRIDORS_GEOJSON = OUT_DIR / "corridors.geojson"
 OSRM_CACHE_PATH = HERE / ".osrm-corridor-cache.json"
 GAZETTEER_CACHE_DIR = PROJECT_ROOT / "data" / "lodes-cache" / "gazetteer"
+ZIP_PLACES_CACHE_DIR = PROJECT_ROOT / "data" / "uszips-cache"
 
 COORD_DECIMALS = 6
 OSRM_SNAP_RADIUS_M: int | None = None
@@ -85,11 +88,17 @@ SEG_AXIS_TOL = 2
 # ---------------------------------------------------------------------------
 def load_place_name_seed() -> dict[str, str]:
     """
-    Bootstrap a ZIP→place lookup from the prior build's zips.json so external
-    CO ZIPs already known to the renderer keep their friendly labels. Anchor
-    overrides win over this seed.
+    Build a three-layer ZIP→place lookup:
+
+      1. Census ZIP→city crosswalk (broad fallback covering all U.S. ZCTAs).
+         Source: github.com/scpike/us-state-county-zip — public-domain Census
+         data, fetched once and cached under data/uszips-cache/.
+      2. Prior build's zips.json (preserves friendly-name overrides made by
+         hand). Empty strings in the prior are ignored so Census fallbacks
+         can fill them.
+      3. ANCHOR_PLACE_NAMES (the 11 study anchors — these always win).
     """
-    seed: dict[str, str] = {}
+    prior_seed: dict[str, str] = {}
     prior = OUT_DIR / "zips.json"
     if prior.exists():
         try:
@@ -98,11 +107,15 @@ def load_place_name_seed() -> dict[str, str]:
                     z = entry.get("zip")
                     p = entry.get("place")
                     if z and p:
-                        seed[z] = p
+                        prior_seed[z] = p
         except Exception as e:
             print(f"  ! could not seed place names from prior zips.json: {e}", file=sys.stderr)
-    seed.update(ANCHOR_PLACE_NAMES)
-    return seed
+    try:
+        census = load_census_zip_places(ZIP_PLACES_CACHE_DIR)
+    except Exception as e:
+        print(f"  ! could not load Census ZIP→city crosswalk: {e}", file=sys.stderr)
+        census = {}
+    return merge_place_seed(census, prior_seed, ANCHOR_PLACE_NAMES)
 
 
 # ---------------------------------------------------------------------------

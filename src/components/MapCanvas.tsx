@@ -916,6 +916,16 @@ export function MapCanvas({
         for (const el of direct) {
           if ((el as HTMLElement).dataset?.corridorId) return;
         }
+        // Direct miss: if a corridor is already the active hover, clear it
+        // immediately rather than letting the ring sample keep it alive in
+        // open map space. The hover chip should be strictly tied to the
+        // cursor being on a halo.
+        if (activeCorridorId != null) {
+          clearHover();
+          return;
+        }
+        // No active hover yet — ring-sample to acquire hover on initial
+        // approach to a nearby corridor.
         for (const [dx, dy] of SNAP_OFFSETS) {
           const els = document.elementsFromPoint(e.clientX + dx, e.clientY + dy);
           for (const el of els) {
@@ -927,7 +937,6 @@ export function MapCanvas({
             return;
           }
         }
-        if (activeCorridorId != null) clearHover();
       };
       if (currentSnapMove) {
         container.removeEventListener('mousemove', currentSnapMove);
