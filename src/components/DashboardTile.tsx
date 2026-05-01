@@ -132,6 +132,7 @@ export function DashboardTile({
           mode={mode}
           onChange={onModeChange}
           disabled={selectionKind === 'non-anchor'}
+          aggregate={selectionKind === 'aggregate'}
         />
         {selectionKind === 'non-anchor' && nonAnchorBundle && (
           <div className="-mt-2">

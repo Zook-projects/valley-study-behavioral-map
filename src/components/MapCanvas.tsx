@@ -573,7 +573,9 @@ export function MapCanvas({
         path.setAttribute(
           'aria-label',
           `${agg.corridor.label}: ${agg.total.toLocaleString()} workers across ` +
-            `${agg.flows.length} ${mode === 'inbound' ? 'origin' : 'destination'} ` +
+            `${agg.flows.length} ${
+              mode === 'inbound' ? 'origin' : mode === 'outbound' ? 'destination' : 'OD pair'
+            } ` +
             `flow(s) in ${mode} mode (${CORRIDOR_BUCKET_SEMANTIC[style.bucket]} corridor)`,
         );
 

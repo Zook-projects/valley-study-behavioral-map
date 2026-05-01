@@ -64,6 +64,62 @@ LATEST_YEAR = lodes.LATEST_YEAR
 # the cap and the cap effectively never bites.
 PAIRS_PER_ANCHOR_PER_MODE = 5000
 
+# Synthetic gateway labels — collapse all non-anchor endpoints beyond the
+# I-70 anchor envelope into two buckets so the pass-through card surfaces
+# "Eastern I-70" / "Western I-70" rows instead of dozens of small individual
+# ZIPs (Eagle, Vail, Denver, Grand Junction, etc.). The runtime card maps
+# these labels to friendly place names. The east boundary tracks the
+# build-data.py routing split (GWS longitude); the west boundary uses the
+# westernmost anchor (De Beque). Non-anchor ZIPs INSIDE the envelope keep
+# their individual identity.
+GATEWAY_E_ZIP = "GW_E"
+GATEWAY_W_ZIP = "GW_W"
+GATEWAY_SPLIT_LNG = -107.3248  # mirrors build-data.py — GWS centroid lng
+ENVELOPE_W_LNG = min(lng for _, lng in CITY_CENTROIDS.values())  # De Beque
+
+
+def gateway_for(zip_code: str, lng: float | None) -> str | None:
+    """Return GATEWAY_E_ZIP / GATEWAY_W_ZIP if the ZIP is a non-anchor
+    beyond the I-70 anchor envelope; otherwise None (keep its identity)."""
+    if zip_code in ANCHOR_ZIPS:
+        return None
+    if lng is None:
+        return None
+    if lng > GATEWAY_SPLIT_LNG:
+        return GATEWAY_E_ZIP
+    if lng < ENVELOPE_W_LNG:
+        return GATEWAY_W_ZIP
+    return None
+
+
+def collapse_to_gateway(sub: pd.DataFrame, side: str) -> pd.DataFrame:
+    """Rewrite the non-anchor side's ZIP/lng to the gateway sentinel for any
+    row whose endpoint sits beyond the I-70 envelope, then re-aggregate by
+    (h_zcta, w_zcta) summing workerCount. Pairs whose target side is an
+    anchor or sits inside the envelope pass through unchanged.
+
+    `side` is 'origin' (rewrite h_zcta — used for inbound's residence side)
+    or 'dest' (rewrite w_zcta — used for outbound's workplace side).
+    """
+    if sub.empty:
+        return sub
+    sub = sub.copy()
+    if side == "origin":
+        zip_col, lng_col = "h_zcta", "h_lng"
+    elif side == "dest":
+        zip_col, lng_col = "w_zcta", "w_lng"
+    else:
+        raise ValueError(f"unknown side: {side!r}")
+    new_zips = [
+        gateway_for(z, lng) or z
+        for z, lng in zip(sub[zip_col].tolist(), sub[lng_col].tolist())
+    ]
+    sub[zip_col] = new_zips
+    return (
+        sub.groupby(["h_zcta", "w_zcta"], as_index=False)["workerCount"]
+        .sum()
+    )
+
 
 def load_gazetteer_lng() -> dict[str, float]:
     """Return ZCTA → centroid longitude. Pass-through is E/W-only so the
@@ -178,14 +234,21 @@ def main() -> int:
 
         # Inbound mode: workplace ∈ ANCHOR_ZIPS - {anchor_zip}. The selected
         # anchor itself is already excluded by `not_a`, so isin(ANCHOR_ZIPS)
-        # implicitly resolves to "the other 10 anchors".
+        # implicitly resolves to "the other 10 anchors". Non-anchor residence
+        # endpoints beyond the I-70 envelope are collapsed to GW_E / GW_W
+        # via collapse_to_gateway so the pass-through card surfaces a single
+        # "Eastern I-70" / "Western I-70" row instead of every long-tail ZIP.
         inbound_sub = flank_sub[flank_sub["w_zcta"].isin(ANCHOR_ZIPS)]
+        inbound_sub = collapse_to_gateway(inbound_sub, side="origin")
         inbound_pairs, inbound_residual = slice_top_and_residual(
             inbound_sub, PAIRS_PER_ANCHOR_PER_MODE
         )
 
-        # Outbound mode: residence ∈ ANCHOR_ZIPS - {anchor_zip}.
+        # Outbound mode: residence ∈ ANCHOR_ZIPS - {anchor_zip}. Non-anchor
+        # workplace endpoints beyond the I-70 envelope are collapsed onto the
+        # gateway sentinels (mirroring the inbound rewrite).
         outbound_sub = flank_sub[flank_sub["h_zcta"].isin(ANCHOR_ZIPS)]
+        outbound_sub = collapse_to_gateway(outbound_sub, side="dest")
         outbound_pairs, outbound_residual = slice_top_and_residual(
             outbound_sub, PAIRS_PER_ANCHOR_PER_MODE
         )

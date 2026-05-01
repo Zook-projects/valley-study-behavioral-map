@@ -33,6 +33,7 @@ import {
   filterByDirection,
   filterForSelection,
   isAnchorZip,
+  unionFlowsByPair,
   type DriveDistanceMap,
 } from './lib/flowQueries';
 import {
@@ -393,7 +394,30 @@ export default function App() {
     };
   }, []);
 
-  const flows = mode === 'inbound' ? flowsInbound : flowsOutbound;
+  // Regional flow union — deduped union of inbound + outbound. Powers the
+  // synthetic 'regional' mode used in the aggregate (no-ZIP-selected) view.
+  // Anchor↔anchor pairs collapse to a single row (identical workerCount and
+  // segments in both build outputs); anchor→non-anchor and non-anchor→anchor
+  // pairs each appear once. The result is the smallest correct universe of
+  // flows that "touch at least one anchor."
+  const flowsRegional = useMemo<FlowRow[] | null>(() => {
+    if (!flowsInbound || !flowsOutbound) return null;
+    return unionFlowsByPair(flowsInbound, flowsOutbound);
+  }, [flowsInbound, flowsOutbound]);
+
+  // effectiveMode = 'regional' when no ZIP is selected (aggregate view) so the
+  // map / corridor pipeline draws the unioned universe. When a ZIP is selected
+  // it falls back to the user-driven inbound/outbound mode. Raw `mode` is kept
+  // around for the left panel and ModeToggle's button state.
+  const effectiveMode: Mode =
+    !selectedZip || selectedZip === 'ALL_OTHER' ? 'regional' : mode;
+
+  const flows =
+    effectiveMode === 'regional'
+      ? flowsRegional
+      : effectiveMode === 'inbound'
+      ? flowsInbound
+      : flowsOutbound;
 
   // Apply the direction filter to BOTH datasets up front. The aggregated
   // stats panel renders side-by-side inbound + outbound figures (Option B)
@@ -419,8 +443,19 @@ export default function App() {
       segmentFilter,
     );
   }, [flowsOutbound, zips, directionFilter, segmentFilter]);
+  const directionFilteredRegional = useMemo(() => {
+    if (!flowsRegional || !zips) return [];
+    return applySegmentFilter(
+      filterByDirection(flowsRegional, zips, directionFilter),
+      segmentFilter,
+    );
+  }, [flowsRegional, zips, directionFilter, segmentFilter]);
   const directionFilteredFlows =
-    mode === 'inbound' ? directionFilteredInbound : directionFilteredOutbound;
+    effectiveMode === 'regional'
+      ? directionFilteredRegional
+      : effectiveMode === 'inbound'
+      ? directionFilteredInbound
+      : directionFilteredOutbound;
 
   // selectionKind drives every branch that needs to know "is this a real
   // anchor view vs the new non-anchor pivot vs aggregate". Derived from
@@ -439,13 +474,13 @@ export default function App() {
     if (selectionKind === 'non-anchor') {
       return directionFilteredInbound;
     }
-    return filterForSelection(directionFilteredFlows, selectedZip, mode);
+    return filterForSelection(directionFilteredFlows, selectedZip, effectiveMode);
   }, [
     selectionKind,
     directionFilteredInbound,
     directionFilteredFlows,
     selectedZip,
-    mode,
+    effectiveMode,
   ]);
 
   // Bundle-pivoted flows — one row per (bundle ZIP × anchor destination),
@@ -464,8 +499,8 @@ export default function App() {
   // DashboardTile) and the renderer (MapCanvas) share one set of breaks.
   const visibleCorridorMap = useMemo(() => {
     if (!corridorIndex || !flowIndex) return null;
-    return buildVisibleCorridorMap(corridorIndex, flowIndex, visibleFlows, mode);
-  }, [corridorIndex, flowIndex, visibleFlows, mode]);
+    return buildVisibleCorridorMap(corridorIndex, flowIndex, visibleFlows, effectiveMode);
+  }, [corridorIndex, flowIndex, visibleFlows, effectiveMode]);
 
   // Reference distribution for the corridor width buckets — built from the
   // active mode's unfiltered flow set (ignoring direction filter and
@@ -477,8 +512,8 @@ export default function App() {
   // consumes the narrowed `visibleCorridorMap` to decide what to draw.
   const referenceCorridorMap = useMemo(() => {
     if (!corridorIndex || !flowIndex || !flows) return null;
-    return buildVisibleCorridorMap(corridorIndex, flowIndex, flows, mode);
-  }, [corridorIndex, flowIndex, flows, mode]);
+    return buildVisibleCorridorMap(corridorIndex, flowIndex, flows, effectiveMode);
+  }, [corridorIndex, flowIndex, flows, effectiveMode]);
 
   // Quantile breaks recomputed when mode changes. Inbound and outbound have
   // different distributions, so a single static break table won't do — but
@@ -550,9 +585,11 @@ export default function App() {
         }
         return n;
       };
+      // Aggregate view shows the regional union on the map; the chip's
+      // "X of Y flows shown" denominator/numerator follow the same universe.
       return {
-        numerator: count(directionFilteredInbound),
-        denominator: count(flowsInbound ?? []),
+        numerator: count(directionFilteredRegional),
+        denominator: count(flowsRegional ?? []),
       };
     }
     if (selectionKind === 'non-anchor' && nonAnchorBundle && flowsInbound) {
@@ -584,7 +621,9 @@ export default function App() {
     mode,
     directionFilteredFlows,
     directionFilteredInbound,
+    directionFilteredRegional,
     flowsInbound,
+    flowsRegional,
   ]);
 
   // Pass-through cross-filter shares the lifecycle of the partner filter —
@@ -772,7 +811,7 @@ export default function App() {
           bucketBreaks={bucketBreaks}
           selectedZip={selectedZip}
           selectedPartner={selectedPartner}
-          mode={mode}
+          mode={effectiveMode}
           onSelectZip={handleSelectZip}
           hoveredCorridorId={hover?.corridorId ?? null}
           onHoverCorridor={(corridorId, payload) => {
@@ -1033,7 +1072,7 @@ export default function App() {
                       flowsInbound,
                       flowsOutbound,
                       zips,
-                      mode,
+                      mode: effectiveMode,
                       directionFilter,
                       selectedPartner,
                       passThroughOrigin,

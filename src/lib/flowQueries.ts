@@ -447,16 +447,44 @@ export function filterByDirection(
   });
 }
 
-/** Return the subset of flows that should be drawn given the current selection. */
+/** Return the subset of flows that should be drawn given the current selection.
+ * Regional mode is only ever paired with a null selection (aggregate view), so
+ * it short-circuits via the early return — the mode-specific branch below is
+ * a guard for the inbound/outbound paths only. */
 export function filterForSelection(
   flows: FlowRow[],
   selectedZip: string | null,
   mode: Mode,
 ): FlowRow[] {
   if (!selectedZip) return flows;
+  if (mode === 'regional') return flows;
   return flows.filter((f) =>
     mode === 'inbound' ? f.destZip === selectedZip : f.originZip === selectedZip,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Regional flow union — combines the inbound and outbound build outputs into
+// a single FlowRow array deduped on (originZip, destZip). Anchor↔anchor pairs
+// appear in both files with identical workerCount and segments (both files
+// derive from the same underlying LODES OD pairs), so the dedupe collapses
+// each unique pair to one row. The resulting array powers the synthetic
+// 'regional' mode used in the aggregate (no-ZIP-selected) view.
+// ---------------------------------------------------------------------------
+export function unionFlowsByPair(
+  flowsInbound: FlowRow[],
+  flowsOutbound: FlowRow[],
+): FlowRow[] {
+  const out = new Map<string, FlowRow>();
+  for (const f of flowsInbound) {
+    out.set(`${f.originZip}|${f.destZip}`, f);
+  }
+  for (const f of flowsOutbound) {
+    const key = `${f.originZip}|${f.destZip}`;
+    if (out.has(key)) continue; // anchor↔anchor pair already captured
+    out.set(key, f);
+  }
+  return Array.from(out.values());
 }
 
 // ---------------------------------------------------------------------------

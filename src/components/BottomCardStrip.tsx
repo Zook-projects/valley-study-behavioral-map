@@ -2070,6 +2070,38 @@ function perZipBlocks(
 // is exposed upstream (App.tsx) for the map filter.
 const PASS_THROUGH_TOP_N = 10;
 
+// Synthetic gateway ZIPs emitted by scripts/build-passthrough.py — they
+// collapse all non-anchor endpoints beyond the I-70 anchor envelope into
+// two friendly buckets so the card surfaces "Eastern I-70" / "Western I-70"
+// rows instead of dozens of small individual ZIPs (Eagle, Vail, Denver,
+// Grand Junction, etc.). The gateway ZIPs are not present in zips.json —
+// they're synthetic — so the place-name and direction helpers special-case
+// them inline.
+const GATEWAY_PLACE_NAMES: Record<string, string> = {
+  GW_E: 'Eastern I-70',
+  GW_W: 'Western I-70',
+};
+
+// True when a ZIP is one of the synthetic gateway ZIPs.
+function isGatewayZip(zip: string): boolean {
+  return zip === 'GW_E' || zip === 'GW_W';
+}
+
+// Direction-classify an OD pair where one or both endpoints may be the
+// synthetic gateway ZIPs. Falls through to the shared classifyDirection()
+// for normal pairs. A gateway endpoint anchors the bearing: GW_E sits east
+// of the anchor envelope, GW_W sits west, so a flow ending at GW_E goes
+// east, a flow originating at GW_E goes west, and so on.
+function gatewayAwareDirection(
+  originZip: string,
+  destZip: string,
+  zipsList: ZipMeta[],
+): 'east' | 'west' | 'neutral' {
+  if (isGatewayZip(destZip)) return destZip === 'GW_E' ? 'east' : 'west';
+  if (isGatewayZip(originZip)) return originZip === 'GW_E' ? 'west' : 'east';
+  return classifyDirection(originZip, destZip, zipsList);
+}
+
 // Display row produced by the place-rollup. zipLabel is the single ZIP when
 // the row represents one ZIP, or the literal string 'multiple' when the
 // place spans more than one (matching the convention od-summary.json uses
@@ -2239,7 +2271,11 @@ function PassThroughCard({
     type AggBucket = { place: string; zips: Set<string>; workers: number };
     const originAgg = new Map<string, AggBucket>();
     const destAgg = new Map<string, AggBucket>();
-    const placeOf = (zip: string) => zipPlaces.get(zip) || zip;
+    // Place-name lookup: synthetic gateway ZIPs (GW_E / GW_W) come from the
+    // build-passthrough rollup of out-of-envelope non-anchor endpoints; they
+    // aren't in zipPlaces, so check the gateway map first.
+    const placeOf = (zip: string) =>
+      GATEWAY_PLACE_NAMES[zip] ?? zipPlaces.get(zip) ?? zip;
     const destZipsSet = dest ? new Set(dest.zips) : null;
     const originZipsSet = origin ? new Set(origin.zips) : null;
     let originTotal = 0;
@@ -2249,10 +2285,12 @@ function PassThroughCard({
       // same E/W rule the map uses elsewhere. Pairs classified 'neutral'
       // (N-S dominated, same-cluster, or missing centroids) drop out of
       // East/West buckets — keeping them in would smuggle perpendicular
-      // pass-through pairs into a directional view.
+      // pass-through pairs into a directional view. Gateway-aware so a
+      // GW_E / GW_W endpoint resolves to the correct bearing without a
+      // lat/lng row in zips.json.
       if (
         directionFilter !== 'all' &&
-        classifyDirection(p.originZip, p.destZip, zips) !== directionFilter
+        gatewayAwareDirection(p.originZip, p.destZip, zips) !== directionFilter
       ) {
         continue;
       }
@@ -2285,9 +2323,13 @@ function PassThroughCard({
     }
     const toRow = (b: AggBucket): PassThroughDisplayRow => {
       const zips = Array.from(b.zips);
+      // Gateway rows aggregate every non-anchor ZIP beyond the I-70 envelope
+      // into a single synthetic ZIP — render "· beyond envelope" instead of
+      // exposing the placeholder ID to readers.
+      const isGateway = zips.length === 1 && isGatewayZip(zips[0]);
       return {
         place: b.place,
-        zipLabel: zips.length > 1 ? 'multiple' : zips[0],
+        zipLabel: isGateway ? 'beyond envelope' : zips.length > 1 ? 'multiple' : zips[0],
         zips,
         workers: b.workers,
       };

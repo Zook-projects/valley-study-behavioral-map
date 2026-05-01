@@ -2,7 +2,13 @@
 
 import type { AgeBlock, Naics3Block, WageBlock } from './lodes';
 
-export type Mode = 'inbound' | 'outbound';
+// 'inbound' / 'outbound' identify which build-time dataset a flow came from
+// (workplace-anchored vs residence-anchored). 'regional' is a runtime-only
+// synthetic mode used when no ZIP is selected — the visible flow set is the
+// deduped union of inbound + outbound, and corridor aggregation accepts any
+// direction. Build artifacts never carry direction === 'regional'; only the
+// runtime-constructed FlowRow array (flowsRegional in App.tsx) does.
+export type Mode = 'inbound' | 'outbound' | 'regional';
 
 // Geographic bearing of an O-D pair, derived from longitude difference.
 // Self-flows, ALL_OTHER endpoints, and near-aligned pairs (|Δlng| < 0.05°)
@@ -104,12 +110,15 @@ export interface CorridorGraph {
 
 // Flow entry attached to a corridor at runtime — the record that powers the
 // hover tooltip aggregation. Built from FlowRow + corridorPath traversals.
+// The `direction` tag identifies which build dataset (inbound vs outbound)
+// the entry was sourced from — never 'regional', which is a runtime-only
+// synthetic mode that aggregateCorridor handles via flowId deduplication.
 export interface CorridorFlowEntry {
   flowId: string;             // `${originZip}-${destZip}`
   originZip: string;
   destZip: string;
   workerCount: number;
-  direction: Mode;
+  direction: 'inbound' | 'outbound';
 }
 
 // Pass-through OD pairs around an anchor — flows where neither residence

@@ -2,22 +2,25 @@
 //
 // Mode-exclusivity invariant
 // --------------------------
-// At any moment the map renders exactly one mode (inbound XOR outbound). All
-// runtime consumers must filter to the active mode's visible flow set before
-// reading totals or per-zip breakdowns. Build-time produces no precomputed
-// mode-specific totals — that would lock in a filter snapshot the runtime
-// can't reuse.
+// At any moment the map renders exactly one mode. Two single-direction modes
+// ('inbound', 'outbound') filter the corridor flow index to entries tagged
+// with that direction. The synthetic 'regional' mode (active only in the
+// aggregate / no-ZIP-selected view) accepts entries of either direction and
+// dedupes anchor↔anchor pairs by flowId so the same OD pair isn't counted
+// twice (anchor↔anchor pairs appear in both the inbound and outbound build
+// outputs — same workerCount, same corridorPath).
 //
 // Consumers and where the invariant is enforced:
-//   - App.tsx                  selects `flows = mode === 'inbound' ? flowsInbound : flowsOutbound`
+//   - App.tsx                  selects `flows` based on effectiveMode
 //   - DashboardTile.tsx        passes only the active `flows` to stats panels
-//   - StatsAggregated.tsx      reads only the prop it receives (active mode)
+//   - StatsAggregated.tsx      reads only the prop it receives (always inbound)
 //   - StatsForZip.tsx          reads only the prop it receives (active mode)
 //   - MapCanvas.tsx            builds visibleCorridorMap from the active mode only
-//   - aggregateCorridor()      takes `mode` and picks byDestZip vs byOriginZip
+//   - aggregateCorridor()      takes `mode` and picks byDestZip vs byOriginZip;
+//                              dedupes by flowId when mode === 'regional'
 //
-// No code path should produce a tooltip, stat, or rendered corridor that mixes
-// inbound and outbound flows.
+// Single-direction modes never mix inbound and outbound flows; regional mode
+// merges them with explicit deduplication.
 
 import type {
   ActiveCorridorAggregation,
@@ -61,7 +64,7 @@ export function buildCorridorFlowIndex(
 ): Map<CorridorId, CorridorFlowEntry[]> {
   const out = new Map<CorridorId, CorridorFlowEntry[]>();
 
-  const append = (f: FlowRow, direction: Mode) => {
+  const append = (f: FlowRow, direction: 'inbound' | 'outbound') => {
     const path = f.corridorPath;
     if (!path || path.length === 0) return;
     const entry: CorridorFlowEntry = {
@@ -114,10 +117,18 @@ export function aggregateCorridor(
   const byDestZip = new Map<string, number>();
   const byOriginZip = new Map<string, number>();
   const flows: CorridorFlowEntry[] = [];
+  // Regional mode merges inbound + outbound entries; anchor↔anchor pairs
+  // appear in both with identical workerCount/segments, so we count each
+  // flowId at most once. Single-direction modes don't need this guard.
+  const seenFlowIds = mode === 'regional' ? new Set<string>() : null;
 
   for (const fr of entries) {
-    if (fr.direction !== mode) continue;
+    if (mode !== 'regional' && fr.direction !== mode) continue;
     if (!visibleFlowIds.has(fr.flowId)) continue;
+    if (seenFlowIds) {
+      if (seenFlowIds.has(fr.flowId)) continue;
+      seenFlowIds.add(fr.flowId);
+    }
     const workerCount = workerCountByFlowId?.get(fr.flowId) ?? fr.workerCount;
     total += workerCount;
     byDestZip.set(fr.destZip, (byDestZip.get(fr.destZip) ?? 0) + workerCount);
@@ -161,7 +172,9 @@ export function buildVisibleCorridorMap(
   for (const [cid, corridor] of corridorIndex) {
     const entries = flowIndex.get(cid);
     if (!entries) continue;
-    if (!entries.some((fr) => fr.direction === mode)) continue;
+    // Skip corridors with zero entries in the active mode. Regional mode
+    // accepts any entry, so the existence check alone is enough.
+    if (mode !== 'regional' && !entries.some((fr) => fr.direction === mode)) continue;
     const agg = aggregateCorridor(corridor, entries, visibleFlowIds, mode, workerCountByFlowId);
     if (agg.total === 0 || agg.flows.length === 0) continue;
     out.set(cid, agg);

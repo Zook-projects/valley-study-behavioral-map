@@ -32,6 +32,7 @@ import {
   filterByDirection,
   filterForSelection,
   meanCommuteMiles,
+  unionFlowsByPair,
   type DriveDistanceMap,
 } from './flowQueries';
 import { buildVisibleCorridorMap } from './corridors';
@@ -698,29 +699,34 @@ export function exportCorridor(input: CorridorExportInput): void {
   if (!corridor) return;
 
   // Reproduce App.tsx's visibleFlows pipeline MINUS applySegmentFilter:
-  //   1. Pick mode dataset
+  //   1. Pick mode dataset (regional in aggregate view → deduped union)
   //   2. filterByDirection (direction filter respected)
   //   3. filterForSelection (selectedZip narrowing respected)
   //   4. Apply partner / pass-through cross-filter if active
   // The non-anchor branch keeps the aggregate inbound network like App.tsx.
   const baseInbound = filterByDirection(flowsInbound, zips, directionFilter);
   const baseOutbound = filterByDirection(flowsOutbound, zips, directionFilter);
+  const baseRegional =
+    mode === 'regional'
+      ? filterByDirection(unionFlowsByPair(flowsInbound, flowsOutbound), zips, directionFilter)
+      : [];
   let visible: FlowRow[];
   if (selectionKind === 'non-anchor') {
     visible = baseInbound;
   } else {
-    visible = filterForSelection(
-      mode === 'inbound' ? baseInbound : baseOutbound,
-      selectedZip,
-      mode,
-    );
+    const baseForMode =
+      mode === 'regional' ? baseRegional : mode === 'inbound' ? baseInbound : baseOutbound;
+    visible = filterForSelection(baseForMode, selectedZip, mode);
   }
 
   // Partner narrowing — scope to the selected partner's ZIP set on the
-  // partner-side endpoint (origin in inbound, dest in outbound).
+  // partner-side endpoint (origin in inbound, dest in outbound). Regional
+  // mode is only ever paired with no selection / no partner, so this branch
+  // doesn't fire under regional in practice; the inbound fallback below
+  // is a defensive default.
   if (selectedPartner) {
     const set = new Set(selectedPartner.zips);
-    visible = visible.filter((f) => (mode === 'inbound' ? set.has(f.originZip) : set.has(f.destZip)));
+    visible = visible.filter((f) => (mode === 'outbound' ? set.has(f.destZip) : set.has(f.originZip)));
   } else if (passThroughOrigin && passThroughDest) {
     const oset = new Set(passThroughOrigin.zips);
     const dset = new Set(passThroughDest.zips);
