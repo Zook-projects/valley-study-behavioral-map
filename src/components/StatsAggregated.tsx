@@ -277,44 +277,47 @@ function LayoutHero({ items }: { items: StatItem[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Per-anchor rankings section — three ranked views (Outbound, Inbound, Local %)
-// over the 11 workplace anchors. Pinned to the unfiltered inbound + outbound
-// flow sets so the ranking stays stable across direction-filter toggles.
+// Per-anchor rankings section — four ranked views (Total, Inbound, Outbound,
+// Local) over the 11 workplace anchors. "Total" is the WAC-style total
+// workforce at each anchor (inbound + within-ZIP). Re-aggregates against the
+// active direction filter so the rankings reflect the same scope as the rest
+// of the aggregate dashboard. With a direction filter active, ALL_OTHER flows
+// drop out of the inbound/outbound counts (out-of-state has no compass
+// direction); within-ZIP self-flows are preserved by `filterByDirection`.
 // ---------------------------------------------------------------------------
 
-type RankAxis = 'outbound' | 'inbound' | 'local' | 'combined';
+type RankAxis = 'total' | 'inbound' | 'outbound' | 'local';
 
 const RANK_AXES: ReadonlyArray<{ key: RankAxis; label: string }> = [
-  { key: 'outbound', label: 'Outbound' },
+  { key: 'total', label: 'Total' },
   { key: 'inbound', label: 'Inbound' },
+  { key: 'outbound', label: 'Outbound' },
   { key: 'local', label: 'Local' },
-  { key: 'combined', label: 'Combined' },
 ];
 
 const RANK_HELP: Record<RankAxis, { primary: string; secondary?: string }> = {
-  outbound: {
-    primary: 'Residents commuting out of the ZIP code for work',
-    secondary: '% of ZIP code residents (out ÷ (out + within-ZIP))',
+  total: {
+    primary: 'Total workforce at the ZIP code = inbound + within-ZIP',
+    secondary: '% of all 11 ZIP codes’ combined workforce',
   },
   inbound: {
     primary: 'Workers commuting into the ZIP code from elsewhere',
     secondary: '% of ZIP code workforce (in ÷ (in + within-ZIP))',
   },
+  outbound: {
+    primary: 'Residents commuting out of the ZIP code for work',
+    secondary: '% of ZIP code residents (out ÷ (out + within-ZIP))',
+  },
   local: {
     primary: 'Workers who live and work in the same ZIP code',
     secondary: '% of ZIP code workforce (within-ZIP ÷ (in + within-ZIP))',
-  },
-  combined: {
-    primary: 'Total worker activity = outbound + inbound + local',
-    secondary: '% of all 11 ZIP codes’ combined total',
   },
 };
 
 function valueFor(r: AnchorRanking, axis: RankAxis): number {
   if (axis === 'outbound') return r.outboundCommuters;
   if (axis === 'inbound') return r.inboundCommuters;
-  if (axis === 'combined')
-    return r.outboundCommuters + r.inboundCommuters + r.withinZip;
+  if (axis === 'total') return r.inboundCommuters + r.withinZip;
   return r.withinZip;
 }
 
@@ -323,13 +326,13 @@ function fmtAxisValue(v: number, axis: RankAxis): string {
   return fmtInt(v);
 }
 
-// Anchor-internal share shown alongside the primary count. For the combined
-// axis the share is regional (row total ÷ sum of all rows' combined totals),
-// so the caller passes that sum in.
+// Anchor-internal share shown alongside the primary count. For the Total
+// axis the share is regional (row total ÷ sum of all rows' total workforce),
+// so the caller passes that regional sum in.
 function secondaryPercent(
   r: AnchorRanking,
   axis: RankAxis,
-  combinedTotal: number,
+  regionalTotal: number,
 ): number | null {
   if (axis === 'outbound') {
     const denom = r.outboundCommuters + r.withinZip;
@@ -339,9 +342,9 @@ function secondaryPercent(
     const denom = r.inboundCommuters + r.withinZip;
     return denom > 0 ? r.inboundCommuters / denom : 0;
   }
-  if (axis === 'combined') {
-    const v = r.outboundCommuters + r.inboundCommuters + r.withinZip;
-    return combinedTotal > 0 ? v / combinedTotal : 0;
+  if (axis === 'total') {
+    const v = r.inboundCommuters + r.withinZip;
+    return regionalTotal > 0 ? v / regionalTotal : 0;
   }
   return r.localShare;
 }
@@ -349,21 +352,23 @@ function secondaryPercent(
 function AnchorRankings({
   rankings,
   onSelectZip,
+  directionFilter,
 }: {
   rankings: AnchorRanking[];
   onSelectZip?: (zip: string | null) => void;
+  directionFilter: DirectionFilter;
 }) {
-  const [axis, setAxis] = useState<RankAxis>('outbound');
+  const [axis, setAxis] = useState<RankAxis>('total');
 
   const sorted = useMemo(
     () => [...rankings].sort((a, b) => valueFor(b, axis) - valueFor(a, axis)),
     [rankings, axis],
   );
   const max = sorted.length > 0 ? Math.max(valueFor(sorted[0], axis), 1e-9) : 1;
-  const combinedTotal = useMemo(
+  const regionalTotal = useMemo(
     () =>
       rankings.reduce(
-        (sum, r) => sum + r.outboundCommuters + r.inboundCommuters + r.withinZip,
+        (sum, r) => sum + r.inboundCommuters + r.withinZip,
         0,
       ),
     [rankings],
@@ -416,13 +421,18 @@ function AnchorRankings({
         {help.secondary && (
           <div className="opacity-80">{help.secondary}</div>
         )}
+        {directionFilter !== 'all' && (
+          <div className="opacity-80 mt-0.5">
+            Scoped to {directionFilter}-direction flows · ALL_OTHER excluded
+          </div>
+        )}
       </div>
 
       <ol className="flex flex-col gap-0.5 pl-0">
         {sorted.map((r, idx) => {
           const v = valueFor(r, axis);
           const pct = Math.max(0, Math.min(100, (v / max) * 100));
-          const secondary = secondaryPercent(r, axis, combinedTotal);
+          const secondary = secondaryPercent(r, axis, regionalTotal);
           const handleClick = () => onSelectZip?.(r.zip);
           return (
             <li key={r.zip}>
@@ -470,8 +480,8 @@ function AnchorRankings({
                     className="tnum w-9 shrink-0 text-right text-[10px]"
                     style={{ color: 'var(--text-dim)' }}
                     aria-label={
-                      axis === 'combined'
-                        ? `${fmtPct(secondary)} of regional combined total`
+                      axis === 'total'
+                        ? `${fmtPct(secondary)} of regional total workforce`
                         : `${fmtPct(secondary)} of ZIP code ${axis === 'outbound' ? 'residents' : 'workforce'}`
                     }
                   >
@@ -496,17 +506,21 @@ export function StatsAggregated(props: Props) {
   const rankings = useMemo(
     () =>
       computeAnchorRankings(
-        props.flowsInbound,
-        props.flowsOutbound ?? [],
+        props.directionFilteredInbound,
+        props.directionFilteredOutbound ?? [],
         props.zips,
       ),
-    [props.flowsInbound, props.flowsOutbound, props.zips],
+    [props.directionFilteredInbound, props.directionFilteredOutbound, props.zips],
   );
 
   return (
     <div>
       <LayoutHero items={items} />
-      <AnchorRankings rankings={rankings} onSelectZip={props.onSelectZip} />
+      <AnchorRankings
+        rankings={rankings}
+        onSelectZip={props.onSelectZip}
+        directionFilter={props.directionFilter}
+      />
     </div>
   );
 }

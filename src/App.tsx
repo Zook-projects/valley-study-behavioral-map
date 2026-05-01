@@ -952,7 +952,7 @@ export default function App() {
                   type="button"
                   onClick={() => setPinned(null)}
                   aria-label="Close pinned tooltip"
-                  className="-mr-1 -mt-1 px-1.5 py-0.5 rounded hover:bg-white/10 shrink-0"
+                  className="-mr-1 -mt-1 px-2 py-1 rounded text-xl hover:bg-white/10 shrink-0"
                   style={{ color: 'var(--text-h)', lineHeight: 1 }}
                 >
                   ×
