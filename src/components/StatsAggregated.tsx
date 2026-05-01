@@ -282,12 +282,13 @@ function LayoutHero({ items }: { items: StatItem[] }) {
 // flow sets so the ranking stays stable across direction-filter toggles.
 // ---------------------------------------------------------------------------
 
-type RankAxis = 'outbound' | 'inbound' | 'local';
+type RankAxis = 'outbound' | 'inbound' | 'local' | 'combined';
 
 const RANK_AXES: ReadonlyArray<{ key: RankAxis; label: string }> = [
   { key: 'outbound', label: 'Outbound' },
   { key: 'inbound', label: 'Inbound' },
-  { key: 'local', label: 'Local %' },
+  { key: 'local', label: 'Local' },
+  { key: 'combined', label: 'Combined' },
 ];
 
 const RANK_HELP: Record<RankAxis, { primary: string; secondary?: string }> = {
@@ -300,24 +301,36 @@ const RANK_HELP: Record<RankAxis, { primary: string; secondary?: string }> = {
     secondary: '% of ZIP code workforce (in ÷ (in + within-ZIP))',
   },
   local: {
-    primary:
-      'Within-ZIP ÷ (in-commuters + within-ZIP) — share of the ZIP code’s workforce who live there',
+    primary: 'Workers who live and work in the same ZIP code',
+    secondary: '% of ZIP code workforce (within-ZIP ÷ (in + within-ZIP))',
+  },
+  combined: {
+    primary: 'Total worker activity = outbound + inbound + local',
+    secondary: '% of all 11 ZIP codes’ combined total',
   },
 };
 
 function valueFor(r: AnchorRanking, axis: RankAxis): number {
   if (axis === 'outbound') return r.outboundCommuters;
   if (axis === 'inbound') return r.inboundCommuters;
-  return r.localShare;
+  if (axis === 'combined')
+    return r.outboundCommuters + r.inboundCommuters + r.withinZip;
+  return r.withinZip;
 }
 
 function fmtAxisValue(v: number, axis: RankAxis): string {
-  return axis === 'local' ? fmtPct(v) : fmtInt(v);
+  void axis;
+  return fmtInt(v);
 }
 
-// Anchor-internal share for outbound/inbound rows. Local axis already shows
-// a percentage in its primary value column, so this returns null there.
-function secondaryPercent(r: AnchorRanking, axis: RankAxis): number | null {
+// Anchor-internal share shown alongside the primary count. For the combined
+// axis the share is regional (row total ÷ sum of all rows' combined totals),
+// so the caller passes that sum in.
+function secondaryPercent(
+  r: AnchorRanking,
+  axis: RankAxis,
+  combinedTotal: number,
+): number | null {
   if (axis === 'outbound') {
     const denom = r.outboundCommuters + r.withinZip;
     return denom > 0 ? r.outboundCommuters / denom : 0;
@@ -326,7 +339,11 @@ function secondaryPercent(r: AnchorRanking, axis: RankAxis): number | null {
     const denom = r.inboundCommuters + r.withinZip;
     return denom > 0 ? r.inboundCommuters / denom : 0;
   }
-  return null;
+  if (axis === 'combined') {
+    const v = r.outboundCommuters + r.inboundCommuters + r.withinZip;
+    return combinedTotal > 0 ? v / combinedTotal : 0;
+  }
+  return r.localShare;
 }
 
 function AnchorRankings({
@@ -343,6 +360,14 @@ function AnchorRankings({
     [rankings, axis],
   );
   const max = sorted.length > 0 ? Math.max(valueFor(sorted[0], axis), 1e-9) : 1;
+  const combinedTotal = useMemo(
+    () =>
+      rankings.reduce(
+        (sum, r) => sum + r.outboundCommuters + r.inboundCommuters + r.withinZip,
+        0,
+      ),
+    [rankings],
+  );
   const help = RANK_HELP[axis];
 
   return (
@@ -397,7 +422,7 @@ function AnchorRankings({
         {sorted.map((r, idx) => {
           const v = valueFor(r, axis);
           const pct = Math.max(0, Math.min(100, (v / max) * 100));
-          const secondary = secondaryPercent(r, axis);
+          const secondary = secondaryPercent(r, axis, combinedTotal);
           const handleClick = () => onSelectZip?.(r.zip);
           return (
             <li key={r.zip}>
@@ -444,7 +469,11 @@ function AnchorRankings({
                   <span
                     className="tnum w-9 shrink-0 text-right text-[10px]"
                     style={{ color: 'var(--text-dim)' }}
-                    aria-label={`${fmtPct(secondary)} of ZIP code ${axis === 'outbound' ? 'residents' : 'workforce'}`}
+                    aria-label={
+                      axis === 'combined'
+                        ? `${fmtPct(secondary)} of regional combined total`
+                        : `${fmtPct(secondary)} of ZIP code ${axis === 'outbound' ? 'residents' : 'workforce'}`
+                    }
                   >
                     {fmtPct(secondary)}
                   </span>
