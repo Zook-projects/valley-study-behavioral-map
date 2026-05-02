@@ -349,6 +349,10 @@ function secondaryPercent(
   return r.localShare;
 }
 
+// Which numeric attribute drives both the sort order and the "primary"
+// (bright/white) display column. # = absolute count, % = secondary share.
+type RankSortBy = 'count' | 'percent';
+
 function AnchorRankings({
   rankings,
   onSelectZip,
@@ -359,12 +363,8 @@ function AnchorRankings({
   directionFilter: DirectionFilter;
 }) {
   const [axis, setAxis] = useState<RankAxis>('total');
+  const [sortBy, setSortBy] = useState<RankSortBy>('count');
 
-  const sorted = useMemo(
-    () => [...rankings].sort((a, b) => valueFor(b, axis) - valueFor(a, axis)),
-    [rankings, axis],
-  );
-  const max = sorted.length > 0 ? Math.max(valueFor(sorted[0], axis), 1e-9) : 1;
   const regionalTotal = useMemo(
     () =>
       rankings.reduce(
@@ -373,15 +373,75 @@ function AnchorRankings({
       ),
     [rankings],
   );
+
+  // Sort key matches whichever column is "primary" for the current sortBy.
+  // For 'percent' we sort by the same secondaryPercent the row renders, so
+  // the visual order mirrors the right-hand column.
+  const sortKeyFor = (r: AnchorRanking): number => {
+    if (sortBy === 'percent') {
+      return secondaryPercent(r, axis, regionalTotal) ?? 0;
+    }
+    return valueFor(r, axis);
+  };
+
+  const sorted = useMemo(
+    () => [...rankings].sort((a, b) => sortKeyFor(b) - sortKeyFor(a)),
+    // sortKeyFor is recomputed inline; deps capture every input that
+    // changes its return.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rankings, axis, sortBy, regionalTotal],
+  );
+  // Bar-fill scale follows the same attribute that drives the sort, so the
+  // visual bar always corresponds to the column the user chose to rank by.
+  const max =
+    sorted.length > 0 ? Math.max(sortKeyFor(sorted[0]), 1e-9) : 1;
   const help = RANK_HELP[axis];
 
   return (
     <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--rule)' }}>
-      <div
-        className="text-[10px] font-medium uppercase tracking-wider mb-2"
-        style={{ color: 'var(--text-dim)' }}
-      >
-        Workplace Zip Code rankings
+      {/* Header row: section label on the left, sort toggle on the right.
+          The toggle sits ABOVE the axis tablist and switches both the sort
+          order and which numeric column is rendered as the "bright" value. */}
+      <div className="flex items-center justify-between mb-2">
+        <div
+          className="text-[10px] font-medium uppercase tracking-wider"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          Workplace Zip Code rankings
+        </div>
+        <div
+          role="tablist"
+          aria-label="Sort rankings by"
+          className="flex p-0.5 rounded-md border text-[10px]"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            borderColor: 'var(--panel-border)',
+          }}
+        >
+          {([
+            { key: 'count', label: '#' },
+            { key: 'percent', label: '%' },
+          ] as Array<{ key: RankSortBy; label: string }>).map(({ key, label }) => {
+            const active = sortBy === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setSortBy(key)}
+                aria-label={`Sort by ${key === 'count' ? 'count' : 'percent'}`}
+                className="px-2 py-0.5 rounded transition-colors font-medium tnum"
+                style={{
+                  background: active ? 'var(--accent)' : 'transparent',
+                  color: active ? '#1a1207' : 'var(--text-dim)',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div
@@ -431,8 +491,18 @@ function AnchorRankings({
       <ol className="flex flex-col gap-0.5 pl-0">
         {sorted.map((r, idx) => {
           const v = valueFor(r, axis);
-          const pct = Math.max(0, Math.min(100, (v / max) * 100));
           const secondary = secondaryPercent(r, axis, regionalTotal);
+          // Bar fill follows whichever attribute is currently sorted on, so
+          // the bar reads consistently with the bright value column.
+          const sortKey = sortBy === 'percent' ? (secondary ?? 0) : v;
+          const pct = Math.max(0, Math.min(100, (sortKey / max) * 100));
+          // Swap which column gets the bright `text-h` color based on sortBy.
+          // The non-sorted column drops to `text-dim` so the active column is
+          // always the visually emphasized one.
+          const countColor =
+            sortBy === 'count' ? 'var(--text-h)' : 'var(--text-dim)';
+          const percentColor =
+            sortBy === 'percent' ? 'var(--text-h)' : 'var(--text-dim)';
           const handleClick = () => onSelectZip?.(r.zip);
           return (
             <li key={r.zip}>
@@ -471,14 +541,14 @@ function AnchorRankings({
                 </span>
                 <span
                   className="tnum w-14 shrink-0 text-right font-medium"
-                  style={{ color: 'var(--text-h)' }}
+                  style={{ color: countColor }}
                 >
                   {fmtAxisValue(v, axis)}
                 </span>
                 {secondary !== null && (
                   <span
                     className="tnum w-9 shrink-0 text-right text-[10px]"
-                    style={{ color: 'var(--text-dim)' }}
+                    style={{ color: percentColor }}
                     aria-label={
                       axis === 'total'
                         ? `${fmtPct(secondary)} of regional total workforce`
