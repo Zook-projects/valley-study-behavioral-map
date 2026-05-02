@@ -100,7 +100,7 @@ export function ActiveFiltersOverlay({
       : 'all buckets';
 
   return (
-    <div className="absolute top-4 left-4 z-30 flex flex-col items-start gap-1.5 pointer-events-none">
+    <div className="absolute top-20 left-4 z-30 flex flex-col items-start gap-1.5 pointer-events-none">
       {directionActive && (
         <Chip
           label={`Filtered: ${directionLabel} · ${fmtInt(directionNumerator)} of ${fmtInt(directionDenominator)} flows shown`}
