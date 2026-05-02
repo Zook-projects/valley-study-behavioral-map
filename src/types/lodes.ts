@@ -189,3 +189,40 @@ export interface OdSummaryFile {
   aggregate: OdAggregate;
   entries: OdSummaryEntry[];
 }
+
+// ---------------------------------------------------------------------------
+// Block-level heatmap (od-blocks.json) — 2023 only, visual-only layer driving
+// the workplace/residential density heatmap painted under the flow arcs.
+// ---------------------------------------------------------------------------
+export interface BlockSegments {
+  age: AgeBlock;
+  wage: WageBlock;
+  naics3: Naics3Block;
+}
+
+export interface BlockPartner extends BlockSegments {
+  zip: string;
+  total: number;
+}
+
+export interface AnchorBlock extends BlockSegments {
+  block: string;
+  lat: number;
+  lng: number;
+  // Containing-anchor ZIP — used by the heatmap direction filter to evaluate
+  // each partner's bearing against the block's own anchor centroid (uniform
+  // logic in regional and per-anchor views).
+  anchorZip: string;
+  total: number;
+  partners: BlockPartner[];
+}
+
+export interface OdBlocksAnchor {
+  workplaceBlocks: AnchorBlock[];
+  homeBlocks: AnchorBlock[];
+}
+
+export interface OdBlocksFile {
+  latestYear: number;
+  anchors: Record<string, OdBlocksAnchor>;
+}

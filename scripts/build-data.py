@@ -31,8 +31,11 @@ from __future__ import annotations
 
 import heapq
 import json
+import math
 import sys
 from pathlib import Path
+
+import pandas as pd
 
 import lodes
 from anchors import ANCHOR_ZIPS, ANCHOR_PLACE_NAMES, CITY_CENTROIDS
@@ -45,6 +48,7 @@ from zip_places import load_census_zip_places, merge_place_seed
 # ---------------------------------------------------------------------------
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
+VAULT_DIR = PROJECT_ROOT.parent  # .../Valley Study - Behavioral Map/
 OUT_DIR = PROJECT_ROOT / "public" / "data"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -52,6 +56,16 @@ CORRIDORS_GEOJSON = OUT_DIR / "corridors.geojson"
 OSRM_CACHE_PATH = HERE / ".osrm-corridor-cache.json"
 GAZETTEER_CACHE_DIR = PROJECT_ROOT / "data" / "lodes-cache" / "gazetteer"
 ZIP_PLACES_CACHE_DIR = PROJECT_ROOT / "data" / "uszips-cache"
+
+# OnTheMap anchor xwalk — same file used by fetch-lodes.py to define the study
+# area. Carries block-level centroids (blklatdd / blklondd) for every block in
+# the 11 anchor ZCTAs, which the block heatmap pipeline reads to plot points.
+ANCHOR_XWALK = (
+    VAULT_DIR
+    / "Area Characteristics - LODES"
+    / "Metadata"
+    / "xwalk_5a50a3e01d538ef651de716dd7cd9a09.xlsx"
+)
 
 COORD_DECIMALS = 6
 OSRM_SNAP_RADIUS_M: int | None = None
@@ -338,6 +352,158 @@ def attach_corridor_paths(
 
 
 # ---------------------------------------------------------------------------
+# Block-level heatmap data (od-blocks.json)
+# ---------------------------------------------------------------------------
+def _segments_block(row) -> dict:
+    """Build the BlockSegments dict from a renamed-OD pandas row."""
+    return {
+        "age": {
+            "u29":       int(row["ageU29"]),
+            "age30to54": int(row["age30to54"]),
+            "age55plus": int(row["age55plus"]),
+        },
+        "wage": {
+            "low":  int(row["wageLow"]),
+            "mid":  int(row["wageMid"]),
+            "high": int(row["wageHigh"]),
+        },
+        "naics3": {
+            "goods":          int(row["naicsGoods"]),
+            "tradeTransUtil": int(row["naicsTradeTransUtil"]),
+            "allOther":       int(row["naicsAllOther"]),
+        },
+    }
+
+
+def build_od_blocks(
+    od_blocks_latest: pd.DataFrame,
+    block_centroids: dict[str, tuple[float, float]],
+) -> tuple[dict, dict]:
+    """
+    Build the per-anchor block-level heatmap structure for od-blocks.json.
+
+    Returns (doc, qa) where doc has the schema documented in the plan:
+      { latestYear, anchors: { <zip>: { workplaceBlocks: [...], homeBlocks: [...] } } }
+    and qa carries per-anchor totals + drop counts for reconciliation logging.
+
+    `od_blocks_latest` is the output of lodes.aggregate_od_to_block_pairs()
+    filtered to LATEST_YEAR. Required columns:
+      h_geocode, w_geocode, h_zcta, w_zcta,
+      totalJobs, ageU29, age30to54, age55plus,
+      wageLow, wageMid, wageHigh,
+      naicsGoods, naicsTradeTransUtil, naicsAllOther.
+
+    `block_centroids` maps 15-digit block GEOID → (lat, lng). Only anchor
+    blocks (the side WITHIN the anchor) need centroids — partner side is
+    aggregated by ZCTA only and identified by `partner.zip`. Blocks without
+    a centroid are dropped with a per-anchor counter.
+    """
+    df = od_blocks_latest.copy()
+
+    # Normalize NaN ZCTAs (out-of-state partner blocks) to ALL_OTHER so they
+    # become a named partner bucket rather than a NaN group key.
+    df["h_zcta"] = df["h_zcta"].fillna("ALL_OTHER").astype(str)
+    df["w_zcta"] = df["w_zcta"].fillna("ALL_OTHER").astype(str)
+
+    seg_value_cols = [
+        "totalJobs",
+        "ageU29", "age30to54", "age55plus",
+        "wageLow", "wageMid", "wageHigh",
+        "naicsGoods", "naicsTradeTransUtil", "naicsAllOther",
+    ]
+
+    def _build_side(
+        anchor: str,
+        anchor_col: str,        # "w_zcta" for inbound/workplace, "h_zcta" for outbound/home
+        anchor_block_col: str,  # "w_geocode" or "h_geocode"
+        partner_col: str,       # "h_zcta" or "w_zcta"
+    ) -> tuple[list[dict], int, int]:
+        """Return (blocks_array, total_workers, dropped_for_no_centroid)."""
+        scope = df[df[anchor_col] == anchor]
+        if scope.empty:
+            return [], 0, 0
+
+        # Aggregate per (anchor block, partner ZCTA).
+        partner_grp = (
+            scope.groupby([anchor_block_col, partner_col], as_index=False)[seg_value_cols]
+            .sum()
+        )
+        # Aggregate per anchor block (totals across all partners).
+        block_grp = (
+            scope.groupby([anchor_block_col], as_index=False)[seg_value_cols]
+            .sum()
+        )
+
+        blocks_out: list[dict] = []
+        dropped = 0
+        total_workers = 0
+        for _, brow in block_grp.iterrows():
+            block_id = str(brow[anchor_block_col])
+            centroid = block_centroids.get(block_id)
+            if centroid is None:
+                dropped += int(brow["totalJobs"])
+                continue
+            lat, lng = centroid
+            block_total = int(brow["totalJobs"])
+            total_workers += block_total
+
+            # Partner detail — sorted by descending workers for stable JSON.
+            partners_for_block = partner_grp[
+                partner_grp[anchor_block_col] == block_id
+            ].sort_values("totalJobs", ascending=False)
+            partners_out: list[dict] = []
+            for _, prow in partners_for_block.iterrows():
+                partners_out.append({
+                    "zip":   str(prow[partner_col]),
+                    "total": int(prow["totalJobs"]),
+                    **_segments_block(prow),
+                })
+
+            entry = {
+                "block":     block_id,
+                "lat":       round(float(lat), 6),
+                "lng":       round(float(lng), 6),
+                "anchorZip": anchor,
+                "total":     block_total,
+                **_segments_block(brow),
+                "partners":  partners_out,
+            }
+            blocks_out.append(entry)
+
+        # Stable order — block GEOID ascending. Keeps build deterministic.
+        blocks_out.sort(key=lambda b: b["block"])
+        return blocks_out, total_workers, dropped
+
+    anchors_out: dict[str, dict] = {}
+    qa: dict[str, dict] = {}
+    for anchor in sorted(ANCHOR_ZIPS):
+        wp_blocks, wp_total, wp_dropped = _build_side(
+            anchor, "w_zcta", "w_geocode", "h_zcta"
+        )
+        hm_blocks, hm_total, hm_dropped = _build_side(
+            anchor, "h_zcta", "h_geocode", "w_zcta"
+        )
+        anchors_out[anchor] = {
+            "workplaceBlocks": wp_blocks,
+            "homeBlocks":      hm_blocks,
+        }
+        qa[anchor] = {
+            "workplaceTotal":   wp_total,
+            "workplaceDropped": wp_dropped,
+            "homeTotal":        hm_total,
+            "homeDropped":      hm_dropped,
+            "workplaceBlocks":  len(wp_blocks),
+            "homeBlocks":       len(hm_blocks),
+        }
+
+    doc = {
+        "latestYear": LATEST_YEAR,
+        "anchors":    anchors_out,
+    }
+    return doc, qa
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main() -> int:
@@ -359,6 +525,40 @@ def main() -> int:
         f"  → RAC ZCTA-years {len(rac):,}; WAC ZCTA-years {len(wac):,}; "
         f"OD pairs {len(od_pairs):,}",
         file=sys.stderr,
+    )
+
+    # Block-level OD aggregation for the heatmap layer. Latest year only —
+    # the heatmap is purely visual and tied to the latest LODES vintage.
+    od_blocks_latest = lodes.aggregate_od_to_block_pairs(
+        od_raw[od_raw["year"] == LATEST_YEAR]
+    )
+    print(
+        f"  → OD block pairs (latest only) {len(od_blocks_latest):,}",
+        file=sys.stderr,
+    )
+
+    # Block centroids — read from the OnTheMap anchor xwalk. Covers every
+    # block within the 11 anchor ZCTAs; partner-side blocks (outside the
+    # anchors) don't need centroids because the heatmap only plots the
+    # anchor's own blocks.
+    print(f"loading anchor block centroids: {ANCHOR_XWALK.name}", file=sys.stderr)
+    xw = pd.read_excel(
+        ANCHOR_XWALK,
+        dtype={"tabblk2020": str, "zcta": str},
+    )
+    block_centroids: dict[str, tuple[float, float]] = {}
+    for _, r in xw.iterrows():
+        b = str(r["tabblk2020"])
+        try:
+            lat = float(r["blklatdd"])
+            lng = float(r["blklondd"])
+        except (TypeError, ValueError):
+            continue
+        if math.isnan(lat) or math.isnan(lng):
+            continue
+        block_centroids[b] = (lat, lng)
+    print(
+        f"  → {len(block_centroids):,} anchor block centroids", file=sys.stderr,
     )
 
     # ------------------------- Corridor graph ------------------------------
@@ -548,6 +748,11 @@ def main() -> int:
     wac_doc = {"latestYear": LATEST_YEAR, "aggregate": wac_aggregate, "entries": wac_entries}
     od_doc = {"latestYear": LATEST_YEAR, "aggregate": od_aggregate, "entries": od_entries}
 
+    print("\nbuilding od-blocks.json…", file=sys.stderr)
+    od_blocks_doc, od_blocks_qa = build_od_blocks(
+        od_blocks_latest, block_centroids
+    )
+
     # ------------------------- Reconciliation ------------------------------
     print("\nreconciling LODES totals against flows…", file=sys.stderr)
     wac_latest_total = sum(int(e["latest"]["totalJobs"]) for e in wac_entries)
@@ -616,6 +821,73 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # ------------------------- Block-heatmap reconciliation ----------------
+    # Block-level totals must match the OD ZIP-level totals (same universe —
+    # both sum the same OD pairs, just at different aggregation grains).
+    # Comparing against RAC instead of OD-outbound would conflate the known
+    # CO-only-OD gap (residents working out-of-state) with block-aggregation
+    # bugs.
+    print("\nreconciling od-blocks against OD totals…", file=sys.stderr)
+    block_drift_violations = 0
+    block_drift_tol = 0.005
+    total_dropped_workers = 0
+    total_anchor_workers = 0
+    for anchor in sorted(ANCHOR_ZIPS):
+        qa = od_blocks_qa[anchor]
+        # OD-in (sum of pairs where w_zip == anchor) and OD-out (h_zip == anchor)
+        # — identical universe to the block aggregation, so totals must match
+        # within rounding.
+        od_in = sum(
+            f["workerCount"] for f in flows_inbound_out if f["destZip"] == anchor
+        )
+        od_out = sum(
+            f["workerCount"] for f in flows_outbound_out if f["originZip"] == anchor
+        )
+        wp_drift = abs(qa["workplaceTotal"] - od_in) / max(od_in, 1)
+        hm_drift = abs(qa["homeTotal"] - od_out) / max(od_out, 1)
+        total_dropped_workers += qa["workplaceDropped"] + qa["homeDropped"]
+        total_anchor_workers += od_in + od_out
+        if wp_drift > block_drift_tol or hm_drift > block_drift_tol:
+            block_drift_violations += 1
+            print(
+                f"  ! {anchor}: wp_blocks_total={qa['workplaceTotal']:,} vs "
+                f"od_in={od_in:,} ({wp_drift:.2%}); "
+                f"hm_blocks_total={qa['homeTotal']:,} vs od_out={od_out:,} "
+                f"({hm_drift:.2%})",
+                file=sys.stderr,
+            )
+        if qa["workplaceDropped"] or qa["homeDropped"]:
+            print(
+                f"    {anchor}: dropped_workers wp={qa['workplaceDropped']:,} "
+                f"hm={qa['homeDropped']:,} (block missing centroid)",
+                file=sys.stderr,
+            )
+    if block_drift_violations:
+        print(
+            f"  ! {block_drift_violations} anchors with block↔OD drift > "
+            f"{block_drift_tol:.1%}",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"  block↔OD totals reconcile within ±{block_drift_tol:.1%} "
+            f"for all 11 anchors",
+            file=sys.stderr,
+        )
+    drop_rate = total_dropped_workers / max(total_anchor_workers, 1)
+    if drop_rate > 0.01:
+        print(
+            f"  ! missing-centroid drop rate {drop_rate:.2%} exceeds 1% — "
+            f"check the anchor xwalk for incomplete coverage",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"  missing-centroid drop rate = {drop_rate:.2%} "
+            f"({total_dropped_workers:,} of {total_anchor_workers:,} workers)",
+            file=sys.stderr,
+        )
+
     # ------------------------- Per-anchor QA -------------------------------
     print("\nQA — per-anchor totals (latest year):", file=sys.stderr)
     print(f"  {'ZIP':>5}  {'Place':<22} {'WAC':>8} {'OD-in':>8}  {'RAC':>8} {'OD-out':>8}", file=sys.stderr)
@@ -666,6 +938,7 @@ def main() -> int:
     rac_path = OUT_DIR / "rac.json"
     wac_path = OUT_DIR / "wac.json"
     od_path = OUT_DIR / "od-summary.json"
+    od_blocks_path = OUT_DIR / "od-blocks.json"
 
     inbound_path.write_text(json.dumps(flows_inbound_out, separators=(",", ":")))
     outbound_path.write_text(json.dumps(flows_outbound_out, separators=(",", ":")))
@@ -674,9 +947,10 @@ def main() -> int:
     rac_path.write_text(json.dumps(rac_doc, separators=(",", ":")))
     wac_path.write_text(json.dumps(wac_doc, separators=(",", ":")))
     od_path.write_text(json.dumps(od_doc, separators=(",", ":")))
+    od_blocks_path.write_text(json.dumps(od_blocks_doc, separators=(",", ":")))
 
     for path in (inbound_path, outbound_path, zips_path, corridors_path,
-                 rac_path, wac_path, od_path):
+                 rac_path, wac_path, od_path, od_blocks_path):
         print(f"wrote {path.name}  ({path.stat().st_size:,} bytes)", file=sys.stderr)
 
     # Drop legacy outputs.

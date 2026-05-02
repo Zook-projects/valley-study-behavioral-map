@@ -53,8 +53,8 @@ export function MethodologyFooter({ bucketBreaks, amberSwatches }: Props) {
             <strong>Study area.</strong> The 11 valley anchor ZIPs span the
             Colorado River and Roaring Fork corridors from De Beque to Aspen:
             81601 Glenwood Springs, 81611 Aspen, 81615 Snowmass Village,
-            81621 Basalt, 81623 Carbondale, 81630 De Beque, 81635 Battlement
-            Mesa, 81647 New Castle, 81650 Rifle, 81652 Silt, and 81654 Old
+            81621 Basalt, 81623 Carbondale, 81630 De Beque, 81635 Parachute,
+            81647 New Castle, 81650 Rifle, 81652 Silt, and 81654 Old
             Snowmass.
           </p>
           <p className="mb-1.5">

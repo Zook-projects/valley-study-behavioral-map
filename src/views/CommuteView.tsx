@@ -19,6 +19,8 @@ import { MapCanvas } from '../components/MapCanvas';
 import { DashboardTile } from '../components/DashboardTile';
 import { BottomCardStrip } from '../components/BottomCardStrip';
 import { ActiveFiltersOverlay } from '../components/ActiveFiltersOverlay';
+import { HeatmapLegend } from '../components/HeatmapLegend';
+import type { ViewLayer } from '../components/ViewLayerToggle';
 import type {
   ActiveCorridorAggregation,
   CorridorFlowEntry,
@@ -32,7 +34,8 @@ import type {
   SegmentFilter,
   ZipMeta,
 } from '../types/flow';
-import type { OdSummaryFile, RacFile, WacFile } from '../types/lodes';
+import type { OdBlocksFile, OdSummaryFile, RacFile, WacFile } from '../types/lodes';
+import { buildHeatmapGeoJson } from '../lib/heatmapPoints';
 import {
   applySegmentFilter,
   detailForNonAnchorOrigin,
@@ -252,6 +255,10 @@ export function CommuteView() {
   const [odSummary, setOdSummary] = useState<OdSummaryFile | null>(null);
   const [driveDistance, setDriveDistance] = useState<DriveDistanceMap | null>(null);
   const [passThrough, setPassThrough] = useState<PassThroughFile | null>(null);
+  // Block-level OD data (latest year only) — drives the workplace/residential
+  // density heatmap painted under the flow arcs. Optional load: on a failed
+  // fetch the heatmap layer simply doesn't render.
+  const [odBlocks, setOdBlocks] = useState<OdBlocksFile | null>(null);
   const [mode, setMode] = useState<Mode>('inbound');
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
   // Non-anchor place bundle. Set when the user selects a real ZIP that isn't
@@ -271,6 +278,16 @@ export function CommuteView() {
     { place: string; zips: string[] } | null
   >(null);
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('all');
+  // Spatial visualization layer — corridor (flow arcs) is the default; user
+  // can flip to heatmap (block-level density) via the DashboardTile toggle.
+  const [viewLayer, setViewLayer] = useState<ViewLayer>('corridor');
+  // Regional-view mode — drives the corridor + heatmap visuals when no
+  // anchor is selected (replaces the old "Aggregate Regional Flows" static
+  // label). Decoupled from `mode` so toggling here in regional view does
+  // NOT bleed into the left dashboard panel, bottom card strip, or tooltips
+  // — those keep using the user's `mode` state and the deduped regional
+  // flow universe.
+  const [regionalViewMode, setRegionalViewMode] = useState<Mode>('inbound');
   // Segment filter — slices every cross-LODES OD aggregation by one of three
   // axes (age / wage / industry NAICS-3) at a time. LODES does not publish
   // joint cells across axes, so the filter UX commits to one axis at a time.
@@ -360,8 +377,13 @@ export function CommuteView() {
       fetch(`${DATA_BASE}/flows-passthrough.json`)
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null),
+      // Block-level OD — latest LODES year only, drives the heatmap layer.
+      // Optional: on a failed load the heatmap layer is skipped silently.
+      fetch(`${DATA_BASE}/od-blocks.json`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
     ])
-      .then(([fi, fo, z, cg, rac, wac, od, dd, pt]: [
+      .then(([fi, fo, z, cg, rac, wac, od, dd, pt, ob]: [
         FlowRow[],
         FlowRow[],
         ZipMeta[],
@@ -371,6 +393,7 @@ export function CommuteView() {
         OdSummaryFile,
         DriveDistanceMap | null,
         PassThroughFile | null,
+        OdBlocksFile | null,
       ]) => {
         if (cancelled) return;
         // Guard against an old cached JSON (no per-pair segments block) —
@@ -394,6 +417,7 @@ export function CommuteView() {
         setOdSummary(od);
         setDriveDistance(dd);
         setPassThrough(pt);
+        setOdBlocks(ob);
       })
       .catch((err) => console.error('data load failed', err));
     return () => {
@@ -508,6 +532,89 @@ export function CommuteView() {
     if (!corridorIndex || !flowIndex) return null;
     return buildVisibleCorridorMap(corridorIndex, flowIndex, visibleFlows, effectiveMode);
   }, [corridorIndex, flowIndex, visibleFlows, effectiveMode]);
+
+  // ----- Visual-only override (corridor + heatmap rendering) ----------------
+  // In aggregate view the user can flip the ModeToggle to choose whether the
+  // map paints inbound or outbound — the rest of the app (left panel, bottom
+  // cards, tooltips, bucket-breaks scale) keeps consuming the union dataset
+  // via `effectiveMode === 'regional'` so the underlying narrative stays
+  // aggregated. Outside aggregate view these visual values fall through to
+  // the canonical mode-driven values.
+  const visualMode: Mode =
+    selectionKind === 'aggregate' ? regionalViewMode : effectiveMode;
+  const visualFlows: FlowRow[] | null =
+    selectionKind === 'aggregate'
+      ? regionalViewMode === 'inbound'
+        ? flowsInbound
+        : flowsOutbound
+      : flows;
+  const visualDirectionFiltered: FlowRow[] =
+    selectionKind === 'aggregate'
+      ? regionalViewMode === 'inbound'
+        ? directionFilteredInbound
+        : directionFilteredOutbound
+      : directionFilteredFlows;
+  const visualVisibleFlows = useMemo(() => {
+    if (selectionKind === 'non-anchor') return directionFilteredInbound;
+    return filterForSelection(
+      visualDirectionFiltered,
+      selectedZip,
+      visualMode,
+    );
+  }, [
+    selectionKind,
+    directionFilteredInbound,
+    visualDirectionFiltered,
+    selectedZip,
+    visualMode,
+  ]);
+  const visualVisibleCorridorMap = useMemo(() => {
+    if (!corridorIndex || !flowIndex) return null;
+    return buildVisibleCorridorMap(
+      corridorIndex,
+      flowIndex,
+      visualVisibleFlows,
+      visualMode,
+    );
+  }, [corridorIndex, flowIndex, visualVisibleFlows, visualMode]);
+
+  // Heatmap GeoJSON — block-level OD density under the active filter set.
+  // null when the layer should hide (non-anchor selection or unloaded data).
+  // Mode is the visual override (regionalViewMode in aggregate view, the
+  // canonical mode otherwise) so the heatmap responds to the regional-view
+  // toggle alongside the corridor arcs.
+  const heatmapData = useMemo(() => {
+    if (!odBlocks || !zips) return null;
+    return buildHeatmapGeoJson({
+      odBlocks,
+      zips,
+      mode: visualMode,
+      selectedZip,
+      nonAnchorBundle,
+      directionFilter,
+      segmentFilter,
+      selectedPartner,
+    });
+  }, [
+    odBlocks,
+    zips,
+    visualMode,
+    selectedZip,
+    nonAnchorBundle,
+    directionFilter,
+    segmentFilter,
+    selectedPartner,
+  ]);
+
+  // Selecting a non-anchor place drops the heatmap data to null upstream
+  // (heatmapPoints returns null for non-anchor). If the user happened to be
+  // in heatmap view at the moment of selection, force the toggle back to
+  // corridor so they don't end up staring at an empty map. Heatmap remains
+  // available — they can flip back manually after returning to anchor or
+  // aggregate view.
+  useEffect(() => {
+    if (selectionKind === 'non-anchor') setViewLayer('corridor');
+  }, [selectionKind]);
 
   // Reference distribution for the corridor width buckets — built from the
   // active mode's unfiltered flow set (ignoring direction filter and
@@ -786,6 +893,10 @@ export function CommuteView() {
         zips={zips}
         mode={mode}
         onModeChange={handleModeChange}
+        viewMode={selectionKind === 'aggregate' ? regionalViewMode : mode}
+        onViewModeChange={
+          selectionKind === 'aggregate' ? setRegionalViewMode : handleModeChange
+        }
         selectedZip={selectedZip}
         onSelectZip={handleSelectZip}
         selectionKind={selectionKind}
@@ -796,6 +907,8 @@ export function CommuteView() {
         onSelectPartner={handleSelectPartner}
         directionFilter={directionFilter}
         onDirectionChange={handleDirectionChange}
+        viewLayer={viewLayer}
+        onViewLayerChange={setViewLayer}
         bucketBreaks={bucketBreaks}
         topCorridorInbound={topCorridorInbound}
         topCorridorOutbound={topCorridorOutbound}
@@ -809,16 +922,16 @@ export function CommuteView() {
             pre-mobile layout where overlays and the strip stack via z-index. */}
         <div className="relative w-full h-[80vh] md:h-auto md:absolute md:inset-0">
         <MapCanvas
-          flows={flows}
+          flows={visualFlows}
           zips={zips}
-          visibleFlows={visibleFlows}
+          visibleFlows={visualVisibleFlows}
           bundleFlows={bundleFlows}
           nonAnchorBundle={nonAnchorBundle}
-          visibleCorridorMap={visibleCorridorMap}
+          visibleCorridorMap={visualVisibleCorridorMap}
           bucketBreaks={bucketBreaks}
           selectedZip={selectedZip}
           selectedPartner={selectedPartner}
-          mode={effectiveMode}
+          mode={visualMode}
           onSelectZip={handleSelectZip}
           hoveredCorridorId={hover?.corridorId ?? null}
           onHoverCorridor={(corridorId, payload) => {
@@ -843,6 +956,20 @@ export function CommuteView() {
             // hover until the user moves off so the dismissal sticks.
             setSuppressedHover(hover?.corridorId ?? null);
           }}
+          heatmapData={heatmapData}
+          viewLayer={viewLayer}
+        />
+
+        {/* Block-level heatmap legend — bottom-left, above the bottom card
+            strip and to the right of the left dashboard panel. Hidden when
+            heatmapData is null (non-anchor selection / unloaded data). */}
+        <HeatmapLegend
+          mode={visualMode}
+          selectedZip={selectedZip}
+          zips={zips}
+          segmentFilter={segmentFilter}
+          visible={heatmapData != null && viewLayer === 'heatmap'}
+          bottomOffset={bottomStripHeight + 16}
         />
 
         {/* Credit chip — docked to the right edge just above the bottom

@@ -5,6 +5,7 @@ import type { DirectionFilter, FlowRow, Mode, ZipMeta } from '../types/flow';
 import type { DriveDistanceMap } from '../lib/flowQueries';
 import { ModeToggle } from './ModeToggle';
 import { DirectionToggle } from './DirectionToggle';
+import { ViewLayerToggle, type ViewLayer } from './ViewLayerToggle';
 import { ZipSelector } from './ZipSelector';
 import { StatsAggregated } from './StatsAggregated';
 import { StatsForZip } from './StatsForZip';
@@ -29,6 +30,13 @@ interface Props {
   zips: ZipMeta[];
   mode: Mode;
   onModeChange: (m: Mode) => void;
+  // Toggle binding for ModeToggle. In aggregate view this is wired to
+  // regionalViewMode (a separate state that only drives the corridor +
+  // heatmap visuals); in anchor view it mirrors `mode`. Decoupled so the
+  // stats panels (which read `mode`) stay aggregated when the user flips
+  // the regional-view toggle.
+  viewMode: Mode;
+  onViewModeChange: (m: Mode) => void;
   selectedZip: string | null;
   onSelectZip: (z: string | null) => void;
   // Selection class — drives the toggle/notice swap and the StatsForZip
@@ -52,6 +60,10 @@ interface Props {
   onSelectPartner: (p: { place: string; zips: string[] } | null) => void;
   directionFilter: DirectionFilter;
   onDirectionChange: (d: DirectionFilter) => void;
+  // Spatial visualization layer — corridor (flow arcs) vs heatmap
+  // (block-level density). Toggle sits directly above DirectionToggle.
+  viewLayer: ViewLayer;
+  onViewLayerChange: (v: ViewLayer) => void;
   // Quantile breaks for the corridor width × luminance legend. Recomputed
   // upstream when mode/visible flows change.
   bucketBreaks: [number, number, number, number];
@@ -75,6 +87,8 @@ export function DashboardTile({
   zips,
   mode,
   onModeChange,
+  viewMode,
+  onViewModeChange,
   selectedZip,
   onSelectZip,
   selectionKind,
@@ -85,6 +99,8 @@ export function DashboardTile({
   onSelectPartner,
   directionFilter,
   onDirectionChange,
+  viewLayer,
+  onViewLayerChange,
   bucketBreaks,
   topCorridorInbound,
   topCorridorOutbound,
@@ -128,11 +144,13 @@ export function DashboardTile({
             origin is the selected place, so outbound has no meaning here.
             A "Back to aggregate view" link sits directly beneath so the
             user can clear the lock without having to re-target the selector. */}
+        {/* viewMode is bound to regionalViewMode in aggregate view (visuals
+            only) and to the user's mode in anchor view; non-anchor stays
+            locked to inbound via the disabled flag. */}
         <ModeToggle
-          mode={mode}
-          onChange={onModeChange}
+          mode={viewMode}
+          onChange={onViewModeChange}
           disabled={selectionKind === 'non-anchor'}
-          aggregate={selectionKind === 'aggregate'}
         />
         {selectionKind === 'non-anchor' && nonAnchorBundle && (
           <div className="-mt-2">
@@ -146,6 +164,10 @@ export function DashboardTile({
             </button>
           </div>
         )}
+
+        {/* View-layer toggle (sits above direction — picks corridor flow
+            arcs vs block-level heatmap). */}
+        <ViewLayerToggle value={viewLayer} onChange={onViewLayerChange} />
 
         {/* Direction toggle (independent — composes with mode) */}
         <DirectionToggle value={directionFilter} onChange={onDirectionChange} />

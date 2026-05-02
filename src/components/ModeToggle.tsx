@@ -1,8 +1,11 @@
 // Inbound / Outbound segmented control — mirrors the "Live Map / Fleet / Routes"
-// tab pattern in the Ron Design inspiration. In the aggregate (no-ZIP-selected)
-// view the toggle is replaced by a single non-interactive "Aggregate Regional
-// Flows" label — the map renders the deduped union of inbound + outbound and
-// neither single-direction view is meaningful at the regional scale.
+// tab pattern in the Ron Design inspiration. The toggle renders in every view:
+//  • anchor view → drives the user's mode (left panel + map both react)
+//  • aggregate view → drives a separate `regionalViewMode` upstream that only
+//    re-skins the corridor + heatmap visuals; the left panel / cards / tooltip
+//    stay aggregated across both directions.
+//  • non-anchor view → disabled (locked to inbound — anchor-inbound is the
+//    only dataset whose origins include non-anchor places).
 
 import type { Mode } from '../types/flow';
 
@@ -15,35 +18,9 @@ interface Props {
   // the non-anchor selection). Buttons are non-interactive but keep their
   // active styling so the lock reads visually.
   disabled?: boolean;
-  // When true, render a single "Aggregate Regional Flows" label instead of
-  // the two-button group. Used in the aggregate (no-ZIP-selected) view.
-  aggregate?: boolean;
 }
 
-export function ModeToggle({ mode, onChange, disabled = false, aggregate = false }: Props) {
-  if (aggregate) {
-    return (
-      <div
-        role="status"
-        aria-label="Aggregate Regional Flows"
-        className="flex p-1 rounded-lg border"
-        style={{
-          background: 'rgba(255,255,255,0.03)',
-          borderColor: 'var(--panel-border)',
-        }}
-      >
-        <div
-          className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md text-center"
-          style={{
-            background: 'var(--accent)',
-            color: '#1a1207',
-          }}
-        >
-          Aggregate Regional Flows
-        </div>
-      </div>
-    );
-  }
+export function ModeToggle({ mode, onChange, disabled = false }: Props) {
   return (
     <div
       role="tablist"

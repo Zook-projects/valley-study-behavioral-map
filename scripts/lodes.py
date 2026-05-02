@@ -211,6 +211,33 @@ def aggregate_od_to_zip_pairs(df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
+def aggregate_od_to_block_pairs(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregate OD rows to (h_geocode, w_geocode, h_zcta, w_zcta, year) totals
+    while preserving block-level granularity. Used by the block-level heatmap
+    pipeline; ZCTA-side columns are kept as group keys so per-anchor filtering
+    in build-data.py doesn't need a second xwalk join.
+
+    Out-of-state (NaN ZCTA) endpoints are kept as NaN — the heatmap caller
+    drops blocks missing centroid coordinates, so external endpoints fall out
+    naturally there.
+    """
+    df = df.copy()
+    value_cols = list(OD_COLS.keys())
+    grouped = (
+        df.groupby(
+            ["h_geocode", "w_geocode", "h_zcta", "w_zcta", "year"],
+            as_index=False,
+            dropna=False,
+        )[value_cols]
+        .sum()
+        .sort_values(["h_geocode", "w_geocode", "year"])
+        .reset_index(drop=True)
+    )
+    grouped = grouped.rename(columns=OD_COLS)
+    return grouped
+
+
 # ---------------------------------------------------------------------------
 # Per-ZIP and aggregate panel builders
 # ---------------------------------------------------------------------------

@@ -39,7 +39,7 @@ ANCHOR_PLACE_NAMES: dict[str, str] = {
     "81621": "Basalt",
     "81623": "Carbondale",
     "81630": "De Beque",
-    "81635": "Battlement Mesa",
+    "81635": "Parachute",
     "81647": "New Castle",
     "81650": "Rifle",
     "81652": "Silt",

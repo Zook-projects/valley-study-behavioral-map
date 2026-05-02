@@ -315,28 +315,58 @@ export function StatsForZip({
               </li>
             );
           })}
-          {selfFlow > 0 && (
-            <li className="text-xs">
-              <div className="flex justify-between mb-0.5">
-                <span style={{ color: 'var(--text-h)' }}>
-                  Within-ZIP commute{' '}
-                  <span className="tnum" style={{ color: 'var(--text-dim)' }}>· {meta.zip}</span>
-                </span>
-                <span className="tnum" style={{ color: 'var(--text-dim)' }}>
-                  {fmtInt(selfFlow)} · {fmtPct(selfFlow / Math.max(1, anchorTotal))}
-                </span>
-              </div>
-              <div className="h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                <div
-                  className="h-full"
+          {selfFlow > 0 && (() => {
+            // The within-ZIP commute row behaves like a top-10 partner row,
+            // but the partner is the anchor's own ZIP — clicking it scopes
+            // visualizations to the self-flow only (live-and-work cohort).
+            const isSelected =
+              selectedPartner != null &&
+              selectedPartner.zips.length === 1 &&
+              selectedPartner.zips[0] === meta.zip;
+            const isOtherSelected = selectedPartner != null && !isSelected;
+            return (
+              <li className="text-xs">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectPartner(
+                      isSelected ? null : { place: meta.place, zips: [meta.zip] },
+                    )
+                  }
+                  aria-pressed={isSelected}
+                  className="w-full text-left rounded-md px-1.5 py-1 transition-colors"
                   style={{
-                    width: `${(selfFlow / maxCount) * 100}%`,
-                    background: 'rgba(200,205,215,0.55)',
+                    background: isSelected
+                      ? 'var(--accent-soft)'
+                      : 'transparent',
+                    border: `1px solid ${isSelected ? 'var(--accent)' : 'transparent'}`,
+                    opacity: isOtherSelected ? 0.45 : 1,
+                    cursor: 'pointer',
                   }}
-                />
-              </div>
-            </li>
-          )}
+                >
+                  <div className="flex justify-between mb-0.5">
+                    <span style={{ color: isSelected ? 'var(--accent)' : 'var(--text-h)' }}>
+                      Within-ZIP commute{' '}
+                      <span className="tnum" style={{ color: 'var(--text-dim)' }}>· {meta.zip}</span>
+                    </span>
+                    <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                      {fmtInt(selfFlow)} · {fmtPct(selfFlow / Math.max(1, anchorTotal))}
+                    </span>
+                  </div>
+                  <div className="h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${(selfFlow / maxCount) * 100}%`,
+                        background: isSelected ? 'var(--accent)' : 'rgba(200,205,215,0.55)',
+                        opacity: isSelected ? 1 : 0.8,
+                      }}
+                    />
+                  </div>
+                </button>
+              </li>
+            );
+          })()}
           {remainderCount > 0 && (
             <li className="text-xs">
               <div className="flex justify-between mb-0.5">

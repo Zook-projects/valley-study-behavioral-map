@@ -4,7 +4,10 @@
 // that traverses it.
 
 import { useEffect, useRef } from 'react';
-import maplibregl, { type Map as MLMap } from 'maplibre-gl';
+import maplibregl, {
+  type GeoJSONSource,
+  type Map as MLMap,
+} from 'maplibre-gl';
 import { CORRIDOR_BUCKET_SEMANTIC, corridorStyle } from '../lib/arcMath';
 import { flowIdOf } from '../lib/corridors';
 import { ANCHOR_ZIPS } from '../lib/flowQueries';
@@ -56,6 +59,22 @@ interface Props {
     payload: { aggregation: ActiveCorridorAggregation; clientX: number; clientY: number },
   ) => void;
   onClickEmpty: () => void;
+  // Heatmap data — workplace/residential block density, latest LODES year.
+  // null hides the layer entirely (non-anchor selection or unloaded data).
+  // Empty FeatureCollection keeps the layer visible but with no density.
+  heatmapData: {
+    type: 'FeatureCollection';
+    features: Array<{
+      type: 'Feature';
+      geometry: { type: 'Point'; coordinates: [number, number] };
+      properties: { weight: number; block: string };
+    }>;
+  } | null;
+  // Active visualization layer — 'corridor' shows the SVG flow arcs and hides
+  // the heatmap; 'heatmap' shows the heatmap and hides arcs / off-corridor
+  // strands. ZIP nodes + labels remain visible in both modes so selection
+  // still works in heatmap view.
+  viewLayer: 'corridor' | 'heatmap';
 }
 
 // CARTO Dark Matter style — open, no API key required.
@@ -89,6 +108,8 @@ export function MapCanvas({
   onHoverCorridor,
   onClickCorridor,
   onClickEmpty,
+  heatmapData,
+  viewLayer,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -174,6 +195,19 @@ export function MapCanvas({
         );
       }
 
+      // Hide every basemap symbol (label) layer — place names, road shields,
+      // POI / water labels. The map's own ZIP-node labels remain (they live
+      // in the SVG overlay, not the MapLibre style), so anchor identification
+      // stays intact while the basemap goes silent behind the heatmap / arcs.
+      for (const layer of style.layers) {
+        if (layer.type !== 'symbol') continue;
+        try {
+          map.setLayoutProperty(layer.id, 'visibility', 'none');
+        } catch {
+          /* layer may already be hidden — skip */
+        }
+      }
+
       for (const layer of style.layers) {
         if (layer.type !== 'line') continue;
         const id = layer.id;
@@ -210,58 +244,204 @@ export function MapCanvas({
     };
   }, []);
 
+  // ---- Heatmap layer (block-level OD density) ------------------------------
+  // Registers a single GeoJSON source + heatmap layer on style load. The
+  // source data is updated by a sibling effect when `heatmapData` changes.
+  // Layer is inserted before the first symbol layer so basemap labels stay
+  // crisp on top; SVG flow arcs (rendered above the canvas) always paint
+  // over the heatmap.
+  const HEATMAP_SOURCE_ID = 'od-blocks-heatmap';
+  const HEATMAP_LAYER_ID = 'od-blocks-heatmap-layer';
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const ensureLayer = () => {
+      if (map.getSource(HEATMAP_SOURCE_ID)) return;
+      const style = map.getStyle();
+      if (!style?.layers) return;
+      map.addSource(HEATMAP_SOURCE_ID, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      const firstSymbolLayerId =
+        style.layers.find((l) => l.type === 'symbol')?.id;
+      map.addLayer(
+        {
+          id: HEATMAP_LAYER_ID,
+          type: 'heatmap',
+          source: HEATMAP_SOURCE_ID,
+          // Density is relative within the visible window; we don't cap the
+          // weight expression so the densest block in the active filter set
+          // always reaches the brightest stop.
+          paint: {
+            // Weight is pre-normalized to 0..1 in heatmapPoints.ts (each
+            // block's worker count divided by the scope-max — region-wide
+            // in regional view, anchor-wide in anchor view). Holding
+            // intensity at 1 across all zooms keeps the density at a
+            // kernel-center proportional to that normalized weight, so the
+            // step bands in heatmap-color read as fixed % of scope-max
+            // (≥20/40/60/80%) regardless of zoom.
+            'heatmap-weight': ['get', 'weight'],
+            // A larger radius is the key to producing the LEHD OnTheMap
+            // contour-band look — adjacent block kernels need to overlap
+            // heavily so the underlying density field is continuous, which
+            // then lets the `step` color expression carve clean discrete
+            // contour polygons through it. Small radii leave each block as
+            // an isolated halo with band rings, which reads more like a
+            // glow than the LEHD choropleth.
+            // Exponential interpolation (base 2) keeps the kernel tight at
+            // low zoom — at zoom 9 the radius is ~7px, at zoom 11 ~13px,
+            // only at zoom 13–14 does it grow to the 40–70px range needed
+            // for kernels to merge into LEHD-style contour bands. A flat
+            // linear interpolation here over-smears the heatmap when the
+            // user is zoomed out across the valley.
+            'heatmap-radius': [
+              'interpolate', ['exponential', 2], ['zoom'],
+              8, 6,
+              14, 70,
+            ],
+            // Intensity slightly above 1 lets quintile-binned weights (band
+            // centers 0.10..0.90) push density above the top band cutoff
+            // even when kernel falloff dilutes the peak — keeps the highest
+            // quintile reading as the brightest band, not the second.
+            'heatmap-intensity': 1.4,
+            'heatmap-opacity': 0.85,
+            // 5 discrete white bands — no gradient between stops. Mirrors
+            // the LEHD OnTheMap discrete-choropleth heatmap style. MapLibre
+            // accepts `step` expressions in heatmap-color, producing hard
+            // edges between bands instead of smooth interpolation.
+            'heatmap-color': [
+              'step', ['heatmap-density'],
+              'rgba(255,255,255,0)',     // density < 0.20 → transparent
+              0.20, 'rgba(255,255,255,0.20)',
+              0.40, 'rgba(255,255,255,0.45)',
+              0.60, 'rgba(255,255,255,0.70)',
+              0.80, 'rgba(255,255,255,0.95)',
+            ],
+          },
+          layout: { visibility: 'none' },
+        },
+        firstSymbolLayerId,
+      );
+    };
+    if (map.isStyleLoaded()) ensureLayer();
+    map.on('style.load', ensureLayer);
+    return () => {
+      map.off('style.load', ensureLayer);
+    };
+  }, []);
+
+  // Push heatmap data + visibility on every change. Keeping this in its own
+  // effect lets the layer-registration effect run once while filter changes
+  // only swap the source's GeoJSON without churning the layer.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource(HEATMAP_SOURCE_ID) as
+        | GeoJSONSource
+        | undefined;
+      if (!src) return;
+      if (heatmapData == null || viewLayer !== 'heatmap') {
+        // Either no data, or the user has the corridor layer active. Keep
+        // the source primed (empty) so the next show is instant.
+        if (heatmapData == null) {
+          src.setData({ type: 'FeatureCollection', features: [] });
+        } else {
+          src.setData(heatmapData);
+        }
+        if (map.getLayer(HEATMAP_LAYER_ID)) {
+          map.setLayoutProperty(HEATMAP_LAYER_ID, 'visibility', 'none');
+        }
+        return;
+      }
+      src.setData(heatmapData);
+      if (map.getLayer(HEATMAP_LAYER_ID)) {
+        map.setLayoutProperty(HEATMAP_LAYER_ID, 'visibility', 'visible');
+      }
+    };
+    if (map.isStyleLoaded() && map.getSource(HEATMAP_SOURCE_ID)) {
+      apply();
+    } else {
+      // Wait for either the style or the layer-registration effect.
+      map.once('idle', apply);
+    }
+  }, [heatmapData, viewLayer]);
+
   // ---- Fit bounds when a non-anchor bundle is selected ---------------------
   // Frame the bundle's ZIP centroids together with the 11 workplace anchors so
   // the user sees both ends of the residence → workplace commute. Skips when
   // any centroid is missing (synthetic ZIPs / unknown geography). When the
-  // bundle clears (back to anchor / aggregate), the map is left at the user's
-  // current view — no auto-resetting on every selection change.
+  // bundle clears (back to aggregate), the map flies back to the original
+  // regional bounds so the user always returns to the same starting frame.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    // Determine the set of ZIPs to fit:
-    //   non-anchor selected → bundle ZIPs ∪ ANCHOR_ZIPS (residence + anchor
-    //                          workplaces both in frame).
-    //   anchor selected     → ANCHOR_ZIPS (regional context — selected anchor
-    //                          plus the rest of the anchor cluster).
-    //   aggregate / ALL_OTHER → no auto-fit (user keeps manual viewport).
-    let targetZips: Set<string> | null = null;
+    // Branches:
+    //   non-anchor selected → fit to bundle ZIPs ∪ ANCHOR_ZIPS (residence +
+    //                         anchor workplaces both in frame).
+    //   anchor selected     → flyTo the anchor's centroid at a tighter zoom
+    //                         so the user can read the anchor's interior
+    //                         (block heatmap or selection-narrowed arcs).
+    //   aggregate / ALL_OTHER → fit back to the regional bounds used at
+    //                          map init so deselection always returns the
+    //                          user to the full-region frame.
     if (nonAnchorBundle) {
-      targetZips = new Set<string>([
+      const targetZips = new Set<string>([
         ...nonAnchorBundle.zips,
         ...ANCHOR_ZIPS,
       ]);
+      const lats: number[] = [];
+      const lngs: number[] = [];
+      for (const z of zips) {
+        if (!targetZips.has(z.zip)) continue;
+        if (z.lat == null || z.lng == null) continue;
+        lats.push(z.lat);
+        lngs.push(z.lng);
+      }
+      if (lats.length < 2) return;
+      const minLng = Math.min(...lngs);
+      const maxLng = Math.max(...lngs);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      map.fitBounds(
+        [
+          [minLng, minLat],
+          [maxLng, maxLat],
+        ],
+        {
+          padding: { top: 100, right: 100, bottom: 300, left: 100 },
+          duration: 700,
+          maxZoom: 9,
+        },
+      );
     } else if (selectedZip && ANCHOR_ZIPS.includes(selectedZip)) {
-      targetZips = new Set<string>(ANCHOR_ZIPS);
-    }
-    if (!targetZips) return;
-    const lats: number[] = [];
-    const lngs: number[] = [];
-    for (const z of zips) {
-      if (!targetZips.has(z.zip)) continue;
-      if (z.lat == null || z.lng == null) continue;
-      lats.push(z.lat);
-      lngs.push(z.lng);
-    }
-    if (lats.length < 2) return;
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    // Bottom padding accounts for the ~250-px bottom card strip + breathing
-    // room. maxZoom 9 keeps the regional scale legible (10 pulled in too
-    // tightly on the smaller anchor pair geometries).
-    map.fitBounds(
-      [
-        [minLng, minLat],
-        [maxLng, maxLat],
-      ],
-      {
-        padding: { top: 100, right: 100, bottom: 300, left: 100 },
+      // Zoom into the selected anchor — centroid + a fixed zoom that frames
+      // the anchor's block-level structure (downtown core + surrounding
+      // residential/employment fabric) without losing nearby context.
+      const meta = zips.find((z) => z.zip === selectedZip);
+      if (!meta || meta.lat == null || meta.lng == null) return;
+      map.flyTo({
+        center: [meta.lng, meta.lat],
+        zoom: 11.5,
         duration: 700,
-        maxZoom: 9,
-      },
-    );
+      });
+    } else {
+      // Aggregate / ALL_OTHER → restore the regional starting bounds.
+      // Mirrors the init bounds + bottom padding for the card strip so the
+      // restored view matches what the user first sees.
+      map.fitBounds(
+        [
+          [-108.45, 39.05],
+          [-106.65, 39.85],
+        ],
+        {
+          padding: { top: 100, right: 100, bottom: 300, left: 100 },
+          duration: 700,
+          maxZoom: 9,
+        },
+      );
+    }
   }, [nonAnchorBundle, selectedZip, zips]);
 
   // ---- Render corridors + centroids on every map move and on data change ---
@@ -797,9 +977,9 @@ export function MapCanvas({
         const r = isAllOther
           ? 7
           : isAnchor
-          ? 4 + Math.log1p(z.totalAsWorkplace) * 0.55
+          ? 2 + Math.log1p(z.totalAsWorkplace) * 0.275
           : isBundleMember
-          ? 4 + Math.log1p(z.totalAsResidence) * 0.55
+          ? 2 + Math.log1p(z.totalAsResidence) * 0.275
           : 1.8 + Math.log1p(z.totalAsResidence) * 0.35;
 
         if (isSelected) {
@@ -984,13 +1164,23 @@ export function MapCanvas({
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       <svg
         ref={svgRef}
+        data-view-layer={viewLayer}
         style={{
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
         }}
       />
-      <style>{`svg [data-layer="arcs"] path, svg [data-layer="nodes"] circle { pointer-events: auto; }`}</style>
+      {/* Pointer-events on the interactive arc + node geometry; nodes and
+          labels remain visible in heatmap mode so the user can still pick a
+          ZIP, but arcs and the off-corridor strands are hidden so the
+          heatmap reads cleanly. */}
+      <style>{`
+        svg [data-layer="arcs"] path,
+        svg [data-layer="nodes"] circle { pointer-events: auto; }
+        svg[data-view-layer="heatmap"] [data-layer="arcs"],
+        svg[data-view-layer="heatmap"] [data-layer="off-corridor"] { display: none; }
+      `}</style>
     </div>
   );
 }
