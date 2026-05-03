@@ -19,7 +19,6 @@ import { MapCanvas } from '../components/MapCanvas';
 import { DashboardTile } from '../components/DashboardTile';
 import { BottomCardStrip } from '../components/BottomCardStrip';
 import { ActiveFiltersOverlay } from '../components/ActiveFiltersOverlay';
-import { HeatmapLegend } from '../components/HeatmapLegend';
 import type { ViewLayer } from '../components/ViewLayerToggle';
 import type {
   ActiveCorridorAggregation,
@@ -35,7 +34,10 @@ import type {
   ZipMeta,
 } from '../types/flow';
 import type { OdBlocksFile, OdSummaryFile, RacFile, WacFile } from '../types/lodes';
+import type { Dataset } from '../types/dataset';
+import { DatasetToggle } from '../components/DatasetToggle';
 import { buildHeatmapGeoJson } from '../lib/heatmapPoints';
+import type { HeatmapSide } from '../components/HeatmapModeToggle';
 import {
   applySegmentFilter,
   detailForNonAnchorOrigin,
@@ -51,6 +53,10 @@ import {
   buildVisibleCorridorMap,
   indexCorridors,
 } from '../lib/corridors';
+import {
+  buildEastWestTransitFlows,
+  filterEastWestTransits,
+} from '../lib/passthroughTransits';
 import {
   exportCorridor,
   exportRegion,
@@ -70,6 +76,12 @@ const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
 /** Pretty-format a tooltip row's place + ZIP label. */
 function placeLabel(zips: ZipMeta[], zip: string): string {
+  // Gateway sentinels for the East ↔ West pass-through transit synthetic
+  // flows have no entry in zips.json — they live only in the corridor
+  // graph as off-map I-70 endpoints. Render their human-readable labels
+  // instead of leaking the raw 'GW_E' / 'GW_W' identifiers into tooltips.
+  if (zip === 'GW_E') return 'Eastern I-70';
+  if (zip === 'GW_W') return 'Western I-70';
   const m = zips.find((z) => z.zip === zip);
   return m?.place || zip;
 }
@@ -244,7 +256,16 @@ function TooltipBody({
   );
 }
 
-export function CommuteView() {
+interface CommuteViewProps {
+  // Top-level dataset selector state — owned by App.tsx and threaded in so
+  // the DatasetToggle can be rendered inside this view's map area (anchored
+  // to the map rather than fixed to the viewport, which prevents the toggle
+  // from overlapping the full-width dashboard panel on mobile).
+  dataset: Dataset;
+  onDatasetChange: (next: Dataset) => void;
+}
+
+export function CommuteView({ dataset, onDatasetChange }: CommuteViewProps) {
   const [flowsInbound, setFlowsInbound] = useState<FlowRow[] | null>(null);
   const [flowsOutbound, setFlowsOutbound] = useState<FlowRow[] | null>(null);
   const [zips, setZips] = useState<ZipMeta[] | null>(null);
@@ -281,13 +302,14 @@ export function CommuteView() {
   // Spatial visualization layer — corridor (flow arcs) is the default; user
   // can flip to heatmap (block-level density) via the DashboardTile toggle.
   const [viewLayer, setViewLayer] = useState<ViewLayer>('corridor');
-  // Regional-view mode — drives the corridor + heatmap visuals when no
-  // anchor is selected (replaces the old "Aggregate Regional Flows" static
-  // label). Decoupled from `mode` so toggling here in regional view does
-  // NOT bleed into the left dashboard panel, bottom card strip, or tooltips
-  // — those keep using the user's `mode` state and the deduped regional
-  // flow universe.
-  const [regionalViewMode, setRegionalViewMode] = useState<Mode>('inbound');
+  // Independent heatmap-side toggle — drives the Workplace / Residence tab
+  // strip that slides out below the View Layer toggle whenever the heatmap
+  // layer is active. Decoupled from canonical `mode` so all four
+  // (mode × heatmapSide) combinations are reachable in anchor view, e.g.
+  // inbound + residence renders cross-anchor home blocks where partner == X.
+  // In aggregate view canonical mode locks to 'regional' upstream and only
+  // heatmapSide matters; in anchor view both interact via heatmapPoints.ts.
+  const [heatmapSide, setHeatmapSide] = useState<HeatmapSide>('workplace');
   // Segment filter — slices every cross-LODES OD aggregation by one of three
   // axes (age / wage / industry NAICS-3) at a time. LODES does not publish
   // joint cells across axes, so the filter UX commits to one axis at a time.
@@ -533,26 +555,79 @@ export function CommuteView() {
     return buildVisibleCorridorMap(corridorIndex, flowIndex, visibleFlows, effectiveMode);
   }, [corridorIndex, flowIndex, visibleFlows, effectiveMode]);
 
-  // ----- Visual-only override (corridor + heatmap rendering) ----------------
-  // In aggregate view the user can flip the ModeToggle to choose whether the
-  // map paints inbound or outbound — the rest of the app (left panel, bottom
-  // cards, tooltips, bucket-breaks scale) keeps consuming the union dataset
-  // via `effectiveMode === 'regional'` so the underlying narrative stays
-  // aggregated. Outside aggregate view these visual values fall through to
-  // the canonical mode-driven values.
+  // ----- Visual-only override (corridor rendering) --------------------------
+  // In aggregate view the corridor visualization is locked to inbound — the
+  // regional narrative is "where do workers go", and the corridor flows,
+  // hover tooltips, and pinned tooltips should all read off the inbound
+  // dataset regardless of any heatmap toggle state. The heatmap layer reads
+  // its block source from `heatmapSide` independently and does not need a
+  // mode override of its own. Outside aggregate view these visual values
+  // fall through to the canonical mode-driven values.
   const visualMode: Mode =
-    selectionKind === 'aggregate' ? regionalViewMode : effectiveMode;
+    selectionKind === 'aggregate' ? 'inbound' : effectiveMode;
+
+  // East ↔ West pass-through transits — derived from the GWS pass-through
+  // bucket (GW_W ↔ GW_E sentinel pairs). These OD pairs never enter
+  // flows-inbound.json or flows-outbound.json since neither endpoint touches
+  // an anchor, so the regional corridor view would otherwise miss the
+  // valley's through-traffic on I-70 / Glenwood Canyon. They're folded into
+  // the *visual* pipeline only — the un-augmented flowIndex / flowsInbound /
+  // flowsOutbound feed the left dashboard panel and the bottom card strip,
+  // which intentionally stay anchor-bound.
+  const eastWestTransits = useMemo(
+    () => buildEastWestTransitFlows(passThrough),
+    [passThrough],
+  );
+  const visualEastWestTransits = useMemo(
+    () =>
+      selectionKind === 'aggregate'
+        ? filterEastWestTransits(eastWestTransits, directionFilter)
+        : [],
+    [selectionKind, eastWestTransits, directionFilter],
+  );
+
+  // Augmented corridor flow index — same as `flowIndex` plus the East ↔ West
+  // transit entries layered onto every corridor in EAST_WEST_CORRIDOR_PATH.
+  // The transits are tagged with both 'inbound' and 'outbound' direction
+  // entries so they survive any single-direction mode filter inside
+  // aggregateCorridor; regional mode dedupes by flowId so the duplication
+  // doesn't double-count.
+  const visualFlowIndex = useMemo(() => {
+    if (!flowIndex) return null;
+    if (eastWestTransits.length === 0) return flowIndex;
+    const augmented = new Map<CorridorId, CorridorFlowEntry[]>();
+    for (const [cid, list] of flowIndex) augmented.set(cid, list.slice());
+    for (const f of eastWestTransits) {
+      const flowId = `${f.originZip}-${f.destZip}`;
+      for (const cid of f.corridorPath) {
+        const bucket = augmented.get(cid);
+        const inboundEntry: CorridorFlowEntry = {
+          flowId,
+          originZip: f.originZip,
+          destZip: f.destZip,
+          workerCount: f.workerCount,
+          direction: 'inbound',
+        };
+        const outboundEntry: CorridorFlowEntry = { ...inboundEntry, direction: 'outbound' };
+        if (bucket) {
+          bucket.push(inboundEntry, outboundEntry);
+        } else {
+          augmented.set(cid, [inboundEntry, outboundEntry]);
+        }
+      }
+    }
+    return augmented;
+  }, [flowIndex, eastWestTransits]);
+
   const visualFlows: FlowRow[] | null =
     selectionKind === 'aggregate'
-      ? regionalViewMode === 'inbound'
-        ? flowsInbound
-        : flowsOutbound
+      ? flowsInbound
+        ? [...flowsInbound, ...visualEastWestTransits]
+        : flowsInbound
       : flows;
   const visualDirectionFiltered: FlowRow[] =
     selectionKind === 'aggregate'
-      ? regionalViewMode === 'inbound'
-        ? directionFilteredInbound
-        : directionFilteredOutbound
+      ? [...directionFilteredInbound, ...visualEastWestTransits]
       : directionFilteredFlows;
   const visualVisibleFlows = useMemo(() => {
     if (selectionKind === 'non-anchor') return directionFilteredInbound;
@@ -569,26 +644,28 @@ export function CommuteView() {
     visualMode,
   ]);
   const visualVisibleCorridorMap = useMemo(() => {
-    if (!corridorIndex || !flowIndex) return null;
+    if (!corridorIndex || !visualFlowIndex) return null;
     return buildVisibleCorridorMap(
       corridorIndex,
-      flowIndex,
+      visualFlowIndex,
       visualVisibleFlows,
       visualMode,
     );
-  }, [corridorIndex, flowIndex, visualVisibleFlows, visualMode]);
+  }, [corridorIndex, visualFlowIndex, visualVisibleFlows, visualMode]);
 
   // Heatmap GeoJSON — block-level OD density under the active filter set.
   // null when the layer should hide (non-anchor selection or unloaded data).
-  // Mode is the visual override (regionalViewMode in aggregate view, the
-  // canonical mode otherwise) so the heatmap responds to the regional-view
-  // toggle alongside the corridor arcs.
+  // Drives off the canonical mode (effectiveMode) plus the independent
+  // heatmapSide. heatmapPoints.ts resolves all four (mode × heatmapSide)
+  // combinations, including cross-anchor projection when the side disagrees
+  // with the anchor's own side under the active mode.
   const heatmapData = useMemo(() => {
     if (!odBlocks || !zips) return null;
     return buildHeatmapGeoJson({
       odBlocks,
       zips,
-      mode: visualMode,
+      mode: effectiveMode,
+      heatmapSide,
       selectedZip,
       nonAnchorBundle,
       directionFilter,
@@ -598,7 +675,8 @@ export function CommuteView() {
   }, [
     odBlocks,
     zips,
-    visualMode,
+    effectiveMode,
+    heatmapSide,
     selectedZip,
     nonAnchorBundle,
     directionFilter,
@@ -895,10 +973,10 @@ export function CommuteView() {
         zips={zips}
         mode={mode}
         onModeChange={handleModeChange}
-        viewMode={selectionKind === 'aggregate' ? regionalViewMode : mode}
-        onViewModeChange={
-          selectionKind === 'aggregate' ? setRegionalViewMode : handleModeChange
-        }
+        viewMode={mode}
+        onViewModeChange={handleModeChange}
+        heatmapSide={heatmapSide}
+        onHeatmapSideChange={setHeatmapSide}
         selectedZip={selectedZip}
         onSelectZip={handleSelectZip}
         selectionKind={selectionKind}
@@ -915,6 +993,9 @@ export function CommuteView() {
         topCorridorInbound={topCorridorInbound}
         topCorridorOutbound={topCorridorOutbound}
         driveDistance={driveDistance}
+        heatmapVisible={heatmapData != null && viewLayer === 'heatmap'}
+        heatmapLegendSide={heatmapSide}
+        segmentFilter={segmentFilter}
       />
       <main className="relative w-full md:flex-1">
         {/* Map area wrapper — gives the absolutely-positioned MapCanvas
@@ -962,17 +1043,15 @@ export function CommuteView() {
           viewLayer={viewLayer}
         />
 
-        {/* Block-level heatmap legend — bottom-left, above the bottom card
-            strip and to the right of the left dashboard panel. Hidden when
-            heatmapData is null (non-anchor selection / unloaded data). */}
-        <HeatmapLegend
-          mode={visualMode}
-          selectedZip={selectedZip}
-          zips={zips}
-          segmentFilter={segmentFilter}
-          visible={heatmapData != null && viewLayer === 'heatmap'}
-          bottomOffset={bottomStripHeight + 16}
-        />
+        {/* Top-level dataset selector — anchored inside the map area so it
+            never overlaps the full-width dashboard panel on mobile. Mobile:
+            top-right of the map. Desktop: top-left of the map area (just
+            inside the map's left edge, matching the prior viewport-fixed
+            placement of `left-[396px]`). z-index above the SVG overlay
+            and active-filter chips so it stays clickable across views. */}
+        <div className="absolute top-2 right-2 md:right-auto md:left-2 md:top-3 z-40">
+          <DatasetToggle dataset={dataset} onChange={onDatasetChange} />
+        </div>
 
         {/* Credit chip — docked to the right edge just above the bottom
             card strip. Strip height varies by view type (aggregate / anchor
@@ -1079,14 +1158,17 @@ export function CommuteView() {
             pointer-events: auto so the close button and clickable ZIP rows
             are interactive; the rest of the body is text-selectable. */}
         {pinned && (() => {
-          // Re-derive the corridor's aggregation from the active mode +
-          // direction filter's visibleCorridorMap so a mode/direction toggle
-          // updates the pinned panel's content without dismissing it. If the
-          // pinned corridor was filtered out (no visible flows under the new
-          // filter state), fall back to the snapshot from click time so the
-          // panel still has something to show until the user dismisses it.
+          // Re-derive the corridor's aggregation from the *visual* corridor
+          // map (the same one MapCanvas renders) so a mode/direction toggle
+          // updates the pinned panel's content without dismissing it, and so
+          // the panel reflects whatever the map is actually drawing —
+          // including the East ↔ West pass-through transit synthetic flows
+          // injected into the regional visual pipeline. If the pinned
+          // corridor was filtered out (no visible flows under the new filter
+          // state), fall back to the snapshot from click time so the panel
+          // still has something to show until the user dismisses it.
           const liveAggregation =
-            visibleCorridorMap.get(pinned.corridorId) ?? pinned.aggregation;
+            visualVisibleCorridorMap.get(pinned.corridorId) ?? pinned.aggregation;
           const pinnedView: HoverState = { ...pinned, aggregation: liveAggregation };
           // Click handler shared by whichever card matches the active mode's
           // partner axis. In aggregate view (no anchor) partner filtering has

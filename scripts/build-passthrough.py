@@ -2,17 +2,42 @@
 """
 build-passthrough.py — Extract latest-year pass-through OD flows per anchor.
 
-Mode-aware pass-through definition for anchor A:
+Tree-topology pass-through definition for anchor A:
   - residence != A AND workplace != A
-  - residence and workplace flank A longitudinally (XOR east/west of A)
-  - inbound bucket:  workplace ∈ ANCHOR_ZIPS - {A}
-                     (residence may be any non-A ZCTA on the opposite side)
-  - outbound bucket: residence ∈ ANCHOR_ZIPS - {A}
-                     (workplace may be any non-A ZCTA on the opposite side)
+  - the (h_zcta → w_zcta) commute path on the I-70 / Hwy 82 tree topology
+    physically passes through anchor A
+  - inbound bucket:  workplace ∈ ANCHOR_ZIPS - {A}  (worker is heading TO an
+                     anchor; A is between origin and the working anchor)
+  - outbound bucket: residence ∈ ANCHOR_ZIPS - {A}  (worker lives AT an
+                     anchor; A is between that anchor and the workplace)
 
-A given pair can appear in both buckets when both endpoints are anchors —
-that is anchor-to-anchor pass-through, which legitimately surfaces on either
-mode.
+A single per-anchor `total` is also emitted: the unfiltered sum of pass-through
+workers for that anchor across BOTH directions, including non-anchor endpoints
+(after sentinel collapse). This is the canonical "total pass-through volume"
+headline for the card and resolves the inbound/outbound asymmetry that the
+old longitude-XOR check produced.
+
+Topology
+--------
+  branches centered on GWS junction (81601):
+    JUNCTION  – 81601 only
+    W branch  – I-70 west of GWS:
+                  New Castle (81647) → Silt (81652) → Rifle (81650)
+                  → Parachute (81635) → De Beque (81630)
+    S branch  – Hwy 82 south up Roaring Fork Valley:
+                  Carbondale (81623) → Basalt (81621) → Aspen (81611)
+    SPUR      – terminal, off main corridor:
+                  Old Snowmass (81654), Snowmass Village (81615)
+                  – pass-through total = 0 by construction
+    E branch  – everything east of GWS collapses to a single GW_E sentinel
+                (no anchors on this branch)
+
+  Non-anchor ZIPs are collapsed up-front into one of three sentinels:
+    GW_E      – non-anchor north of corridor, east of GWS  (Eagle, Vail, …)
+    GW_W      – non-anchor north of corridor, west of GWS  (Grand Junction, …)
+    GW_OTHER  – non-anchor south of corridor / off-network (Leadville, Front
+                Range south, RF Valley non-anchors, …) – modeled as joining
+                the network at the JUNCTION
 
 Reads:
   - data/lodes-cache/raw/co_od_main_JT00_{LATEST_YEAR}.csv.gz
@@ -26,6 +51,7 @@ Writes public/data/flows-passthrough.json with shape:
     "pairsPerAnchorPerMode": 5000,
     "byAnchor": {
       "81601": {
+        "total": 12345,
         "inbound":  { "pairs": [...], "residual": 0 },
         "outbound": { "pairs": [...], "residual": 0 }
       },
@@ -56,78 +82,150 @@ GAZETTEER_CACHE_DIR = PROJECT_ROOT / "data" / "lodes-cache" / "gazetteer"
 
 LATEST_YEAR = lodes.LATEST_YEAR
 
-# Per-anchor, per-mode pair cap. Top N pairs by worker count are emitted
-# explicitly; the remaining tail collapses into a single residual integer
-# surfaced as "All other locations" in the dashboard. 5000 is generous
-# enough that the residual stays small in practice — for inbound/outbound
-# slices restricted to anchor endpoints, total pair volume is well below
-# the cap and the cap effectively never bites.
+# Per-anchor, per-mode pair cap. With non-anchor endpoints collapsed into
+# 3 sentinels, the (h_node, w_node) label space is at most 14×14 = 196,
+# so the cap effectively never bites — the residual is kept for forward
+# compatibility but should always be 0 in the current build.
 PAIRS_PER_ANCHOR_PER_MODE = 5000
 
-# Synthetic gateway labels — collapse all non-anchor endpoints beyond the
-# I-70 anchor envelope into two buckets so the pass-through card surfaces
-# "Eastern I-70" / "Western I-70" rows instead of dozens of small individual
-# ZIPs (Eagle, Vail, Denver, Grand Junction, etc.). The runtime card maps
-# these labels to friendly place names. The east boundary tracks the
-# build-data.py routing split (GWS longitude); the west boundary uses the
-# westernmost anchor (De Beque). Non-anchor ZIPs INSIDE the envelope keep
-# their individual identity.
+# Synthetic non-anchor sentinels.
 GATEWAY_E_ZIP = "GW_E"
 GATEWAY_W_ZIP = "GW_W"
-GATEWAY_SPLIT_LNG = -107.3248  # mirrors build-data.py — GWS centroid lng
-ENVELOPE_W_LNG = min(lng for _, lng in CITY_CENTROIDS.values())  # De Beque
+GATEWAY_OTHER_ZIP = "GW_OTHER"
+
+# Geographic boundaries used to assign non-anchor ZIPs to a sentinel.
+# - GWS_LNG / GWS_LAT mirror the GWS centroid used elsewhere in the build.
+# - NORTH_LAT_THRESHOLD splits "on/near the I-70 corridor" (north) from
+#   "off-corridor" (south). Sits between GWS (39.55) and Carbondale (39.40).
+GWS_LNG = -107.3248
+GWS_LAT = 39.5505
+NORTH_LAT_THRESHOLD = 39.45
 
 
-def gateway_for(zip_code: str, lng: float | None) -> str | None:
-    """Return GATEWAY_E_ZIP / GATEWAY_W_ZIP if the ZIP is a non-anchor
-    beyond the I-70 anchor envelope; otherwise None (keep its identity)."""
+def gateway_for(
+    zip_code: str, lat: float | None, lng: float | None
+) -> str | None:
+    """Assign a non-anchor ZIP to one of three sentinels. Anchor ZIPs return
+    None (keep their identity). Missing coordinates fall through to
+    GW_OTHER so the row isn't silently dropped."""
     if zip_code in ANCHOR_ZIPS:
         return None
-    if lng is None:
-        return None
-    if lng > GATEWAY_SPLIT_LNG:
+    if lat is None or lng is None:
+        return GATEWAY_OTHER_ZIP
+    if lat < NORTH_LAT_THRESHOLD:
+        return GATEWAY_OTHER_ZIP
+    if lng > GWS_LNG:
         return GATEWAY_E_ZIP
-    if lng < ENVELOPE_W_LNG:
-        return GATEWAY_W_ZIP
-    return None
+    return GATEWAY_W_ZIP
 
 
-def collapse_to_gateway(sub: pd.DataFrame, side: str) -> pd.DataFrame:
-    """Rewrite the non-anchor side's ZIP/lng to the gateway sentinel for any
-    row whose endpoint sits beyond the I-70 envelope, then re-aggregate by
-    (h_zcta, w_zcta) summing workerCount. Pairs whose target side is an
-    anchor or sits inside the envelope pass through unchanged.
+# ---------------------------------------------------------------------------
+# Tree-topology classifier
+# ---------------------------------------------------------------------------
+# Each anchor maps to (branch, position). Position is signed distance from
+# the JUNCTION along the branch — increases as you move outward.
+#   W branch position  = GWS_LNG - lng         (further west → larger pos)
+#   S branch position  = GWS_LAT - lat         (further south → larger pos)
+ANCHOR_NODES: dict[str, tuple[str, float]] = {
+    "81601": ("JUNCTION", 0.0),                  # Glenwood Springs
+    "81647": ("W", -107.3248 - (-107.5306)),     # New Castle  ≈ 0.2058
+    "81652": ("W", -107.3248 - (-107.6539)),     # Silt        ≈ 0.3291
+    "81650": ("W", -107.3248 - (-107.7831)),     # Rifle       ≈ 0.4583
+    "81635": ("W", -107.3248 - (-108.0531)),     # Parachute   ≈ 0.7283
+    "81630": ("W", -107.3248 - (-108.2231)),     # De Beque    ≈ 0.8983
+    "81623": ("S", 39.5505 - 39.4019),           # Carbondale  ≈ 0.1486
+    "81621": ("S", 39.5505 - 39.3691),           # Basalt      ≈ 0.1814
+    "81611": ("S", 39.5505 - 39.1911),           # Aspen       ≈ 0.3594
+    "81654": ("SPUR", 0.0),                      # Old Snowmass
+    "81615": ("SPUR", 0.0),                      # Snowmass Village
+}
 
-    `side` is 'origin' (rewrite h_zcta — used for inbound's residence side)
-    or 'dest' (rewrite w_zcta — used for outbound's workplace side).
+# When a SPUR anchor appears AS AN ENDPOINT, remap to the nearest main-
+# corridor anchor for the topology check. OSM merges onto Hwy 82 around
+# Snowmass Canyon (just south of Basalt); SMV connects via Brush Creek to
+# the Aspen-Snowmass Y intersection. Self-loop pairs (anchor→spur) are
+# excluded by the not-A check before topology runs.
+SPUR_ENDPOINT_REMAP: dict[str, str] = {
+    "81654": "81621",  # Old Snowmass → Basalt
+    "81615": "81611",  # Snowmass Village → Aspen
+}
+
+# Sentinel positions on the topology. GW_E and GW_W sit "infinitely far"
+# along their respective branches so any anchor on that branch sits between
+# the JUNCTION and the sentinel. GW_OTHER endpoints are off-corridor — their
+# physical commute path can't be determined (statewide CO data includes
+# Front Range south, San Luis Valley, etc., which DON'T transit the I-70 /
+# Hwy 82 corridor). Marking them OFF excludes them from pass-through totals
+# entirely, which honors "truly passing through" over inflated headlines.
+# The label still exists in the JSON so future contexts can surface it; it
+# just never appears in pass-through pair lists.
+GATEWAY_NODES: dict[str, tuple[str, float]] = {
+    GATEWAY_E_ZIP: ("E", 1.0),         # > 0; no anchors on E branch
+    GATEWAY_W_ZIP: ("W", 1.0),         # > De Beque (0.8983)
+    GATEWAY_OTHER_ZIP: ("OFF", 0.0),   # off-corridor; excluded from passes_through
+}
+
+
+def node_for(zip_code: str) -> tuple[str, float]:
+    """Return (branch, position) for an anchor or sentinel. Spur anchors
+    are remapped to their attachment anchor for topology checks."""
+    if zip_code in SPUR_ENDPOINT_REMAP:
+        return ANCHOR_NODES[SPUR_ENDPOINT_REMAP[zip_code]]
+    if zip_code in ANCHOR_NODES:
+        return ANCHOR_NODES[zip_code]
+    if zip_code in GATEWAY_NODES:
+        return GATEWAY_NODES[zip_code]
+    raise KeyError(f"unknown zip_code in topology: {zip_code!r}")
+
+
+def passes_through(anchor_zip: str, h_zip: str, w_zip: str) -> bool:
+    """True iff the unique tree-path from h_zip to w_zip on the I-70 / Hwy 82
+    topology passes strictly through anchor_zip (excluding endpoints).
+
+    Spur anchors (OSM, SMV) are terminal and never sit on through-paths; the
+    function returns False for them by construction.
     """
-    if sub.empty:
-        return sub
-    sub = sub.copy()
-    if side == "origin":
-        zip_col, lng_col = "h_zcta", "h_lng"
-    elif side == "dest":
-        zip_col, lng_col = "w_zcta", "w_lng"
-    else:
-        raise ValueError(f"unknown side: {side!r}")
-    new_zips = [
-        gateway_for(z, lng) or z
-        for z, lng in zip(sub[zip_col].tolist(), sub[lng_col].tolist())
-    ]
-    sub[zip_col] = new_zips
-    return (
-        sub.groupby(["h_zcta", "w_zcta"], as_index=False)["workerCount"]
-        .sum()
-    )
+    if anchor_zip == h_zip or anchor_zip == w_zip:
+        return False
+    a_branch, a_pos = ANCHOR_NODES[anchor_zip]
+    if a_branch == "SPUR":
+        return False
+
+    h_branch, h_pos = node_for(h_zip)
+    w_branch, w_pos = node_for(w_zip)
+
+    # Off-corridor endpoints (GW_OTHER) have undefined commute paths —
+    # exclude from pass-through entirely.
+    if h_branch == "OFF" or w_branch == "OFF":
+        return False
+
+    # JUNCTION (GWS): on the path iff the endpoints are on different
+    # branches. (Same-branch trips never visit the junction; different-
+    # branch trips always route through it.)
+    if a_branch == "JUNCTION":
+        return h_branch != w_branch
+
+    # A is on a non-junction branch (W or S).
+    same_h = h_branch == a_branch
+    same_w = w_branch == a_branch
+    if same_h and same_w:
+        # Same-branch trip: A on path iff a_pos is strictly between the
+        # two endpoint positions.
+        lo, hi = (h_pos, w_pos) if h_pos <= w_pos else (w_pos, h_pos)
+        return lo < a_pos < hi
+    if same_h:
+        # Path: h_branch → JUNCTION → w_branch. A is on h's leg iff
+        # 0 < a_pos < h_pos (A sits between the JUNCTION and h).
+        return 0.0 < a_pos < h_pos
+    if same_w:
+        return 0.0 < a_pos < w_pos
+    # Neither endpoint shares A's branch; the path doesn't visit A.
+    return False
 
 
-def load_gazetteer_lng() -> dict[str, float]:
-    """Return ZCTA → centroid longitude. Pass-through is E/W-only so the
-    latitude is unused — derive from the shared loader and drop lat."""
-    centroids = load_gazetteer(GAZETTEER_CACHE_DIR)
-    return {z: lng for z, (_lat, lng) in centroids.items()}
-
-
+# ---------------------------------------------------------------------------
+# Output helpers
+# ---------------------------------------------------------------------------
 def slice_top_and_residual(
     sub: pd.DataFrame, cap: int
 ) -> tuple[list[dict], int]:
@@ -166,11 +264,15 @@ def main() -> int:
     sxw = pd.read_csv(xwalk_raw, dtype=str, usecols=["tabblk2020", "zcta"])
     block_to_zcta = dict(zip(sxw["tabblk2020"], sxw["zcta"]))
 
-    # Override anchor centroids onto the gazetteer so the E/W classification
+    # Load both lat AND lng — sentinel assignment uses both.
+    print(f"loading ZCTA centroids…", file=sys.stderr)
+    centroids = load_gazetteer(GAZETTEER_CACHE_DIR)
+    zcta_lat: dict[str, float] = {z: lat for z, (lat, _lng) in centroids.items()}
+    zcta_lng: dict[str, float] = {z: lng for z, (_lat, lng) in centroids.items()}
+    # Override anchor centroids onto the gazetteer so the classification
     # uses the city-center coordinates the rest of the app already trusts.
-    print(f"loading ZCTA centroids (longitude only)…", file=sys.stderr)
-    zcta_lng = load_gazetteer_lng()
-    for zip_code, (_lat, lng) in CITY_CENTROIDS.items():
+    for zip_code, (lat, lng) in CITY_CENTROIDS.items():
+        zcta_lat[zip_code] = lat
         zcta_lng[zip_code] = lng
 
     print(
@@ -194,66 +296,81 @@ def main() -> int:
         file=sys.stderr,
     )
 
-    # Drop rows with no centroid for either side. Without longitude we can't
-    # decide which side of an anchor a ZIP sits on.
-    pre_lng = len(df)
-    df = df[df["h_zcta"].isin(zcta_lng) & df["w_zcta"].isin(zcta_lng)]
-    print(
-        f"  → {len(df):,} after centroid filter "
-        f"(dropped {pre_lng - len(df):,})",
-        file=sys.stderr,
-    )
-
     # Pre-aggregate by (h_zcta, w_zcta) so the per-anchor pass below operates
-    # on unique pairs rather than block-level rows. We INTENTIONALLY do not
-    # drop anchor-touching pairs here — pairs where one endpoint is another
-    # anchor are valid pass-through commutes for a third-anchor view, and
-    # they drive the inbound/outbound mode-aware buckets below.
+    # on unique pairs rather than block-level rows.
     agg = (
         df.groupby(["h_zcta", "w_zcta"], as_index=False)["S000"]
         .sum()
         .rename(columns={"S000": "workerCount"})
     )
-    agg["h_lng"] = agg["h_zcta"].map(zcta_lng)
-    agg["w_lng"] = agg["w_zcta"].map(zcta_lng)
     print(
         f"  → {len(agg):,} unique ZCTA→ZCTA pairs",
         file=sys.stderr,
     )
 
-    by_anchor: dict[str, dict] = {}
-    for anchor_zip, (_lat, anchor_lng) in CITY_CENTROIDS.items():
-        # Pass-through requires the selected anchor itself to be excluded
-        # on both sides, but the OTHER 10 anchors remain valid endpoints.
-        not_a = (agg["h_zcta"] != anchor_zip) & (agg["w_zcta"] != anchor_zip)
-        # E/W flank check.
-        h_east = agg["h_lng"] > anchor_lng
-        w_east = agg["w_lng"] > anchor_lng
-        flanks = h_east ^ w_east
-        flank_sub = agg[not_a & flanks]
+    # Collapse non-anchor endpoints to sentinels up-front and re-aggregate
+    # by (h_node, w_node) so every downstream check operates in the
+    # 14-label topology (11 anchors + 3 sentinels).
+    def collapse(z: str) -> str:
+        return gateway_for(z, zcta_lat.get(z), zcta_lng.get(z)) or z
 
-        # Inbound mode: workplace ∈ ANCHOR_ZIPS - {anchor_zip}. The selected
-        # anchor itself is already excluded by `not_a`, so isin(ANCHOR_ZIPS)
-        # implicitly resolves to "the other 10 anchors". Non-anchor residence
-        # endpoints beyond the I-70 envelope are collapsed to GW_E / GW_W
-        # via collapse_to_gateway so the pass-through card surfaces a single
-        # "Eastern I-70" / "Western I-70" row instead of every long-tail ZIP.
-        inbound_sub = flank_sub[flank_sub["w_zcta"].isin(ANCHOR_ZIPS)]
-        inbound_sub = collapse_to_gateway(inbound_sub, side="origin")
+    agg["h_zcta"] = agg["h_zcta"].map(collapse)
+    agg["w_zcta"] = agg["w_zcta"].map(collapse)
+    agg = (
+        agg.groupby(["h_zcta", "w_zcta"], as_index=False)["workerCount"]
+        .sum()
+    )
+    print(
+        f"  → {len(agg):,} unique pairs after sentinel collapse "
+        f"({len(agg['h_zcta'].unique())} origin labels, "
+        f"{len(agg['w_zcta'].unique())} dest labels)",
+        file=sys.stderr,
+    )
+
+    by_anchor: dict[str, dict] = {}
+    for anchor_zip in CITY_CENTROIDS:
+        # Spur anchors are terminal off the main corridor — nothing passes
+        # "through" them. Emit empty buckets and total=0 explicitly.
+        if anchor_zip in SPUR_ENDPOINT_REMAP:
+            by_anchor[anchor_zip] = {
+                "total": 0,
+                "inbound": {"pairs": [], "residual": 0},
+                "outbound": {"pairs": [], "residual": 0},
+            }
+            continue
+
+        # Identify pass-through pairs via the tree-topology check.
+        mask = [
+            passes_through(anchor_zip, h, w)
+            for h, w in zip(agg["h_zcta"].tolist(), agg["w_zcta"].tolist())
+        ]
+        sub = agg[mask]
+        total_workers = int(sub["workerCount"].sum())
+
+        # Inbound bucket: workplace endpoint is one of the OTHER 10 anchors,
+        # OR both endpoints are sentinels (e.g., GW_E ↔ GW_W transits — non-
+        # anchor commuters whose path crosses A but who don't terminate at
+        # any anchor). Sentinel↔sentinel pairs also land in the outbound
+        # bucket below; the runtime de-dupes by (origin, dest) so they
+        # surface exactly once. Including them here closes the gap between
+        # the canonical `total` and the runtime column sums.
+        sentinel_pair = (
+            sub["h_zcta"].isin(GATEWAY_NODES) & sub["w_zcta"].isin(GATEWAY_NODES)
+        )
+        inbound_sub = sub[sub["w_zcta"].isin(ANCHOR_ZIPS) | sentinel_pair]
         inbound_pairs, inbound_residual = slice_top_and_residual(
             inbound_sub, PAIRS_PER_ANCHOR_PER_MODE
         )
 
-        # Outbound mode: residence ∈ ANCHOR_ZIPS - {anchor_zip}. Non-anchor
-        # workplace endpoints beyond the I-70 envelope are collapsed onto the
-        # gateway sentinels (mirroring the inbound rewrite).
-        outbound_sub = flank_sub[flank_sub["h_zcta"].isin(ANCHOR_ZIPS)]
-        outbound_sub = collapse_to_gateway(outbound_sub, side="dest")
+        # Outbound bucket: residence endpoint is one of the OTHER 10 anchors,
+        # OR both endpoints are sentinels (mirrored above).
+        outbound_sub = sub[sub["h_zcta"].isin(ANCHOR_ZIPS) | sentinel_pair]
         outbound_pairs, outbound_residual = slice_top_and_residual(
             outbound_sub, PAIRS_PER_ANCHOR_PER_MODE
         )
 
         by_anchor[anchor_zip] = {
+            "total": total_workers,
             "inbound": {"pairs": inbound_pairs, "residual": inbound_residual},
             "outbound": {"pairs": outbound_pairs, "residual": outbound_residual},
         }
@@ -272,19 +389,21 @@ def main() -> int:
         f"\nQA — per-anchor pass-through totals (latest year):", file=sys.stderr
     )
     print(
-        f"  {'ZIP':>5}  {'mode':>8}  {'pairs':>6}  {'workers':>10}  {'residual':>10}",
+        f"  {'ZIP':>5}  {'total':>10}  {'mode':>8}  {'pairs':>6}  "
+        f"{'workers':>10}  {'residual':>10}",
         file=sys.stderr,
     )
     for zip_code in sorted(ANCHOR_ZIPS):
         entry = by_anchor.get(zip_code)
         if not entry:
             continue
+        total = entry.get("total", 0)
         for mode_name in ("inbound", "outbound"):
             bucket = entry[mode_name]
             n_pairs = len(bucket["pairs"])
             n_workers = sum(r["workerCount"] for r in bucket["pairs"])
             print(
-                f"  {zip_code:>5}  {mode_name:>8}  {n_pairs:>6}  "
+                f"  {zip_code:>5}  {total:>10,}  {mode_name:>8}  {n_pairs:>6}  "
                 f"{n_workers:>10,}  {bucket['residual']:>10,}",
                 file=sys.stderr,
             )

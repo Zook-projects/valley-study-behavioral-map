@@ -1,26 +1,50 @@
 // Pure function that converts the block-level OD JSON into a GeoJSON
 // FeatureCollection of weighted points for the MapLibre heatmap layer.
 //
+// The heatmap is driven by TWO axes that resolve independently:
+//   • mode          — inbound / outbound / regional (canonical state)
+//   • heatmapSide   — workplace / residence (independent UI toggle)
+//
+// In aggregate view the canonical mode locks to 'regional' upstream, so only
+// heatmapSide matters: workplace → union of every anchor's workplaceBlocks,
+// residence → union of every anchor's homeBlocks.
+//
+// In anchor view (selectedZip = X) all four (mode × heatmapSide) combinations
+// are reachable. Two of them render BLOCKS WITHIN X (same-side); the other
+// two render BLOCKS WITHIN OTHER ANCHORS that pair with X (cross-anchor):
+//
+//   inbound  + workplace  → workplaceBlocks[X]                        (within X)
+//   outbound + residence  → homeBlocks[X]                             (within X)
+//   inbound  + residence  → ⋃ homeBlocks[A] where partner.zip == X    (cross-anchor)
+//   outbound + workplace  → ⋃ workplaceBlocks[A] where partner.zip==X (cross-anchor)
+//
+// Cross-anchor mode also emits a ZIP-centroid fallback for non-anchor partner
+// ZIPs (e.g. inbound+residence with anchor X surfaces non-anchor home ZIPs
+// pulled from workplaceBlocks[X].partners). These render as a single point
+// per ZIP at its centroid — coarse but the only signal we have for blocks
+// outside the 11 anchors.
+//
 // Filter pipeline (mirrors the ZIP-level pipeline in flowQueries.ts):
-//   1. mode + selectedZip → pick the active block list
-//        - regional view (no selection or ALL_OTHER) → union of every
-//          anchor's workplaceBlocks
-//        - anchor + inbound → that anchor's workplaceBlocks
-//        - anchor + outbound → that anchor's homeBlocks
-//        - non-anchor → null (caller hides the layer)
+//   1. mode + heatmapSide + selectedZip → pick blocks + cross-anchor scope
 //   2. directionFilter → drop partner contributions whose bearing relative
 //      to the block's containing-anchor centroid disagrees with the active
-//      filter. Self-pairs (partner.zip === block.anchorZip) and ALL_OTHER
-//      are dropped from non-'all' filters to mirror filterByDirection().
-//   3. selectedPartner → keep only partners whose zip is in the partner's
-//      member-zips set. Only reachable in anchor view.
+//      filter. Self-pairs and ALL_OTHER are dropped from non-'all' filters
+//      to mirror filterByDirection().
+//   3. selectedPartner → in same-side mode, narrows partners; in cross-anchor
+//      mode, narrows the iterated anchors (and centroid fallback ZIPs) since
+//      "partner" is already collapsed onto X.
 //   4. segmentFilter → re-weight each surviving partner by the sum of
 //      selected buckets within the active axis. When the filter is
 //      inactive, partner.total is used directly.
-// Step 1 is always required. Steps 2-4 short-circuit to a fast path that
-// just reads block.total when no filter is active and no partner is set.
+// Steps 2-4 short-circuit to a fast path that just reads block.total when no
+// filter is active, no partner is set, and no cross-anchor projection.
 
-import type { AnchorBlock, BlockSegments, OdBlocksFile } from '../types/lodes';
+import type {
+  AnchorBlock,
+  BlockPartner,
+  BlockSegments,
+  OdBlocksFile,
+} from '../types/lodes';
 import type {
   AgeBucket,
   DirectionFilter,
@@ -30,6 +54,8 @@ import type {
   ZipMeta,
 } from '../types/flow';
 import { isSegmentFilterAll } from './flowQueries';
+
+export type HeatmapSide = 'workplace' | 'residence';
 
 // Re-derive the same direction-classifier thresholds used by flowQueries —
 // keeping them local rather than imported because flowQueries doesn't export
@@ -101,7 +127,14 @@ export interface HeatmapFeatureCollection {
 export interface BuildHeatmapArgs {
   odBlocks: OdBlocksFile | null;
   zips: ZipMeta[];
+  // Canonical inbound / outbound / regional mode. In aggregate view this is
+  // 'regional' and only heatmapSide matters; in anchor view it determines
+  // the partner side and (combined with heatmapSide) whether the heatmap
+  // renders within-anchor or cross-anchor.
   mode: 'inbound' | 'outbound' | 'regional';
+  // Independent heatmap-side toggle — drives which BLOCK collection (W or H)
+  // is rendered. Decoupled from mode so all four combinations are reachable.
+  heatmapSide: HeatmapSide;
   selectedZip: string | null;
   // Non-anchor selections never render the heatmap; this param is included
   // so callers can pass it through without conditional logic at the call site.
@@ -124,6 +157,7 @@ export function buildHeatmapGeoJson(
     odBlocks,
     zips,
     mode,
+    heatmapSide,
     selectedZip,
     nonAnchorBundle,
     directionFilter,
@@ -135,59 +169,134 @@ export function buildHeatmapGeoJson(
   // Non-anchor selection — heatmap hides entirely.
   if (nonAnchorBundle) return null;
 
-  // Pick the active block list per the anchor / mode / selection rules.
+  const isAggregate = !selectedZip || selectedZip === 'ALL_OTHER';
+  const anchorEntry = !isAggregate ? odBlocks.anchors[selectedZip!] : null;
+  // Selected ZIP is non-anchor — caller would normally have caught this via
+  // nonAnchorBundle, but guard defensively so we never explode.
+  if (!isAggregate && !anchorEntry) return null;
+
+  // ----- Block list resolution + cross-anchor projection ---------------------
+  // Same-side: blocks within the selected anchor (or all anchors in aggregate).
+  // Cross-anchor: iterate blocks across anchors whose partner side carries the
+  // selected anchor X; emit ZIP-centroid points for non-anchor partners.
   let blocks: AnchorBlock[];
-  if (!selectedZip || selectedZip === 'ALL_OTHER') {
-    // Regional view → union of every anchor's blocks on the chosen side.
-    // Inbound / 'regional' → workplaceBlocks (where the valley's workers
-    // *work*). Outbound → homeBlocks (where they *live*). Each block already
-    // carries `anchorZip` so the direction filter resolves uniformly.
-    const useHomes = mode === 'outbound';
+  // When set, every block's partners are projected to the single ZIP X — the
+  // heatmap reads "where did flows that touched X come from / go to" rather
+  // than the block's full partner mix. Drives the cross-anchor combinations.
+  let crossAnchorTargetZip: string | null = null;
+  // ZIP centroid fallback rows for cross-anchor mode — one entry per
+  // non-anchor partner ZIP found in X's opposite-side blocks.
+  let centroidFallback: Array<{ partnerZip: string; partners: BlockPartner[] }> = [];
+
+  if (isAggregate) {
+    // Aggregate: union of every anchor's chosen-side blocks.
+    const useHomes = heatmapSide === 'residence';
     blocks = [];
-    for (const anchor of Object.values(odBlocks.anchors)) {
-      const list = useHomes ? anchor.homeBlocks : anchor.workplaceBlocks;
+    for (const a of Object.values(odBlocks.anchors)) {
+      const list = useHomes ? a.homeBlocks : a.workplaceBlocks;
       for (const b of list) blocks.push(b);
     }
   } else {
-    const anchor = odBlocks.anchors[selectedZip];
-    if (!anchor) return null; // selectedZip is non-anchor → hide
-    blocks = mode === 'outbound' ? anchor.homeBlocks : anchor.workplaceBlocks;
+    const X = selectedZip!;
+    // Anchor's "own side" under the active mode — inbound mode pivots around
+    // X's workplaces, outbound mode around X's residences. Mode === 'regional'
+    // is unreachable here (anchor view forces effectiveMode = mode), but fall
+    // through harmlessly to workplace if it ever leaks.
+    const xSide: HeatmapSide = mode === 'outbound' ? 'residence' : 'workplace';
+
+    if (heatmapSide === xSide) {
+      // Same-side — blocks within X.
+      blocks =
+        heatmapSide === 'workplace'
+          ? anchorEntry!.workplaceBlocks
+          : anchorEntry!.homeBlocks;
+    } else {
+      // Cross-anchor — iterate every anchor's heatmapSide list, project
+      // partners onto X. selectedPartner (if set) narrows the iterated
+      // anchors since the partner concept is collapsed onto X here; the
+      // user's partner filter therefore operates on the BLOCK side instead
+      // of the partner side in this branch.
+      const useHomes = heatmapSide === 'residence';
+      const partnerScopeAnchors = selectedPartner
+        ? new Set(selectedPartner.zips)
+        : null;
+      blocks = [];
+      for (const [aZip, a] of Object.entries(odBlocks.anchors)) {
+        if (partnerScopeAnchors && !partnerScopeAnchors.has(aZip)) continue;
+        const list = useHomes ? a.homeBlocks : a.workplaceBlocks;
+        for (const b of list) blocks.push(b);
+      }
+      crossAnchorTargetZip = X;
+
+      // Centroid fallback — non-anchor partner ZIPs from X's opposite list.
+      // For inbound + residence: opposite is workplaceBlocks[X], partners are
+      // h_zcta. We aggregate every non-anchor h_zcta into a centroid point.
+      // For outbound + workplace: opposite is homeBlocks[X], partners are
+      // w_zcta. Non-anchor w_zcta partners get centroid points.
+      const oppositeList = useHomes
+        ? anchorEntry!.workplaceBlocks
+        : anchorEntry!.homeBlocks;
+      const anchorZipSet = new Set(Object.keys(odBlocks.anchors));
+      const fallbackAcc = new Map<string, BlockPartner[]>();
+      for (const b of oppositeList) {
+        for (const p of b.partners) {
+          if (p.zip === 'ALL_OTHER') continue;
+          if (anchorZipSet.has(p.zip)) continue;
+          if (partnerScopeAnchors && !partnerScopeAnchors.has(p.zip)) continue;
+          let arr = fallbackAcc.get(p.zip);
+          if (!arr) {
+            arr = [];
+            fallbackAcc.set(p.zip, arr);
+          }
+          arr.push(p);
+        }
+      }
+      for (const [pz, partners] of fallbackAcc) {
+        centroidFallback.push({ partnerZip: pz, partners });
+      }
+    }
   }
 
+  // ----- Filter setup --------------------------------------------------------
   const segmentActive = !isSegmentFilterAll(segmentFilter);
   const directionActive = directionFilter !== 'all';
-  const partnerActive = selectedPartner != null;
-  const fastPath = !segmentActive && !directionActive && !partnerActive;
 
-  // First, resolve every surviving block's raw weight under the active
-  // filter set. We collect into a [block, weight] list so we can find the
-  // scope-max afterward and normalize. The scope is the active block list
-  // itself: regional view → max across all 11 anchors' workplaceBlocks;
-  // anchor view → max within the selected anchor. That makes each feature's
-  // normalized weight a "share of the densest block in the current view",
-  // which lines up with the discrete-band choropleth semantics requested
-  // (LEHD OnTheMap style) — band cutoffs at 20/40/60/80% of scope-max.
-  type Resolved = { block: AnchorBlock; weight: number };
+  // Block-level partner filter. In cross-anchor mode it pins partners to
+  // {X}; in same-side mode with a selectedPartner it pins to the partner's
+  // member ZIPs. Otherwise null (no per-partner filtering needed).
+  let blockPartnerFilter: Set<string> | null = null;
+  if (crossAnchorTargetZip) {
+    blockPartnerFilter = new Set([crossAnchorTargetZip]);
+  } else if (selectedPartner) {
+    blockPartnerFilter = new Set(selectedPartner.zips);
+  }
+
+  const fastPath =
+    !segmentActive && !directionActive && blockPartnerFilter == null;
+
+  type Resolved = { lat: number; lng: number; key: string; weight: number };
   const resolved: Resolved[] = [];
 
+  const zipMetaByZip = new Map<string, ZipMeta>();
+  for (const z of zips) zipMetaByZip.set(z.zip, z);
+
+  // ----- Block-level resolution ---------------------------------------------
   if (fastPath) {
     for (const b of blocks) {
-      if (b.total > 0) resolved.push({ block: b, weight: b.total });
+      if (b.total > 0)
+        resolved.push({ lat: b.lat, lng: b.lng, key: b.block, weight: b.total });
     }
   } else {
-    // Slow path — iterate partners under the active filter set.
-    const zipMetaByZip = new Map<string, ZipMeta>();
-    for (const z of zips) zipMetaByZip.set(z.zip, z);
-    const partnerZips = selectedPartner
-      ? new Set<string>(selectedPartner.zips)
-      : null;
-
     for (const b of blocks) {
       let weight = 0;
       for (const p of b.partners) {
-        if (partnerZips && !partnerZips.has(p.zip)) continue;
+        if (blockPartnerFilter && !blockPartnerFilter.has(p.zip)) continue;
         if (directionActive) {
-          const bearing = classifyPartnerBearing(b.anchorZip, p.zip, zipMetaByZip);
+          const bearing = classifyPartnerBearing(
+            b.anchorZip,
+            p.zip,
+            zipMetaByZip,
+          );
           if (bearing !== directionFilter) continue;
         }
         const value = segmentActive
@@ -195,23 +304,57 @@ export function buildHeatmapGeoJson(
           : p.total;
         weight += value;
       }
-      if (weight > 0) resolved.push({ block: b, weight });
+      if (weight > 0)
+        resolved.push({ lat: b.lat, lng: b.lng, key: b.block, weight });
     }
   }
 
-  // Quintile binning — every surviving block is placed into one of 5 bands
-  // by its rank within the active scope (region-wide in regional view,
-  // anchor-wide in anchor view). Assigning bin centers 0.10 / 0.30 / 0.50 /
-  // 0.70 / 0.90 lines them up cleanly with the heatmap-color step cutoffs
-  // (0.20 / 0.40 / 0.60 / 0.80) so each quintile renders in its own
-  // discrete white alpha level. Mirrors the LEHD OnTheMap choropleth-style
-  // visual where every block registers in some band rather than collapsing
-  // into a long tail under linear scope-max normalization.
-  const sorted = resolved
-    .map((r) => r.weight)
-    .sort((a, b) => a - b);
-  // Index of the lowest value strictly greater than `frac` of the
-  // distribution — used as upper-edge cutoffs for bins 1..4.
+  // ----- ZIP-centroid fallback (cross-anchor mode only) ----------------------
+  // Non-anchor partner ZIPs that the cross-anchor block iteration can't reach
+  // (their workers' homes / workplaces are outside the 11 anchors and therefore
+  // not present in any anchor's block list). One coarse point per ZIP at its
+  // centroid, weighted by the summed partner count from X's opposite list.
+  if (crossAnchorTargetZip && centroidFallback.length > 0) {
+    for (const entry of centroidFallback) {
+      const z = zipMetaByZip.get(entry.partnerZip);
+      if (!z || z.lat == null || z.lng == null) continue;
+
+      // Direction filter: bearing reference is X (every partner record in
+      // entry.partners came from X's opposite-list blocks, which all share
+      // anchorZip = X). Single bearing decision per fallback ZIP.
+      if (directionActive) {
+        const bearing = classifyPartnerBearing(
+          crossAnchorTargetZip,
+          entry.partnerZip,
+          zipMetaByZip,
+        );
+        if (bearing !== directionFilter) continue;
+      }
+
+      let weight = 0;
+      for (const p of entry.partners) {
+        const value = segmentActive
+          ? segmentSumFromBlockSegments(p, segmentFilter)
+          : p.total;
+        weight += value;
+      }
+      if (weight > 0) {
+        resolved.push({
+          lat: z.lat,
+          lng: z.lng,
+          key: `zip:${entry.partnerZip}`,
+          weight,
+        });
+      }
+    }
+  }
+
+  // ----- Quintile binning (LEHD OnTheMap–style discrete bands) --------------
+  // Every surviving point is placed into one of 5 bands by its rank within
+  // the active scope. Bin centers 0.10 / 0.30 / 0.50 / 0.70 / 0.90 line up
+  // with the heatmap-color step cutoffs (0.20 / 0.40 / 0.60 / 0.80) so each
+  // quintile renders in its own discrete white alpha level.
+  const sorted = resolved.map((r) => r.weight).sort((a, b) => a - b);
   const cutoffAt = (frac: number): number => {
     if (sorted.length === 0) return 0;
     const idx = Math.min(sorted.length - 1, Math.floor(frac * sorted.length));
@@ -222,19 +365,19 @@ export function buildHeatmapGeoJson(
   const t60 = cutoffAt(0.6);
   const t80 = cutoffAt(0.8);
   const bandCenter = (w: number): number => {
-    if (w <= t20) return 0.10;
-    if (w <= t40) return 0.30;
-    if (w <= t60) return 0.50;
-    if (w <= t80) return 0.70;
-    return 0.90;
+    if (w <= t20) return 0.1;
+    if (w <= t40) return 0.3;
+    if (w <= t60) return 0.5;
+    if (w <= t80) return 0.7;
+    return 0.9;
   };
 
   const features: HeatmapPointFeature[] = [];
   for (const r of resolved) {
     features.push({
       type: 'Feature',
-      geometry: { type: 'Point', coordinates: [r.block.lng, r.block.lat] },
-      properties: { weight: bandCenter(r.weight), block: r.block.block },
+      geometry: { type: 'Point', coordinates: [r.lng, r.lat] },
+      properties: { weight: bandCenter(r.weight), block: r.key },
     });
   }
   return { type: 'FeatureCollection', features };

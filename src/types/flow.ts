@@ -151,6 +151,15 @@ export interface PassThroughModeEntry {
 }
 
 export interface PassThroughAnchorEntry {
+  // Canonical pass-through volume across BOTH directions for the anchor —
+  // sum of every worker whose commute path on the I-70 / Hwy 82 tree
+  // topology passes strictly through this anchor (excluding endpoints).
+  // Includes non-anchor endpoints after sentinel collapse. Surfaced as the
+  // headline "Total pass-through volume" on the card; resolves the
+  // inbound/outbound asymmetry that the old longitude-XOR check produced.
+  // Spur anchors (OSM, SMV) are 0 by construction — terminal off-corridor
+  // ZIPs have no through-traffic.
+  total: number;
   inbound: PassThroughModeEntry;
   outbound: PassThroughModeEntry;
 }

@@ -1,9 +1,10 @@
 // Inbound / Outbound segmented control — mirrors the "Live Map / Fleet / Routes"
 // tab pattern in the Ron Design inspiration. The toggle renders in every view:
-//  • anchor view → drives the user's mode (left panel + map both react)
-//  • aggregate view → drives a separate `regionalViewMode` upstream that only
-//    re-skins the corridor + heatmap visuals; the left panel / cards / tooltip
-//    stay aggregated across both directions.
+//  • anchor view → drives the user's mode (left panel + map both react).
+//  • aggregate view → renders a static "Aggregate Regional Flows" label
+//    instead of a toggle; corridor visuals lock to inbound and the heatmap
+//    layer reads its own independent `heatmapSide` state. The Mode prop
+//    coming in is ignored on this branch.
 //  • non-anchor view → disabled (locked to inbound — anchor-inbound is the
 //    only dataset whose origins include non-anchor places).
 
@@ -18,9 +19,36 @@ interface Props {
   // the non-anchor selection). Buttons are non-interactive but keep their
   // active styling so the lock reads visually.
   disabled?: boolean;
+  // When true, the toggle is replaced by a static "Aggregate Regional Flows"
+  // label — used in the aggregate (no-selection) view, where the canonical
+  // stats panels stay aggregated across both directions and the inbound /
+  // outbound choice only re-skins the corridor + heatmap visuals (which are
+  // controlled by the View Layer toggle and the heatmap-specific
+  // Residence / Workplace toggle below it).
+  aggregate?: boolean;
 }
 
-export function ModeToggle({ mode, onChange, disabled = false }: Props) {
+export function ModeToggle({ mode, onChange, disabled = false, aggregate = false }: Props) {
+  if (aggregate) {
+    return (
+      <div
+        role="status"
+        aria-label="Aggregate Regional Flows"
+        className="flex p-1 rounded-lg border"
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          borderColor: 'var(--panel-border)',
+        }}
+      >
+        <div
+          className="flex-1 px-3 py-1.5 text-xs font-medium rounded-md text-center"
+          style={{ background: 'var(--accent)', color: '#1a1207' }}
+        >
+          Aggregate Regional Flows
+        </div>
+      </div>
+    );
+  }
   return (
     <div
       role="tablist"

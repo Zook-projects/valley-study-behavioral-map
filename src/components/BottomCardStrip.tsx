@@ -41,6 +41,7 @@ import type {
   FlowRow,
   Mode,
   PassThroughFile,
+  PassThroughPair,
   SegmentBucket,
   SegmentFilter,
   ZipMeta,
@@ -2071,32 +2072,38 @@ function perZipBlocks(
 const PASS_THROUGH_TOP_N = 10;
 
 // Synthetic gateway ZIPs emitted by scripts/build-passthrough.py — they
-// collapse all non-anchor endpoints beyond the I-70 anchor envelope into
-// two friendly buckets so the card surfaces "Eastern I-70" / "Western I-70"
+// collapse all non-anchor endpoints into three friendly buckets so the
+// card surfaces "Eastern I-70" / "Western I-70" / "All Other Locations"
 // rows instead of dozens of small individual ZIPs (Eagle, Vail, Denver,
-// Grand Junction, etc.). The gateway ZIPs are not present in zips.json —
-// they're synthetic — so the place-name and direction helpers special-case
-// them inline.
+// Grand Junction, Leadville, etc.). The gateway ZIPs are not present in
+// zips.json — they're synthetic — so the place-name and direction helpers
+// special-case them inline. GW_OTHER carries off-corridor non-anchor
+// endpoints (south of the I-70 corridor or off-network); the build pipeline
+// models them as joining the network at the GWS junction.
 const GATEWAY_PLACE_NAMES: Record<string, string> = {
   GW_E: 'Eastern I-70',
   GW_W: 'Western I-70',
+  GW_OTHER: 'All Other Locations',
 };
 
 // True when a ZIP is one of the synthetic gateway ZIPs.
 function isGatewayZip(zip: string): boolean {
-  return zip === 'GW_E' || zip === 'GW_W';
+  return zip === 'GW_E' || zip === 'GW_W' || zip === 'GW_OTHER';
 }
 
 // Direction-classify an OD pair where one or both endpoints may be the
 // synthetic gateway ZIPs. Falls through to the shared classifyDirection()
 // for normal pairs. A gateway endpoint anchors the bearing: GW_E sits east
 // of the anchor envelope, GW_W sits west, so a flow ending at GW_E goes
-// east, a flow originating at GW_E goes west, and so on.
+// east, a flow originating at GW_E goes west, and so on. GW_OTHER is
+// off-corridor (no clean E/W bearing) and resolves to 'neutral' so it
+// drops out of directional filters.
 function gatewayAwareDirection(
   originZip: string,
   destZip: string,
   zipsList: ZipMeta[],
 ): 'east' | 'west' | 'neutral' {
+  if (destZip === 'GW_OTHER' || originZip === 'GW_OTHER') return 'neutral';
   if (isGatewayZip(destZip)) return destZip === 'GW_E' ? 'east' : 'west';
   if (isGatewayZip(originZip)) return originZip === 'GW_E' ? 'west' : 'east';
   return classifyDirection(originZip, destZip, zipsList);
@@ -2229,7 +2236,6 @@ function PassThroughCard({
   passThrough,
   zipPlaces,
   zips,
-  mode,
   directionFilter,
   origin,
   dest,
@@ -2241,19 +2247,39 @@ function PassThroughCard({
   passThrough: PassThroughFile;
   zipPlaces: Map<string, string>;
   zips: ZipMeta[];
-  mode: Mode;
   directionFilter: DirectionFilter;
   origin: { place: string; zips: string[] } | null;
   dest: { place: string; zips: string[] } | null;
   onOriginChange: (sel: { place: string; zips: string[] } | null) => void;
   onDestChange: (sel: { place: string; zips: string[] } | null) => void;
 }) {
-  // Mode-aware bucket: inbound surfaces pairs whose workplace is one of
-  // the OTHER 10 anchors (workers passing through this anchor on their way
-  // to another anchor's workplace); outbound surfaces pairs whose
-  // residence is at one of the OTHER 10 anchors.
+  // Pass-through is mode-agnostic — a commute either passes through this
+  // anchor or it doesn't, regardless of inbound/outbound framing. Union
+  // the two buckets and dedupe by (originZip, destZip) so anchor↔anchor
+  // pairs (which appear in both buckets by construction) are counted once.
+  // The card's headline `total` (set by the build pipeline) is the
+  // canonical pass-through volume; column sums reach that figure minus
+  // any sentinel↔sentinel pass-through (e.g., GW_E ↔ GW_W transits
+  // through GWS), which the build buckets exclude because both buckets
+  // require an anchor endpoint.
   const anchorEntry = passThrough.byAnchor[anchorZip];
-  const modeEntry = mode === 'inbound' ? anchorEntry?.inbound : anchorEntry?.outbound;
+  const unifiedEntry = useMemo(() => {
+    if (!anchorEntry) return null;
+    const seen = new Set<string>();
+    const pairs: PassThroughPair[] = [];
+    for (const p of [...anchorEntry.inbound.pairs, ...anchorEntry.outbound.pairs]) {
+      const key = `${p.originZip}→${p.destZip}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push(p);
+    }
+    // Both bucket residuals are computed on the un-direction-filtered
+    // tail beyond the build cap. With <200 unique labels post-collapse
+    // the cap never bites in practice, so this is effectively 0; sum to
+    // be safe if a future build raises the label count.
+    const residual = anchorEntry.inbound.residual + anchorEntry.outbound.residual;
+    return { pairs, residual };
+  }, [anchorEntry]);
 
   // Aggregate the (origin, dest) pair list into per-side rollups KEYED BY
   // PLACE NAME — multiple ZIPs sharing a place (e.g., Eagle 81637 + 81631)
@@ -2267,7 +2293,7 @@ function PassThroughCard({
       originTotal: 0,
       destTotal: 0,
     };
-    if (!modeEntry) return empty;
+    if (!unifiedEntry) return empty;
     type AggBucket = { place: string; zips: Set<string>; workers: number };
     const originAgg = new Map<string, AggBucket>();
     const destAgg = new Map<string, AggBucket>();
@@ -2280,7 +2306,7 @@ function PassThroughCard({
     const originZipsSet = origin ? new Set(origin.zips) : null;
     let originTotal = 0;
     let destTotal = 0;
-    for (const p of modeEntry.pairs) {
+    for (const p of unifiedEntry.pairs) {
       // Direction filter: classify the (origin → dest) bearing using the
       // same E/W rule the map uses elsewhere. Pairs classified 'neutral'
       // (N-S dominated, same-cluster, or missing centroids) drop out of
@@ -2341,17 +2367,17 @@ function PassThroughCard({
       .map(toRow)
       .sort((a, b) => b.workers - a.workers);
     return { origins, dests, originTotal, destTotal };
-  }, [modeEntry, zipPlaces, zips, directionFilter, origin, dest]);
+  }, [unifiedEntry, zipPlaces, zips, directionFilter, origin, dest]);
 
   const directionActive = directionFilter !== 'all';
   // Build-time residual is computed across the un-direction-filtered tail,
   // so it can't be apportioned into East/West. Suppress it whenever a
   // direction filter is active (same rule as cross-filter narrowing).
-  const residualVisible = !directionActive && modeEntry ? modeEntry.residual : 0;
-  const totalPairs = modeEntry
+  const residualVisible = !directionActive && unifiedEntry ? unifiedEntry.residual : 0;
+  const totalPairs = unifiedEntry
     ? directionActive
       ? rollup.originTotal // origin/destTotal match when no cross-filter
-      : modeEntry.pairs.reduce((s, p) => s + p.workerCount, 0) + modeEntry.residual
+      : unifiedEntry.pairs.reduce((s, p) => s + p.workerCount, 0) + unifiedEntry.residual
     : 0;
   const filterActive = origin != null || dest != null;
   const filteredTotal = filterActive
@@ -2365,12 +2391,10 @@ function PassThroughCard({
     if (dest != null) onDestChange(null);
   };
 
-  // Mode-driven copy: which side is the anchor-restricted column, and how
-  // we explain the slice to the reader.
-  const subtitleCopy =
-    mode === 'inbound'
-      ? `Workers commuting past ${anchorPlace} to another anchor workplace · latest year (${passThrough.year})`
-      : `Workers commuting past ${anchorPlace} from another anchor's residents · latest year (${passThrough.year})`;
+  // Mode-agnostic copy — pass-through is a property of the commute path,
+  // not of which side we frame as "anchor". The headline `total` line
+  // below shows the canonical anchor-level pass-through volume.
+  const subtitleCopy = `Workers commuting through ${anchorPlace} · latest year (${passThrough.year})`;
 
   // Section box style — matches the pinned tooltip's residence/workplace
   // sub-cards (see App.tsx pinned panel). The opposite-side section
@@ -2408,8 +2432,21 @@ function PassThroughCard({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <div className="text-[11px] tnum" style={{ color: 'var(--text-h)' }}>
-            {fmtInt(filteredTotal)} workers
+          <div className="flex flex-col items-end">
+            <div className="text-[11px] tnum" style={{ color: 'var(--text-h)' }}>
+              {fmtInt(filteredTotal)} workers
+            </div>
+            {/* Canonical anchor-level total — every commuter whose tree-
+                topology path passes through this anchor (both directions,
+                including non-anchor endpoints). Invariant to mode, direction
+                filter, and cross-filter — gives the user a stable "true"
+                pass-through volume to compare against the filtered headline
+                above. */}
+            {anchorEntry && anchorEntry.total > 0 && (
+              <div className="text-[10px] tnum mt-0.5" style={{ color: 'var(--text-dim)' }}>
+                {fmtInt(anchorEntry.total)} total pass-through
+              </div>
+            )}
           </div>
           {filterActive && (
             <button
@@ -3065,7 +3102,6 @@ export function BottomCardStrip({
                 passThrough={passThrough}
                 zipPlaces={zipPlaces}
                 zips={zips}
-                mode={mode}
                 directionFilter={directionFilter}
                 origin={passThroughOrigin}
                 dest={passThroughDest}

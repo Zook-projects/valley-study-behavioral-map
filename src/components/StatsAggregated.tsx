@@ -46,9 +46,6 @@ interface Props {
   zips: ZipMeta[];
   // Precomputed OSRM drive-distance lookup. Null = use Haversine fallback only.
   driveDistance: DriveDistanceMap | null;
-  // Optional — passed through to the per-anchor rankings so a row click
-  // selects the anchor (same effect as clicking its chip in ZipSelector).
-  onSelectZip?: (zip: string | null) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,9 +57,25 @@ interface StatItem {
   label: string;
   value: string;
   sub: string;
+  // Optional second sub-line. Currently used only by the Total Workforce
+  // hero tile to surface "X% of mapped workforce" — the ratio of the
+  // currently-filtered total to the absolute regional baseline (the full
+  // un-narrowed, un-direction-filtered, un-segment-filtered inbound total).
+  // Responds to direction, segment, and ranking filters because the
+  // numerator moves while the denominator stays pinned.
+  secondary?: string;
 }
 
-function buildItems(props: Props): StatItem[] {
+function buildItems(
+  props: Props,
+  // Absolute regional total workforce baseline (sum of inbound across all
+  // 11 anchors, no direction / segment / ranking filtering applied). Used
+  // as the denominator for the workforce hero's secondary "% of mapped
+  // workforce" line. Caller computes from the un-narrowed `flowsInbound`
+  // prop to keep the denominator stable while filters re-aggregate the
+  // numerator.
+  mappedWorkforceTotal: number,
+): StatItem[] {
   const {
     flowsInbound,
     directionFilteredInbound,
@@ -80,12 +93,16 @@ function buildItems(props: Props): StatItem[] {
     : 'worker-weighted, straight-line × 1.25, cross-ZIP only';
   const filterActive = directionFilter !== 'all';
 
+  const mappedShare =
+    mappedWorkforceTotal > 0 ? summary.totalWorkers / mappedWorkforceTotal : 0;
+
   const items: StatItem[] = [
     {
       id: 'workforce',
       label: 'Total Workforce',
       value: fmtInt(summary.totalWorkers),
       sub: 'working within the 11 workplace ZIP codes',
+      secondary: `${fmtPct(mappedShare)} of mapped workforce`,
     },
     {
       id: 'cross-zip',
@@ -256,6 +273,14 @@ function HeroRow({ item }: { item: StatItem }) {
           {item.sub}
         </div>
       </div>
+      {item.secondary && (
+        <div
+          className="mt-0.5 text-xs tnum"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          {item.secondary}
+        </div>
+      )}
     </div>
   );
 }
@@ -355,11 +380,17 @@ type RankSortBy = 'count' | 'percent';
 
 function AnchorRankings({
   rankings,
-  onSelectZip,
+  selectedFilter,
+  onToggleFilter,
   directionFilter,
 }: {
   rankings: AnchorRanking[];
-  onSelectZip?: (zip: string | null) => void;
+  // Set of currently-selected workplace ZIPs. When non-empty the rows in
+  // the set render with an active background and the headline tiles above
+  // re-aggregate to those ZIPs only. Empty = no filter. Clearing the filter
+  // is handled by the status banner in StatsAggregated, not inside this list.
+  selectedFilter: Set<string>;
+  onToggleFilter: (zip: string) => void;
   directionFilter: DirectionFilter;
 }) {
   const [axis, setAxis] = useState<RankAxis>('total');
@@ -503,14 +534,27 @@ function AnchorRankings({
             sortBy === 'count' ? 'var(--text-h)' : 'var(--text-dim)';
           const percentColor =
             sortBy === 'percent' ? 'var(--text-h)' : 'var(--text-dim)';
-          const handleClick = () => onSelectZip?.(r.zip);
+          const isSelected = selectedFilter.has(r.zip);
+          const handleClick = () => onToggleFilter(r.zip);
           return (
             <li key={r.zip}>
               <button
                 type="button"
                 onClick={handleClick}
-                aria-label={`Select ${r.place} (ZIP ${r.zip})`}
+                aria-pressed={isSelected}
+                aria-label={`${isSelected ? 'Remove' : 'Add'} ${r.place} (ZIP ${r.zip}) ${isSelected ? 'from' : 'to'} stats filter`}
                 className="w-full flex items-center gap-2 py-1 px-1 text-[11px] text-left rounded-sm transition-colors hover:bg-white/[0.05] focus:outline-none focus-visible:ring-1"
+                style={
+                  isSelected
+                    ? {
+                        // Active filter row — same accent treatment used for
+                        // selected ZIP chips in ZipSelector so the visual
+                        // language reads consistently across the panel.
+                        background: 'rgba(244, 191, 79, 0.12)',
+                        boxShadow: 'inset 0 0 0 1px rgba(244, 191, 79, 0.55)',
+                      }
+                    : undefined
+                }
               >
                 <span
                   className="tnum w-4 shrink-0 text-right"
@@ -572,7 +616,65 @@ function AnchorRankings({
 // ---------------------------------------------------------------------------
 
 export function StatsAggregated(props: Props) {
-  const items = buildItems(props);
+  // Local panel-only filter — clicking a row in AnchorRankings toggles its
+  // ZIP into this set. Headline tiles re-aggregate against flows narrowed
+  // to destZip ∈ filter; the rankings list itself stays unfiltered so the
+  // user can compare against the rest of the valley while toggling. Empty
+  // set means "no filter" — identical behavior to pre-filter aggregate view.
+  const [rankingFilter, setRankingFilter] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const filterActive = rankingFilter.size > 0;
+
+  const toggleRankingFilter = (zip: string) => {
+    setRankingFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(zip)) next.delete(zip);
+      else next.add(zip);
+      return next;
+    });
+  };
+  const clearRankingFilter = () => setRankingFilter(new Set());
+
+  // Narrow the inbound flow arrays to flows landing in the selected anchor(s)
+  // when the filter is active. The "Outside" tiles read off `flowsInbound`
+  // (unfiltered by direction) so we narrow that one too.
+  const narrowedDirectionFilteredInbound = useMemo(() => {
+    if (!filterActive) return props.directionFilteredInbound;
+    return props.directionFilteredInbound.filter((f) =>
+      rankingFilter.has(f.destZip),
+    );
+  }, [filterActive, props.directionFilteredInbound, rankingFilter]);
+  const narrowedFlowsInbound = useMemo(() => {
+    if (!filterActive) return props.flowsInbound;
+    return props.flowsInbound.filter((f) => rankingFilter.has(f.destZip));
+  }, [filterActive, props.flowsInbound, rankingFilter]);
+
+  // Absolute baseline for the workforce hero's "% of mapped workforce"
+  // sub-line. Computed off the un-narrowed `props.flowsInbound` so the
+  // denominator stays pinned while the numerator (computed inside
+  // buildItems off the narrowed/direction/segment-filtered set) moves.
+  const mappedWorkforceTotal = useMemo(
+    () => computeAggregated(props.flowsInbound).totalWorkers,
+    [props.flowsInbound],
+  );
+
+  const items = buildItems(
+    {
+      ...props,
+      flowsInbound: narrowedFlowsInbound,
+      directionFilteredInbound: narrowedDirectionFilteredInbound,
+      // Top Corridor is pre-computed upstream against the regional flow
+      // set and can't be cheaply recomputed here. Hide the tile when the
+      // local filter is active so it doesn't display a stat that disagrees
+      // with the rest of the panel.
+      topCorridorInbound: filterActive ? null : props.topCorridorInbound,
+    },
+    mappedWorkforceTotal,
+  );
+
+  // Rankings are computed off the un-narrowed direction-filtered arrays so
+  // every anchor stays visible regardless of filter state.
   const rankings = useMemo(
     () =>
       computeAnchorRankings(
@@ -583,12 +685,49 @@ export function StatsAggregated(props: Props) {
     [props.directionFilteredInbound, props.directionFilteredOutbound, props.zips],
   );
 
+  // Friendly label for the active filter — surfaced above the hero so the
+  // user always knows the headline tiles are scoped. Single-ZIP filter
+  // names the place; multi-ZIP filter shows the count.
+  const filterLabel = useMemo(() => {
+    if (!filterActive) return null;
+    if (rankingFilter.size === 1) {
+      const z = rankingFilter.values().next().value as string;
+      const meta = props.zips.find((m) => m.zip === z);
+      return meta?.place ?? z;
+    }
+    return `${rankingFilter.size} ZIPs`;
+  }, [filterActive, rankingFilter, props.zips]);
+
   return (
     <div>
+      {filterActive && filterLabel && (
+        <div
+          className="flex items-center justify-between gap-2 py-1.5 px-2 rounded-md mb-1.5 text-[10px] uppercase tracking-wider"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid var(--panel-border)',
+            color: 'var(--text-dim)',
+          }}
+        >
+          <span>
+            Filtered to{' '}
+            <span style={{ color: 'var(--text-h)' }}>{filterLabel}</span>
+          </span>
+          <button
+            type="button"
+            onClick={clearRankingFilter}
+            className="font-medium hover:underline focus:outline-none focus-visible:underline"
+            style={{ color: 'var(--accent)' }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
       <LayoutHero items={items} />
       <AnchorRankings
         rankings={rankings}
-        onSelectZip={props.onSelectZip}
+        selectedFilter={rankingFilter}
+        onToggleFilter={toggleRankingFilter}
         directionFilter={props.directionFilter}
       />
     </div>

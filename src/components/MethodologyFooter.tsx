@@ -4,14 +4,91 @@
 
 import { useState } from 'react';
 import { CorridorLegend } from './CorridorLegend';
+import type { SegmentFilter, ZipMeta } from '../types/flow';
+import { isSegmentFilterAll } from '../lib/flowQueries';
+import type { HeatmapSide } from './HeatmapModeToggle';
 
 interface Props {
   bucketBreaks: [number, number, number, number];
   amberSwatches: boolean;
+  // Heatmap legend props — when `heatmapVisible` is true the methodology
+  // panel renders a block-level density legend section alongside the
+  // corridor legend. Mirrors the dynamic title and 5-step gradient that
+  // previously lived in the standalone HeatmapLegend overlay.
+  heatmapVisible: boolean;
+  // Drives the legend title's "Workplace density" vs "Residential density"
+  // wording — reads off the independent heatmapSide UI state, NOT the
+  // canonical inbound/outbound mode.
+  heatmapSide: HeatmapSide;
+  selectedZip: string | null;
+  zips: ZipMeta[];
+  segmentFilter: SegmentFilter;
 }
 
-export function MethodologyFooter({ bucketBreaks, amberSwatches }: Props) {
+// Friendly label for the active segment filter — mirrors wording used
+// elsewhere in the dashboard. Returns null when the filter is inactive so
+// the caller can skip the second line.
+function describeSegmentFilter(filter: SegmentFilter): string | null {
+  if (isSegmentFilterAll(filter)) return null;
+  if (filter.buckets.length === 0) return null;
+  const axisLabel =
+    filter.axis === 'age'
+      ? 'Age'
+      : filter.axis === 'wage'
+      ? 'Wage'
+      : 'Industry';
+  const bucketLabels = filter.buckets.map((b) => {
+    switch (b) {
+      case 'u29':
+        return 'Under 29';
+      case 'age30to54':
+        return '30–54';
+      case 'age55plus':
+        return '55+';
+      case 'low':
+        return 'Low';
+      case 'mid':
+        return 'Mid';
+      case 'high':
+        return 'High';
+      case 'goods':
+        return 'Goods';
+      case 'tradeTransUtil':
+        return 'Trade/Trans/Util';
+      case 'allOther':
+        return 'All other';
+    }
+  });
+  return `${axisLabel}: ${bucketLabels.join(', ')}`;
+}
+
+export function MethodologyFooter({
+  bucketBreaks,
+  amberSwatches,
+  heatmapVisible,
+  heatmapSide,
+  selectedZip,
+  zips,
+  segmentFilter,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
+
+  // Title for the embedded heatmap legend — workplace vs residential density
+  // reads directly off the independent heatmapSide toggle. The trailing scope
+  // label is "all anchors" in aggregate view; the selected anchor's place +
+  // ZIP otherwise.
+  let heatmapTitle: string;
+  const sideLabel =
+    heatmapSide === 'residence' ? 'Residential density' : 'Workplace density';
+  if (!selectedZip || selectedZip === 'ALL_OTHER') {
+    heatmapTitle = `${sideLabel} — all anchors`;
+  } else {
+    const meta = zips.find((z) => z.zip === selectedZip);
+    const placeLabel = meta?.place ?? selectedZip;
+    const anchorLabel = `${placeLabel} (${selectedZip})`;
+    heatmapTitle = `${sideLabel} — ${anchorLabel}`;
+  }
+  const heatmapSegmentLabel = describeSegmentFilter(segmentFilter);
 
   return (
     <div
@@ -39,6 +116,53 @@ export function MethodologyFooter({ bucketBreaks, amberSwatches }: Props) {
           <div className="mb-3">
             <CorridorLegend breaks={bucketBreaks} amberSwatches={amberSwatches} />
           </div>
+          {heatmapVisible && (
+            <div className="mb-3" style={{ color: 'var(--text-h)' }}>
+              <div
+                className="uppercase tracking-widest"
+                style={{ fontSize: 10, color: 'var(--text-dim)' }}
+              >
+                Block-level density
+              </div>
+              <div
+                className="mt-0.5 leading-tight text-[11px]"
+                style={{ color: 'var(--text-h)' }}
+              >
+                {heatmapTitle}
+              </div>
+              {/* 5 discrete white bands — mirrors the stepped heatmap-color
+                  stops in MapCanvas.tsx. The dark pad keeps the lowest-alpha
+                  cell readable against the methodology panel background. */}
+              <div
+                className="mt-1.5 h-2 w-full rounded-sm flex overflow-hidden"
+                style={{
+                  background: 'rgba(0,0,0,0.45)',
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.12)',
+                }}
+              >
+                <div className="flex-1 h-full" style={{ background: 'rgba(255,255,255,0)' }} />
+                <div className="flex-1 h-full" style={{ background: 'rgba(255,255,255,0.20)' }} />
+                <div className="flex-1 h-full" style={{ background: 'rgba(255,255,255,0.45)' }} />
+                <div className="flex-1 h-full" style={{ background: 'rgba(255,255,255,0.70)' }} />
+                <div className="flex-1 h-full" style={{ background: 'rgba(255,255,255,0.95)' }} />
+              </div>
+              <div
+                className="mt-0.5 flex justify-between"
+                style={{ fontSize: 10, color: 'var(--text-dim)' }}
+              >
+                <span>Lower</span>
+                <span>Higher</span>
+              </div>
+              {heatmapSegmentLabel ? (
+                <div
+                  className="mt-1 italic"
+                  style={{ fontSize: 10, color: 'var(--text-dim)' }}
+                >
+                  {heatmapSegmentLabel}
+                </div>
+              ) : null}
+            </div>
+          )}
           <p className="mb-1.5">
             <strong>Source.</strong> U.S. Census Bureau, LEHD LODES Version 8 —
             Origin–Destination (OD), Workplace Area Characteristics (WAC), and

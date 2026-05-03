@@ -1,11 +1,12 @@
 // Frosted-glass left dashboard tile. Composes header, mode toggle, ZIP selector,
 // stats, and methodology footer. Accepts the global selection state via props.
 
-import type { DirectionFilter, FlowRow, Mode, ZipMeta } from '../types/flow';
+import type { DirectionFilter, FlowRow, Mode, SegmentFilter, ZipMeta } from '../types/flow';
 import type { DriveDistanceMap } from '../lib/flowQueries';
 import { ModeToggle } from './ModeToggle';
 import { DirectionToggle } from './DirectionToggle';
 import { ViewLayerToggle, type ViewLayer } from './ViewLayerToggle';
+import { HeatmapModeToggle, type HeatmapSide } from './HeatmapModeToggle';
 import { ZipSelector } from './ZipSelector';
 import { StatsAggregated } from './StatsAggregated';
 import { StatsForZip } from './StatsForZip';
@@ -30,13 +31,17 @@ interface Props {
   zips: ZipMeta[];
   mode: Mode;
   onModeChange: (m: Mode) => void;
-  // Toggle binding for ModeToggle. In aggregate view this is wired to
-  // regionalViewMode (a separate state that only drives the corridor +
-  // heatmap visuals); in anchor view it mirrors `mode`. Decoupled so the
-  // stats panels (which read `mode`) stay aggregated when the user flips
-  // the regional-view toggle.
+  // Toggle binding for ModeToggle — in anchor view it mirrors `mode`. In
+  // aggregate view ModeToggle renders the static "Aggregate Regional Flows"
+  // label so this prop is effectively unused but kept consistent with mode.
   viewMode: Mode;
   onViewModeChange: (m: Mode) => void;
+  // Independent heatmap-side state — drives the Workplace / Residence
+  // sub-toggle that slides out under ViewLayerToggle when the heatmap
+  // layer is active. Decoupled from `mode` / `viewMode` so all four
+  // (mode × heatmapSide) combinations are reachable.
+  heatmapSide: HeatmapSide;
+  onHeatmapSideChange: (s: HeatmapSide) => void;
   selectedZip: string | null;
   onSelectZip: (z: string | null) => void;
   // Selection class — drives the toggle/notice swap and the StatsForZip
@@ -75,6 +80,12 @@ interface Props {
   // Precomputed OSRM drive-distance lookup for the average-commute stat.
   // Optional — null falls back to Haversine × detour-factor.
   driveDistance: DriveDistanceMap | null;
+  // Heatmap legend props — mirror the legend that previously rendered as
+  // a standalone overlay above the bottom card strip. The legend now lives
+  // inside the methodology footer's expanded panel.
+  heatmapVisible: boolean;
+  heatmapLegendSide: HeatmapSide;
+  segmentFilter: SegmentFilter;
 }
 
 export function DashboardTile({
@@ -88,6 +99,8 @@ export function DashboardTile({
   mode,
   viewMode,
   onViewModeChange,
+  heatmapSide,
+  onHeatmapSideChange,
   selectedZip,
   onSelectZip,
   selectionKind,
@@ -104,6 +117,9 @@ export function DashboardTile({
   topCorridorInbound,
   topCorridorOutbound,
   driveDistance,
+  heatmapVisible,
+  heatmapLegendSide,
+  segmentFilter,
 }: Props) {
   return (
     <aside
@@ -143,13 +159,15 @@ export function DashboardTile({
             origin is the selected place, so outbound has no meaning here.
             A "Back to aggregate view" link sits directly beneath so the
             user can clear the lock without having to re-target the selector. */}
-        {/* viewMode is bound to regionalViewMode in aggregate view (visuals
-            only) and to the user's mode in anchor view; non-anchor stays
-            locked to inbound via the disabled flag. */}
+        {/* In aggregate view ModeToggle short-circuits to the static
+            "Aggregate Regional Flows" label, so viewMode is effectively
+            unused there. In anchor view it mirrors the user's mode; in
+            non-anchor view it stays disabled and locked to inbound. */}
         <ModeToggle
           mode={viewMode}
           onChange={onViewModeChange}
           disabled={selectionKind === 'non-anchor'}
+          aggregate={selectionKind === 'aggregate'}
         />
         {selectionKind === 'non-anchor' && nonAnchorBundle && (
           <div className="-mt-2">
@@ -167,6 +185,18 @@ export function DashboardTile({
         {/* View-layer toggle (sits above direction — picks corridor flow
             arcs vs block-level heatmap). */}
         <ViewLayerToggle value={viewLayer} onChange={onViewLayerChange} />
+
+        {/* Heatmap-only Residence / Workplace toggle. Slides out from behind
+            the Corridor / Heatmap row when heatmap is active and the heatmap
+            layer is actually visible (i.e. not non-anchor). Drives an
+            INDEPENDENT heatmap-side state — decoupled from the canonical
+            mode so every (mode × heatmapSide) combination is reachable in
+            anchor view. */}
+        <HeatmapModeToggle
+          side={heatmapSide}
+          onChange={onHeatmapSideChange}
+          visible={viewLayer === 'heatmap' && selectionKind !== 'non-anchor'}
+        />
 
         {/* Direction toggle (independent — composes with mode) */}
         <DirectionToggle value={directionFilter} onChange={onDirectionChange} />
@@ -209,7 +239,6 @@ export function DashboardTile({
               topCorridorOutbound={topCorridorOutbound}
               zips={zips}
               driveDistance={driveDistance}
-              onSelectZip={onSelectZip}
             />
           )}
         </div>
@@ -242,6 +271,11 @@ export function DashboardTile({
         <MethodologyFooter
           bucketBreaks={bucketBreaks}
           amberSwatches={selectedZip == null}
+          heatmapVisible={heatmapVisible}
+          heatmapSide={heatmapLegendSide}
+          selectedZip={selectedZip}
+          zips={zips}
+          segmentFilter={segmentFilter}
         />
       </div>
     </aside>

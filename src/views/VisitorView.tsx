@@ -35,10 +35,21 @@ import type {
   VisitorScopeFilter,
   VisitorSummaryFile,
 } from '../types/placer';
+import type { Dataset } from '../types/dataset';
+import { DatasetToggle } from '../components/DatasetToggle';
 
 const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
-export function VisitorView() {
+interface VisitorViewProps {
+  // Top-level dataset selector state — owned by App.tsx and threaded in so
+  // the DatasetToggle can be rendered inside this view's map area (anchored
+  // to the map rather than fixed to the viewport, which prevents the toggle
+  // from overlapping the full-width dashboard panel on mobile).
+  dataset: Dataset;
+  onDatasetChange: (next: Dataset) => void;
+}
+
+export function VisitorView({ dataset, onDatasetChange }: VisitorViewProps) {
   const [rows, setRows] = useState<VisitorFlowRow[] | null>(null);
   const [zips, setZips] = useState<PlacerZipMeta[] | null>(null);
   const [summary, setSummary] = useState<VisitorSummaryFile | null>(null);
@@ -186,8 +197,19 @@ export function VisitorView() {
             onSelectOrigin={setSelectedOrigin}
           />
 
-          {/* Map scope chips — top-right of the map. */}
-          <div className="absolute top-2 right-2 md:top-3 md:right-4 z-30">
+          {/* Top-level dataset selector — anchored inside the map area
+              so it never overlaps the full-width dashboard panel on
+              mobile. Mobile: top-right of the map. Desktop: top-left of
+              the map area. The MapScopeControl below shifts down on
+              mobile only to clear room for the toggle stack; on desktop
+              the two chips don't conflict (toggle is on the left). */}
+          <div className="absolute top-2 right-2 md:right-auto md:left-2 md:top-3 z-40">
+            <DatasetToggle dataset={dataset} onChange={onDatasetChange} />
+          </div>
+
+          {/* Map scope chips — top-right of the map on desktop; on mobile
+              they tuck below the DatasetToggle to avoid overlap. */}
+          <div className="absolute top-16 right-2 md:top-3 md:right-4 z-30">
             <MapScopeControl scope={mapScope} onChange={setMapScope} />
           </div>
         </div>
