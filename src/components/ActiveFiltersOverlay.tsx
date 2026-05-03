@@ -49,13 +49,18 @@ function Chip({
   ariaLabel: string;
 }) {
   return (
+    // The chip wraps an interactive Clear button; its presence/disappearance
+    // is also worth announcing to assistive tech, so use aria-live="polite"
+    // (announces additions without grabbing focus) instead of role="status"
+    // (which would frame the whole chip as a status region containing a
+    // button — confusing for screen readers).
     <div
       className="glass inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] pointer-events-auto"
       style={{
         color: 'var(--accent)',
         border: '1px solid var(--panel-border)',
       }}
-      role="status"
+      aria-live="polite"
     >
       <span
         className="inline-block w-1 h-1 rounded-full"

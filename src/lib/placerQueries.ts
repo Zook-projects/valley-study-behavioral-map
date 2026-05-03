@@ -32,7 +32,6 @@ export function projectVisitorRow(
     destZip: v.destZip,
     destPlace: v.destPlace,
     workerCount: count ?? 0,
-    percentage: 0,
     year: v.year,
     // Fudge: corridors.ts and MapCanvas only read `source` indirectly via
     // the FlowRow type; setting it to 'LEHD' avoids type errors but does not

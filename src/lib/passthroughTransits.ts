@@ -86,10 +86,6 @@ export function buildEastWestTransitFlows(
       destZip,
       destPlace: placeFor(destZip),
       workerCount,
-      // No anchor-side share denominator applies to a transit pair — leave
-      // at 0 so any consumer that accidentally reads it doesn't surface a
-      // misleading "X% of anchor flow" number.
-      percentage: 0,
       year: passThrough.year,
       source: 'LEHD',
       corridorPath: EAST_WEST_CORRIDOR_PATH,

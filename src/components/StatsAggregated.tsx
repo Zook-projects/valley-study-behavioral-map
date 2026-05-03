@@ -20,7 +20,7 @@
 // section follows beneath. Earlier prototypes carried a layout picker
 // (List / Grid / Hero); Hero was selected and the others have been pruned.
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { DirectionFilter, FlowRow, ZipMeta } from '../types/flow';
 import {
   computeAggregated,
@@ -407,20 +407,23 @@ function AnchorRankings({
 
   // Sort key matches whichever column is "primary" for the current sortBy.
   // For 'percent' we sort by the same secondaryPercent the row renders, so
-  // the visual order mirrors the right-hand column.
-  const sortKeyFor = (r: AnchorRanking): number => {
-    if (sortBy === 'percent') {
-      return secondaryPercent(r, axis, regionalTotal) ?? 0;
-    }
-    return valueFor(r, axis);
-  };
+  // the visual order mirrors the right-hand column. Hoisted as a useCallback
+  // so both the memoized sort and the bar-fill `max` calculation share a
+  // single closure — and the linter can verify the dep set without an
+  // eslint-disable escape hatch.
+  const sortKeyFor = useCallback(
+    (r: AnchorRanking): number => {
+      if (sortBy === 'percent') {
+        return secondaryPercent(r, axis, regionalTotal) ?? 0;
+      }
+      return valueFor(r, axis);
+    },
+    [axis, sortBy, regionalTotal],
+  );
 
   const sorted = useMemo(
     () => [...rankings].sort((a, b) => sortKeyFor(b) - sortKeyFor(a)),
-    // sortKeyFor is recomputed inline; deps capture every input that
-    // changes its return.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rankings, axis, sortBy, regionalTotal],
+    [rankings, sortKeyFor],
   );
   // Bar-fill scale follows the same attribute that drives the sort, so the
   // visual bar always corresponds to the column the user chose to rank by.

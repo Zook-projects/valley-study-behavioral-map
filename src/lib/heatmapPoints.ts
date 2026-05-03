@@ -42,26 +42,21 @@
 import type {
   AnchorBlock,
   BlockPartner,
-  BlockSegments,
   OdBlocksFile,
 } from '../types/lodes';
 import type {
-  AgeBucket,
   DirectionFilter,
-  Naics3Bucket,
   SegmentFilter,
-  WageBucket,
   ZipMeta,
 } from '../types/flow';
-import { isSegmentFilterAll } from './flowQueries';
+import {
+  EW_THRESHOLD_DEG,
+  NS_DOMINANCE_RATIO,
+  isSegmentFilterAll,
+  sumBucketsFromAllAxes,
+} from './flowQueries';
 
 export type HeatmapSide = 'workplace' | 'residence';
-
-// Re-derive the same direction-classifier thresholds used by flowQueries —
-// keeping them local rather than imported because flowQueries doesn't export
-// classifyDirection (it's an internal helper to filterByDirection).
-const EW_THRESHOLD_DEG = 0.005;
-const NS_DOMINANCE_RATIO = 2;
 
 /** Classify the bearing of `partnerZip` relative to `anchorZip`'s centroid.
  * Mirrors classifyDirection() in flowQueries.ts:393–425, but operates on a
@@ -89,28 +84,6 @@ function classifyPartnerBearing(
   }
   if (Math.abs(dy) > Math.abs(dx) * NS_DOMINANCE_RATIO) return 'neutral';
   return dLng > 0 ? 'east' : 'west';
-}
-
-/** Sum of the selected buckets within the active axis for a BlockSegments
- * (or BlockPartner — same shape) record. When the filter is inactive,
- * caller should use the record's `total` directly; this helper is only
- * called on the segment-filter-active branch. */
-function segmentSumFromBlockSegments(
-  seg: BlockSegments,
-  filter: SegmentFilter,
-): number {
-  if (filter.axis === 'all' || filter.buckets.length === 0) return 0;
-  let n = 0;
-  if (filter.axis === 'age') {
-    for (const b of filter.buckets) n += seg.age[b as AgeBucket] ?? 0;
-    return n;
-  }
-  if (filter.axis === 'wage') {
-    for (const b of filter.buckets) n += seg.wage[b as WageBucket] ?? 0;
-    return n;
-  }
-  for (const b of filter.buckets) n += seg.naics3[b as Naics3Bucket] ?? 0;
-  return n;
 }
 
 export interface HeatmapPointFeature {
@@ -300,7 +273,7 @@ export function buildHeatmapGeoJson(
           if (bearing !== directionFilter) continue;
         }
         const value = segmentActive
-          ? segmentSumFromBlockSegments(p, segmentFilter)
+          ? sumBucketsFromAllAxes(p, segmentFilter)
           : p.total;
         weight += value;
       }
@@ -334,7 +307,7 @@ export function buildHeatmapGeoJson(
       let weight = 0;
       for (const p of entry.partners) {
         const value = segmentActive
-          ? segmentSumFromBlockSegments(p, segmentFilter)
+          ? sumBucketsFromAllAxes(p, segmentFilter)
           : p.total;
         weight += value;
       }

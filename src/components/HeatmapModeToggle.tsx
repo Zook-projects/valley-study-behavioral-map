@@ -8,7 +8,8 @@
 //   • outbound + workplace → blocks where outgoing residents WORK (anywhere)
 // In non-anchor view the heatmap is hidden, so the toggle is unreachable.
 
-export type HeatmapSide = 'workplace' | 'residence';
+import type { HeatmapSide } from '../lib/heatmapPoints';
+export type { HeatmapSide };
 
 interface Props {
   side: HeatmapSide;

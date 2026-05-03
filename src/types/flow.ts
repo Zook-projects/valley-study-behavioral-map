@@ -53,7 +53,6 @@ export interface FlowRow {
   destZip: string;
   destPlace: string;
   workerCount: number;
-  percentage: number;         // share-of-anchor, sums to ~1.0 per anchor ZIP
   year: number;
   source: 'LEHD';             // future-proofed for Placer/ACS/RFTA
   // Ordered list of corridor IDs the flow traverses. Empty for self-flows

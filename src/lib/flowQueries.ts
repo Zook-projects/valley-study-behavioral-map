@@ -24,12 +24,14 @@ import type {
 // Threshold below which a pair's E-W component is too small to call.
 // 0.005° (longitude-corrected for latitude) keeps same-cluster pairs neutral
 // without bleeding genuine valley-axis flows into 'neutral'.
-const EW_THRESHOLD_DEG = 0.005;
+// Exported so heatmapPoints (and any future direction-classifier consumer)
+// can stay in sync with the canonical thresholds used by filterByDirection.
+export const EW_THRESHOLD_DEG = 0.005;
 // When the N-S component dominates the E-W component by this factor, the pair
 // is treated as N-S (neutral) rather than as an east/west flow. Catches cases
 // like Rifle→Meeker (mostly north) or Rifle→Montrose (mostly south) where the
 // raw longitude sign would otherwise drag the flow into an east/west bucket.
-const NS_DOMINANCE_RATIO = 2;
+export const NS_DOMINANCE_RATIO = 2;
 
 export const ANCHOR_ZIPS = [
   '81601', '81611', '81615', '81621', '81623',
@@ -571,6 +573,20 @@ export function sumBucketsFromBlock(
     for (const b of filter.buckets) n += (block as Naics3Block)[b as Naics3Bucket] ?? 0;
   }
   return n;
+}
+
+/** Sum of the selected buckets from a BlockSegments-shaped record (which
+ * carries all three axis blocks). Picks the right axis block then delegates
+ * to sumBucketsFromBlock. Used by the heatmap pipeline where each partner /
+ * block carries the full segments envelope rather than a single axis block. */
+export function sumBucketsFromAllAxes(
+  seg: { age: AgeBlock; wage: WageBlock; naics3: Naics3Block },
+  filter: SegmentFilter,
+): number {
+  if (filter.axis === 'all' || filter.buckets.length === 0) return 0;
+  if (filter.axis === 'age') return sumBucketsFromBlock(seg.age, filter);
+  if (filter.axis === 'wage') return sumBucketsFromBlock(seg.wage, filter);
+  return sumBucketsFromBlock(seg.naics3, filter);
 }
 
 /**

@@ -1096,7 +1096,7 @@ export function MapCanvas({
       const snapMove = (e: MouseEvent) => {
         const direct = document.elementsFromPoint(e.clientX, e.clientY);
         for (const el of direct) {
-          if ((el as HTMLElement).dataset?.corridorId) return;
+          if (el instanceof HTMLElement && el.dataset.corridorId) return;
         }
         // Direct miss: if a corridor is already the active hover, clear it
         // immediately rather than letting the ring sample keep it alive in
@@ -1111,7 +1111,8 @@ export function MapCanvas({
         for (const [dx, dy] of SNAP_OFFSETS) {
           const els = document.elementsFromPoint(e.clientX + dx, e.clientY + dy);
           for (const el of els) {
-            const cid = (el as HTMLElement).dataset?.corridorId;
+            if (!(el instanceof HTMLElement)) continue;
+            const cid = el.dataset.corridorId;
             if (!cid) continue;
             const aggMatch = haloLookup.get(cid);
             if (!aggMatch) continue;

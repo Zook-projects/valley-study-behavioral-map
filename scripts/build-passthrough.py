@@ -369,6 +369,33 @@ def main() -> int:
             outbound_sub, PAIRS_PER_ANCHOR_PER_MODE
         )
 
+        # Bucket overlap contract: a pair appears in BOTH inbound_pairs and
+        # outbound_pairs ONLY when its presence in both buckets is structural
+        # — i.e., both endpoints are anchor ZIPs (in which case it satisfies
+        # both bucket criteria) OR both are sentinels (the sentinel_pair
+        # carve-out above). Consumers that need a single count of any pair
+        # must dedupe by (originZip, destZip) on read; see the pass-through
+        # card union+dedup at BottomCardStrip.tsx and the E↔W transit dedup
+        # in passthroughTransits.ts. The XLSX export deliberately keeps the
+        # duplication, labeling each row by its source bucket. This
+        # assertion catches a future regression in the bucket-assignment
+        # logic that would let a non-anchor / non-sentinel pair land in
+        # both buckets and silently double-count anywhere that dedupes.
+        in_keys = {(p["originZip"], p["destZip"]) for p in inbound_pairs}
+        out_keys = {(p["originZip"], p["destZip"]) for p in outbound_pairs}
+        for key in in_keys & out_keys:
+            origin, dest = key
+            both_anchor = origin in ANCHOR_ZIPS and dest in ANCHOR_ZIPS
+            both_sentinel = origin in GATEWAY_NODES and dest in GATEWAY_NODES
+            if not (both_anchor or both_sentinel):
+                raise AssertionError(
+                    f"anchor {anchor_zip}: pair ({origin}, {dest}) appears in "
+                    f"both inbound and outbound buckets but is neither "
+                    f"anchor↔anchor nor sentinel↔sentinel. The bucket-"
+                    f"assignment logic above let through an unexpected case "
+                    f"that consumers' dedup pattern was not designed for."
+                )
+
         by_anchor[anchor_zip] = {
             "total": total_workers,
             "inbound": {"pairs": inbound_pairs, "residual": inbound_residual},

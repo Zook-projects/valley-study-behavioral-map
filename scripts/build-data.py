@@ -581,16 +581,6 @@ def main() -> int:
     # rac/wac/od-summary trend arrays for the card strip.
     od_latest = od_pairs[od_pairs["year"] == LATEST_YEAR]
 
-    # Per-anchor totals for percentage normalization.
-    inbound_totals = (
-        od_latest[od_latest["w_zip"].isin(ANCHOR_ZIPS)]
-        .groupby("w_zip")["totalJobs"].sum().to_dict()
-    )
-    outbound_totals = (
-        od_latest[od_latest["h_zip"].isin(ANCHOR_ZIPS)]
-        .groupby("h_zip")["totalJobs"].sum().to_dict()
-    )
-
     # Build a FlowRow's per-pair segments block from the namedtuple emitted by
     # od_latest.itertuples(). LODES OD files carry all 9 segment buckets (3 age
     # × 3 wage × 3 industry NAICS-3) per pair; aggregate_od_to_zip_pairs has
@@ -617,14 +607,12 @@ def main() -> int:
 
     flows_inbound_out: list[dict] = []
     for r in od_latest[od_latest["w_zip"].isin(ANCHOR_ZIPS)].itertuples(index=False):
-        denom = inbound_totals.get(r.w_zip, 0) or 1
         flows_inbound_out.append({
             "originZip": str(r.h_zip),
             "originPlace": zip_to_place.get(str(r.h_zip), ""),
             "destZip": str(r.w_zip),
             "destPlace": zip_to_place.get(str(r.w_zip), ""),
             "workerCount": int(r.totalJobs),
-            "percentage": round(int(r.totalJobs) / denom, 6),
             "year": int(r.year),
             "source": "LEHD",
             "segments": _segments_for_row(r),
@@ -632,14 +620,12 @@ def main() -> int:
 
     flows_outbound_out: list[dict] = []
     for r in od_latest[od_latest["h_zip"].isin(ANCHOR_ZIPS)].itertuples(index=False):
-        denom = outbound_totals.get(r.h_zip, 0) or 1
         flows_outbound_out.append({
             "originZip": str(r.h_zip),
             "originPlace": zip_to_place.get(str(r.h_zip), ""),
             "destZip": str(r.w_zip),
             "destPlace": zip_to_place.get(str(r.w_zip), ""),
             "workerCount": int(r.totalJobs),
-            "percentage": round(int(r.totalJobs) / denom, 6),
             "year": int(r.year),
             "source": "LEHD",
             "segments": _segments_for_row(r),
@@ -942,7 +928,7 @@ def main() -> int:
 
     inbound_path.write_text(json.dumps(flows_inbound_out, separators=(",", ":")))
     outbound_path.write_text(json.dumps(flows_outbound_out, separators=(",", ":")))
-    zips_path.write_text(json.dumps(zips_out, indent=2))
+    zips_path.write_text(json.dumps(zips_out, separators=(",", ":")))
     corridors_path.write_text(json.dumps(corridors_json, separators=(",", ":")))
     rac_path.write_text(json.dumps(rac_doc, separators=(",", ":")))
     wac_path.write_text(json.dumps(wac_doc, separators=(",", ":")))

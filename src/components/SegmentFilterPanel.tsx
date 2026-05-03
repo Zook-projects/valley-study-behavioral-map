@@ -117,6 +117,8 @@ export function SegmentFilterPanel({ value, onChange, compact = false }: Props) 
 
   return (
     <div
+      role="group"
+      aria-label="Segment filter"
       className="glass rounded-md p-3 shrink-0 flex flex-col gap-2"
       style={{ width: compact ? 150 : 220 }}
     >
