@@ -212,10 +212,20 @@ def load_corridor_graph() -> tuple[
         ctrl = [[float(p[0]), float(p[1])] for p in ctrl]
         ctrl[0] = [nodes[from_id]["lng"], nodes[from_id]["lat"]]
         ctrl[-1] = [nodes[to_id]["lng"], nodes[to_id]["lat"]]
-        endpoints = [ctrl[0], ctrl[-1]]
+        # By default, only the endpoint nodes are sent to OSRM and OSRM picks
+        # its own shortest path. Authors can opt-in to constraining the route
+        # by adding a `routingVia: [[lng, lat], ...]` property to the corridor
+        # feature in corridors.geojson — those points become OSRM via-points
+        # and force the route through them. Use sparingly: rough via-points
+        # can cause OSRM to overshoot or detour. Today, only C82_CARB_GWS
+        # uses this to keep the route on Grand Ave through downtown Glenwood
+        # (without it, OSRM diverts onto Midland Ave on the west side of the
+        # Roaring Fork).
+        routing_via = props.get("routingVia") or []
+        waypoints = [ctrl[0], *[[float(p[0]), float(p[1])] for p in routing_via], ctrl[-1]]
         try:
             geometry = route_polyline(
-                endpoints,
+                waypoints,
                 cache_path=OSRM_CACHE_PATH,
                 radius_m=OSRM_SNAP_RADIUS_M,
                 label=cid,
