@@ -840,6 +840,8 @@ export function CommuteView() {
     !flowIndex ||
     !flows ||
     !visibleCorridorMap ||
+    !visualFlows ||
+    !visualVisibleCorridorMap ||
     !racFile ||
     !wacFile ||
     !odSummary

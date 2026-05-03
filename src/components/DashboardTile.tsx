@@ -86,7 +86,6 @@ export function DashboardTile({
   directionFilteredOutbound,
   zips,
   mode,
-  onModeChange,
   viewMode,
   onViewModeChange,
   selectedZip,
