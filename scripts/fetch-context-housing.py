@@ -42,10 +42,24 @@ BPS_DIR = CACHE_ROOT / "bps"
 # Zillow public-CSV URLs (current as of 2025). These names are stable but
 # Zillow occasionally updates the slug — verify https://www.zillow.com/research/data/
 # before final builds.
+# All-homes ZHVI: SFR + Condo combined, mid-tier, smoothed + seasonally adjusted.
 ZILLOW_ZHVI_ZIP = "https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
 ZILLOW_ZHVI_CITY = "https://files.zillowstatic.com/research/public_csvs/zhvi/City_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
 ZILLOW_ZHVI_COUNTY = "https://files.zillowstatic.com/research/public_csvs/zhvi/County_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
 ZILLOW_ZHVI_STATE = "https://files.zillowstatic.com/research/public_csvs/zhvi/State_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
+
+# Single-family-only ZHVI (no tier filter).
+ZILLOW_ZHVI_SFR_ZIP = "https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_zhvi_uc_sfr_sm_sa_month.csv"
+ZILLOW_ZHVI_SFR_CITY = "https://files.zillowstatic.com/research/public_csvs/zhvi/City_zhvi_uc_sfr_sm_sa_month.csv"
+ZILLOW_ZHVI_SFR_COUNTY = "https://files.zillowstatic.com/research/public_csvs/zhvi/County_zhvi_uc_sfr_sm_sa_month.csv"
+ZILLOW_ZHVI_SFR_STATE = "https://files.zillowstatic.com/research/public_csvs/zhvi/State_zhvi_uc_sfr_sm_sa_month.csv"
+
+# Condo / co-op-only ZHVI (no tier filter).
+ZILLOW_ZHVI_CONDO_ZIP = "https://files.zillowstatic.com/research/public_csvs/zhvi/Zip_zhvi_uc_condo_sm_sa_month.csv"
+ZILLOW_ZHVI_CONDO_CITY = "https://files.zillowstatic.com/research/public_csvs/zhvi/City_zhvi_uc_condo_sm_sa_month.csv"
+ZILLOW_ZHVI_CONDO_COUNTY = "https://files.zillowstatic.com/research/public_csvs/zhvi/County_zhvi_uc_condo_sm_sa_month.csv"
+ZILLOW_ZHVI_CONDO_STATE = "https://files.zillowstatic.com/research/public_csvs/zhvi/State_zhvi_uc_condo_sm_sa_month.csv"
+
 ZILLOW_ZORI_ZIP = "https://files.zillowstatic.com/research/public_csvs/zori/Zip_zori_uc_sfrcondomfr_sm_month.csv"
 ZILLOW_ZORI_CITY = "https://files.zillowstatic.com/research/public_csvs/zori/City_zori_uc_sfrcondomfr_sm_month.csv"
 
@@ -132,11 +146,23 @@ def _write_normalized(filename: str, rows: list[dict]) -> None:
 def fetch_zillow() -> None:
     print("Zillow ZHVI / ZORI — bulk public CSVs:", file=sys.stderr)
     targets = [
+        # All-homes ZHVI (mid-tier SFR + Condo combined)
         (ZILLOW_ZHVI_ZIP,    "zhvi-zip.csv",    "zhvi-zip.json",    "RegionName", lambda r: r.get("RegionName") in ZILLOW_TARGETS_ZIP),
         (ZILLOW_ZHVI_CITY,   "zhvi-city.csv",   "zhvi-city.json",   "RegionName", lambda r: r.get("RegionName") in ZILLOW_CITY_NAMES and r.get("State") == "CO"),
         (ZILLOW_ZHVI_COUNTY, "zhvi-county.csv", "zhvi-county.json", "RegionName", lambda r: r.get("RegionName") in ZILLOW_COUNTY_NAMES and r.get("State") == "CO"),
         # State CSV: StateName column is empty; the state name is in RegionName.
         (ZILLOW_ZHVI_STATE,  "zhvi-state.csv",  "zhvi-state.json",  "RegionName",  lambda r: r.get("RegionName") == "Colorado"),
+        # Single-family-only ZHVI
+        (ZILLOW_ZHVI_SFR_ZIP,    "zhvi-sfr-zip.csv",    "zhvi-sfr-zip.json",    "RegionName", lambda r: r.get("RegionName") in ZILLOW_TARGETS_ZIP),
+        (ZILLOW_ZHVI_SFR_CITY,   "zhvi-sfr-city.csv",   "zhvi-sfr-city.json",   "RegionName", lambda r: r.get("RegionName") in ZILLOW_CITY_NAMES and r.get("State") == "CO"),
+        (ZILLOW_ZHVI_SFR_COUNTY, "zhvi-sfr-county.csv", "zhvi-sfr-county.json", "RegionName", lambda r: r.get("RegionName") in ZILLOW_COUNTY_NAMES and r.get("State") == "CO"),
+        (ZILLOW_ZHVI_SFR_STATE,  "zhvi-sfr-state.csv",  "zhvi-sfr-state.json",  "RegionName", lambda r: r.get("RegionName") == "Colorado"),
+        # Condo / co-op-only ZHVI
+        (ZILLOW_ZHVI_CONDO_ZIP,    "zhvi-condo-zip.csv",    "zhvi-condo-zip.json",    "RegionName", lambda r: r.get("RegionName") in ZILLOW_TARGETS_ZIP),
+        (ZILLOW_ZHVI_CONDO_CITY,   "zhvi-condo-city.csv",   "zhvi-condo-city.json",   "RegionName", lambda r: r.get("RegionName") in ZILLOW_CITY_NAMES and r.get("State") == "CO"),
+        (ZILLOW_ZHVI_CONDO_COUNTY, "zhvi-condo-county.csv", "zhvi-condo-county.json", "RegionName", lambda r: r.get("RegionName") in ZILLOW_COUNTY_NAMES and r.get("State") == "CO"),
+        (ZILLOW_ZHVI_CONDO_STATE,  "zhvi-condo-state.csv",  "zhvi-condo-state.json",  "RegionName", lambda r: r.get("RegionName") == "Colorado"),
+        # ZORI rents
         (ZILLOW_ZORI_ZIP,    "zori-zip.csv",    "zori-zip.json",    "RegionName", lambda r: r.get("RegionName") in ZILLOW_TARGETS_ZIP),
         (ZILLOW_ZORI_CITY,   "zori-city.csv",   "zori-city.json",   "RegionName", lambda r: r.get("RegionName") in ZILLOW_CITY_NAMES and r.get("State") == "CO"),
     ]

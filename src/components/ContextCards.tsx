@@ -53,6 +53,31 @@ const VISIBLE_TOPICS: ContextTopic[] = [
   'education',
 ];
 
+// Housing-card variant — controls which Zillow ZHVI series the card
+// surfaces as the headline. Defaults to "all" (Zillow's flagship "all
+// homes" mid-tier sfrcondo series). SFR = single-family-only, Condo =
+// condo/co-op-only — useful in Aspen / Snowmass where the mix is condo-
+// heavy and the all-homes blend hides outsize SFR values.
+type HousingVariant = 'all' | 'sfr' | 'condo';
+
+const HOUSING_VARIANT_KEY: Record<HousingVariant, string> = {
+  all: 'zhvi',
+  sfr: 'zhviSfr',
+  condo: 'zhviCondo',
+};
+
+const HOUSING_VARIANT_LABEL: Record<HousingVariant, string> = {
+  all: 'Typical home value (average)',
+  sfr: 'Typical home value (single family)',
+  condo: 'Typical home value (condo/co-op)',
+};
+
+const HOUSING_VARIANT_CHIP_LABEL: Record<HousingVariant, string> = {
+  all: 'Average',
+  sfr: 'Single family',
+  condo: 'Condo',
+};
+
 // Commerce-card variant — controls which CDOR column the card surfaces as
 // the headline. Defaults to "gross" because Gross Sales is the broadest
 // "business throughput" metric (typically what cities cite in EDC briefs);
@@ -98,14 +123,52 @@ const HEADLINE_LABEL: Record<ContextTopic, string> = {
   tourism: 'Lodging tax sales',
 };
 
-function headlineKeyFor(topic: ContextTopic, commerceVariant: CommerceVariant): string {
+function headlineKeyFor(
+  topic: ContextTopic,
+  commerceVariant: CommerceVariant,
+  housingVariant: HousingVariant,
+): string {
   if (topic === 'commerce') return COMMERCE_VARIANT_KEY[commerceVariant];
+  if (topic === 'housing') return HOUSING_VARIANT_KEY[housingVariant];
   return HEADLINE_KEY[topic];
 }
 
-function headlineLabelFor(topic: ContextTopic, commerceVariant: CommerceVariant): string {
+function headlineLabelFor(
+  topic: ContextTopic,
+  commerceVariant: CommerceVariant,
+  housingVariant: HousingVariant,
+): string {
   if (topic === 'commerce') return COMMERCE_VARIANT_LABEL[commerceVariant];
+  if (topic === 'housing') return HOUSING_VARIANT_LABEL[housingVariant];
   return HEADLINE_LABEL[topic];
+}
+
+/**
+ * Geographic granularity tag appended to each card's headline label, so the
+ * user can read off "what geography is this card's per-anchor row keyed to".
+ *
+ * Different sources publish at different levels:
+ *   - Demographics / Education → Census ACS Place (or ZCTA for Old Snowmass)
+ *   - Housing                  → Zillow ZIP-level
+ *   - Commerce                 → CDOR retail-by-City
+ *   - Employment               → LEHD LODES ZIP-keyed
+ *
+ * In the aggregate (no-anchor) view every card collapses to a regional
+ * roll-up (state + Garfield/Eagle/Pitkin), so the suffix is always "region".
+ */
+function geographyLevelSuffix(topic: ContextTopic, isPerAnchor: boolean): string {
+  if (!isPerAnchor) return 'region';
+  switch (topic) {
+    case 'demographics':
+    case 'education':
+    case 'commerce':
+      return 'city';
+    case 'employment':
+    case 'housing':
+      return 'ZIP';
+    default:
+      return 'region';
+  }
 }
 
 const FORMATTERS: Record<ContextTopic, (v: number) => string> = {
@@ -211,8 +274,9 @@ function buildRows(
   selectedZip: string | null,
   bundle: ContextBundle,
   commerceVariant: CommerceVariant,
+  housingVariant: HousingVariant,
 ): Row[] {
-  const key = headlineKeyFor(topic, commerceVariant);
+  const key = headlineKeyFor(topic, commerceVariant, housingVariant);
   const fmt = FORMATTERS[topic];
 
   // Helper to format a single value with the topic's formatter, or fall
@@ -244,16 +308,22 @@ function buildRows(
   return rows;
 }
 
-function VariantToggle({
+function VariantToggle<V extends string>({
   value,
   onChange,
+  options,
+  labels,
+  ariaLabel,
 }: {
-  value: CommerceVariant;
-  onChange: (v: CommerceVariant) => void;
+  value: V;
+  onChange: (v: V) => void;
+  options: readonly V[];
+  labels: Record<V, string>;
+  ariaLabel: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-0.5 mt-1.5" role="group" aria-label="CDOR sales metric">
-      {(['gross', 'retail', 'taxable'] as CommerceVariant[]).map((v) => {
+    <div className="inline-flex items-center gap-0.5 mt-1.5" role="group" aria-label={ariaLabel}>
+      {options.map((v) => {
         const active = value === v;
         return (
           <button
@@ -268,7 +338,7 @@ function VariantToggle({
               border: `1px solid ${active ? 'var(--accent)' : 'var(--panel-border)'}`,
             }}
           >
-            {COMMERCE_VARIANT_CHIP_LABEL[v]}
+            {labels[v]}
           </button>
         );
       })}
@@ -282,18 +352,31 @@ function TopicCard({
   rows,
   sourceLine,
   variantToggle,
+  stretch = false,
 }: {
   topic: ContextTopic;
   headlineLabel: string;
   rows: Row[];
   sourceLine: string | null;
   variantToggle?: React.ReactNode;
+  // When true the card flex-grows to fill available width (Demographics
+  // layer fills the strip on wide screens); when false it stays at the
+  // fixed 240px width used by the LEHD-side card layout.
+  stretch?: boolean;
 }) {
   const allEmpty = rows.every((r) => r.value == null);
   return (
     <div
-      className="glass rounded-md p-3 shrink-0 flex flex-col gap-2"
-      style={{ width: 240, minHeight: 110 }}
+      className={
+        stretch
+          ? 'glass rounded-md p-3 flex flex-col gap-2'
+          : 'glass rounded-md p-3 shrink-0 flex flex-col gap-2'
+      }
+      style={
+        stretch
+          ? { flex: '1 1 0', minWidth: 150, minHeight: 110 }
+          : { width: 240, minHeight: 110 }
+      }
     >
       <div>
         <div
@@ -362,8 +445,9 @@ function latestHeadlineYear(
   env: ContextEnvelope,
   topic: ContextTopic,
   commerceVariant: CommerceVariant,
+  housingVariant: HousingVariant,
 ): number | null {
-  const headlineKey = headlineKeyFor(topic, commerceVariant);
+  const headlineKey = headlineKeyFor(topic, commerceVariant, housingVariant);
   let maxYear: number | null = null;
   const visit = (trend: ContextTrend | undefined) => {
     const series = trend?.[headlineKey];
@@ -381,6 +465,7 @@ function topicSourceLine(
   env: ContextEnvelope,
   topic: ContextTopic,
   commerceVariant: CommerceVariant,
+  housingVariant: HousingVariant,
 ): string | null {
   const wantedId = HEADLINE_SOURCE_ID[topic];
   const src = env.sources.find((s) => s.id === wantedId) ?? env.sources[0];
@@ -388,7 +473,7 @@ function topicSourceLine(
   const label = SOURCE_LABELS[src.id] ?? src.agency;
   // Prefer the actual latest-data-point year derived from the trend; fall
   // back to the topic's vintage end, then the lastPulled date.
-  const headlineYear = latestHeadlineYear(env, topic, commerceVariant);
+  const headlineYear = latestHeadlineYear(env, topic, commerceVariant, housingVariant);
   const fallbackYear = env.vintageRange?.end;
   const date =
     headlineYear ?? (fallbackYear && fallbackYear > 0 ? fallbackYear : src.lastPulled);
@@ -402,9 +487,11 @@ export function ContextCards({
   wacFile,
   odSummary,
 }: Props) {
-  // Commerce-card variant — local state, not lifted. Defaults to "gross"
-  // per the v2 spec (Gross Sales = broadest economic-throughput metric).
+  // Per-card variant state (not lifted). Defaults follow the v2 spec:
+  //   Commerce → Gross Sales (broadest "business throughput")
+  //   Housing  → All homes (Zillow's flagship sfrcondo mid-tier series)
   const [commerceVariant, setCommerceVariant] = useState<CommerceVariant>('gross');
+  const [housingVariant, setHousingVariant] = useState<HousingVariant>('all');
 
   if (!bundle) {
     return (
@@ -420,26 +507,49 @@ export function ContextCards({
         // BLS QCEW path. Three rows × one geography (selected ZIP or
         // regional aggregate) — explicitly different shape from the other
         // cards because LODES is keyed by ZIP, not by county/state.
+        const isPerAnchor = selectedZip != null;
+        const geoSuffix = geographyLevelSuffix(topic, isPerAnchor);
+
         if (topic === 'employment') {
           const { rows, year } = buildEmploymentRows(racFile, wacFile, odSummary, selectedZip);
           return (
             <TopicCard
               key={topic}
               topic={topic}
-              headlineLabel={selectedZip ? 'Workforce flows · ZIP' : 'Workforce flows · region'}
+              headlineLabel={`Workforce flows · ${geoSuffix}`}
               rows={rows}
               sourceLine={`U.S. Census LEHD LODES · ${year}`}
+              stretch
             />
           );
         }
         const env = bundle[topic];
-        const rows = buildRows(env, topic, selectedZip, bundle, commerceVariant);
-        const sourceLine = topicSourceLine(env, topic, commerceVariant);
-        const headlineLabel = headlineLabelFor(topic, commerceVariant);
-        const variantToggle =
-          topic === 'commerce' ? (
-            <VariantToggle value={commerceVariant} onChange={setCommerceVariant} />
-          ) : undefined;
+        const rows = buildRows(env, topic, selectedZip, bundle, commerceVariant, housingVariant);
+        const sourceLine = topicSourceLine(env, topic, commerceVariant, housingVariant);
+        const baseHeadlineLabel = headlineLabelFor(topic, commerceVariant, housingVariant);
+        const headlineLabel = `${baseHeadlineLabel} · ${geoSuffix}`;
+        let variantToggle: React.ReactNode | undefined;
+        if (topic === 'commerce') {
+          variantToggle = (
+            <VariantToggle<CommerceVariant>
+              value={commerceVariant}
+              onChange={setCommerceVariant}
+              options={['gross', 'retail', 'taxable']}
+              labels={COMMERCE_VARIANT_CHIP_LABEL}
+              ariaLabel="CDOR sales metric"
+            />
+          );
+        } else if (topic === 'housing') {
+          variantToggle = (
+            <VariantToggle<HousingVariant>
+              value={housingVariant}
+              onChange={setHousingVariant}
+              options={['all', 'sfr', 'condo']}
+              labels={HOUSING_VARIANT_CHIP_LABEL}
+              ariaLabel="Zillow ZHVI property type"
+            />
+          );
+        }
         return (
           <TopicCard
             key={topic}
@@ -448,6 +558,7 @@ export function ContextCards({
             rows={rows}
             sourceLine={sourceLine}
             variantToggle={variantToggle}
+            stretch
           />
         );
       })}

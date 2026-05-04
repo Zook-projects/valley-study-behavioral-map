@@ -1118,8 +1118,6 @@ export function CommuteView() {
           onClearSegmentFilter={() =>
             handleSegmentFilterChange({ axis: 'all', buckets: [] })
           }
-          cardLayer={cardLayer}
-          onClearContext={() => setCardLayer('commute')}
         />
 
         {/* Region / Workplace export — top-right of the map. Renders for

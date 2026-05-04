@@ -33,13 +33,17 @@ ACS_LATEST_YEAR = 2024
 ACS_TREND_START = 2015  # B25 series have decent ZCTA-level coverage from 2015 on
 
 
-def _zillow_for_geo(geo_kind: str, key: str) -> dict | None:
+def _zillow_for_geo(geo_kind: str, key: str, *, kind: str = "all") -> dict | None:
     """
-    Read a normalized Zillow record from data/context-cache/zillow/. The
-    Phase 3 fetcher writes one JSON per geography level keyed by:
-      zillow/zhvi-{state|county|zip}.json  → list of {key, latest, trend}
+    Read a normalized Zillow ZHVI record from data/context-cache/zillow/.
+    `kind` selects the property-type variant:
+      'all'   → zhvi-{geo}.json       (SFR + Condo combined, mid-tier)
+      'sfr'   → zhvi-sfr-{geo}.json   (Single-family only)
+      'condo' → zhvi-condo-{geo}.json (Condo / co-op only)
+    Returns the matching record (with 'latest' + 'trend') or None.
     """
-    path = CACHE_DIR / "zillow" / f"zhvi-{geo_kind}.json"
+    prefix = "zhvi" if kind == "all" else f"zhvi-{kind}"
+    path = CACHE_DIR / "zillow" / f"{prefix}-{geo_kind}.json"
     if not path.exists():
         return None
     try:
@@ -108,9 +112,12 @@ def _acs_block(row) -> dict:
 
 
 def _merge_zillow(block: dict, geo_kind: str, key: str) -> None:
-    z = _zillow_for_geo(geo_kind, key)
-    if z and z.get("latest") is not None:
-        block["zhvi"] = z["latest"]
+    # Three ZHVI variants — all-homes (existing 'zhvi'), SFR-only, and
+    # Condo-only. The UI exposes a property-type toggle on the Housing card.
+    for variant_kind, out_key in (("all", "zhvi"), ("sfr", "zhviSfr"), ("condo", "zhviCondo")):
+        z = _zillow_for_geo(geo_kind, key, kind=variant_kind)
+        if z and z.get("latest") is not None:
+            block[out_key] = z["latest"]
     z = _zori_for_geo(geo_kind, key)
     if z and z.get("latest") is not None:
         block["zori"] = z["latest"]
@@ -134,8 +141,8 @@ def _merge_fmr(block: dict, county_geoid: str) -> None:
         pass
 
 
-def _zillow_trend(geo_kind: str, key: str) -> list[dict]:
-    z = _zillow_for_geo(geo_kind, key)
+def _zillow_trend(geo_kind: str, key: str, *, kind: str = "all") -> list[dict]:
+    z = _zillow_for_geo(geo_kind, key, kind=kind)
     if not z or not z.get("trend"):
         return []
     return trend_series([(int(p["year"]), float(p["value"])) for p in z["trend"]])
@@ -153,6 +160,8 @@ def build_housing() -> dict:
     _merge_zillow(state_block_latest, "state", "CO")
     state_trend = {}
     state_trend["zhvi"] = _zillow_trend("state", "CO")
+    state_trend["zhviSfr"] = _zillow_trend("state", "CO", kind="sfr")
+    state_trend["zhviCondo"] = _zillow_trend("state", "CO", kind="condo")
     for tk, var in ACS_HOUSING_VARS.items():
         pairs = []
         for y in sorted(rows_by_year):
@@ -170,7 +179,11 @@ def build_housing() -> dict:
         block = _acs_block(latest_county)
         _merge_zillow(block, "county", geoid)
         _merge_fmr(block, geoid)
-        ctrend = {"zhvi": _zillow_trend("county", geoid)}
+        ctrend = {
+            "zhvi": _zillow_trend("county", geoid),
+            "zhviSfr": _zillow_trend("county", geoid, kind="sfr"),
+            "zhviCondo": _zillow_trend("county", geoid, kind="condo"),
+        }
         for tk, var in ACS_HOUSING_VARS.items():
             pairs = []
             for y in sorted(rows_by_year):
@@ -206,6 +219,8 @@ def build_housing() -> dict:
         # Zillow ZIP-level
         _merge_zillow(block, "zip", rec["zip"])
         ptrend["zhvi"] = _zillow_trend("zip", rec["zip"])
+        ptrend["zhviSfr"] = _zillow_trend("zip", rec["zip"], kind="sfr")
+        ptrend["zhviCondo"] = _zillow_trend("zip", rec["zip"], kind="condo")
         ptrend["zori"] = _zillow_trend("zip", rec["zip"])  # placeholder; ZORI ZIP coverage uneven
         place_data[rec["zip"]] = {"latest": block or None, "trend": ptrend}
 

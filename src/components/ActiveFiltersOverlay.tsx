@@ -5,7 +5,6 @@
 
 import type { DirectionFilter, SegmentFilter } from '../types/flow';
 import { fmtInt } from '../lib/format';
-import type { CardLayer } from './ContextLayerToggle';
 
 interface Props {
   directionFilter: DirectionFilter;
@@ -19,11 +18,6 @@ interface Props {
   directionDenominator: number;
   segmentFilter: SegmentFilter;
   onClearSegmentFilter: () => void;
-  // Regional-context layer state — when the user is on the Context layer
-  // we surface a dismissable chip so the active view is one click away from
-  // being cleared back to Commute.
-  cardLayer?: CardLayer;
-  onClearContext?: () => void;
 }
 
 const AXIS_LABELS: Record<SegmentFilter['axis'], string> = {
@@ -95,13 +89,10 @@ export function ActiveFiltersOverlay({
   directionDenominator,
   segmentFilter,
   onClearSegmentFilter,
-  cardLayer,
-  onClearContext,
 }: Props) {
   const directionActive = directionFilter !== 'all';
   const segmentActive = segmentFilter.axis !== 'all';
-  const contextActive = cardLayer === 'context';
-  if (!directionActive && !selectedPartner && !segmentActive && !contextActive) return null;
+  if (!directionActive && !selectedPartner && !segmentActive) return null;
 
   const directionLabel =
     directionFilter === 'east' ? 'Eastbound only' : 'Westbound only';
@@ -138,13 +129,6 @@ export function ActiveFiltersOverlay({
           label={`Segment: ${AXIS_LABELS[segmentFilter.axis]} · ${segmentBucketsLabel}`}
           onClear={onClearSegmentFilter}
           ariaLabel="Clear segment filter"
-        />
-      )}
-      {contextActive && onClearContext && (
-        <Chip
-          label="Context"
-          onClear={onClearContext}
-          ariaLabel="Return to commute layer"
         />
       )}
     </div>
