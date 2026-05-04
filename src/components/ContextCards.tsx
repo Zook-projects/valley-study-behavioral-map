@@ -16,7 +16,7 @@ import type {
   ContextEnvelope,
   ContextTrend,
 } from '../types/context';
-import { CONTEXT_TOPICS, CONTEXT_TOPIC_LABELS } from '../types/context';
+import { CONTEXT_TOPIC_LABELS } from '../types/context';
 import { getPlaceWithRails } from '../lib/contextQueries';
 import { fmtInt } from '../lib/format';
 import type { OdSummaryFile, RacFile, WacFile } from '../types/lodes';
@@ -40,11 +40,18 @@ const AGGREGATE_COUNTY_ORDER: string[] = [
   '08097', // Pitkin
 ];
 
-// Topics rendered in the bottom strip. 'tourism' is intentionally excluded —
-// the lodging-tax surface needs a dedicated treatment (manual file drops for
-// the local LMD/STR series CDOR doesn't expose), so the placeholder card was
-// pulled until that data lands.
-const VISIBLE_TOPICS: ContextTopic[] = CONTEXT_TOPICS.filter((t) => t !== 'tourism');
+// Topics rendered in the bottom strip — fixed editorial order, NOT the
+// schema's CONTEXT_TOPICS order. 'tourism' is intentionally excluded:
+// the lodging-tax surface needs a dedicated treatment (manual file drops
+// for the LMD/STR series CDOR doesn't expose), so the placeholder card
+// was pulled until that data lands.
+const VISIBLE_TOPICS: ContextTopic[] = [
+  'demographics',
+  'employment',
+  'commerce',
+  'housing',
+  'education',
+];
 
 // Commerce-card variant — controls which CDOR column the card surfaces as
 // the headline. Defaults to "gross" because Gross Sales is the broadest
