@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch:context:census": "python3 scripts/fetch-context-census.py",
+    "fetch:context:labor": "python3 scripts/fetch-context-labor.py",
+    "fetch:context:housing": "python3 scripts/fetch-context-housing.py",
+    "fetch:context:tax": "python3 scripts/fetch-context-tax.py",
+    "fetch:context:tourism": "python3 scripts/fetch-context-tourism.py",
+    "build:context": "python3 scripts/build-context.py"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.4",

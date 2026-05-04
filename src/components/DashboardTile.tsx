@@ -11,6 +11,7 @@ import { ZipSelector } from './ZipSelector';
 import { StatsAggregated } from './StatsAggregated';
 import { StatsForZip } from './StatsForZip';
 import { MethodologyFooter } from './MethodologyFooter';
+import type { ContextBundle } from '../types/context';
 
 interface Props {
   // Active-mode dataset — used for both aggregated and per-ZIP stats. The
@@ -86,6 +87,9 @@ interface Props {
   heatmapVisible: boolean;
   heatmapLegendSide: HeatmapSide;
   segmentFilter: SegmentFilter;
+  // Optional regional context bundle — passed straight through to the
+  // methodology footer so its Sources block can list every agency.
+  contextBundle?: ContextBundle | null;
 }
 
 export function DashboardTile({
@@ -120,6 +124,7 @@ export function DashboardTile({
   heatmapVisible,
   heatmapLegendSide,
   segmentFilter,
+  contextBundle = null,
 }: Props) {
   return (
     <aside
@@ -276,6 +281,7 @@ export function DashboardTile({
           selectedZip={selectedZip}
           zips={zips}
           segmentFilter={segmentFilter}
+          contextBundle={contextBundle}
         />
       </div>
     </aside>

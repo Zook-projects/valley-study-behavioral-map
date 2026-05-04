@@ -59,6 +59,9 @@ import {
   type DriveDistanceMap,
 } from '../lib/flowQueries';
 import { SegmentFilterPanel } from './SegmentFilterPanel';
+import type { CardLayer } from './ContextLayerToggle';
+import { ContextCards } from './ContextCards';
+import type { ContextBundle } from '../types/context';
 
 // ---------------------------------------------------------------------------
 // Sparkline
@@ -1914,6 +1917,12 @@ interface Props {
   // current rendered height (which varies by selection type and segment
   // filter expansion).
   containerRef?: React.RefObject<HTMLDivElement | null>;
+  // Regional context layer (added in v2). When `cardLayer === 'context'` the
+  // strip swaps the LEHD cards out for ContextCards rendered as a row of
+  // text-only topic cards. The toggle that flips this state is rendered as
+  // a floating overlay by CommuteView, not inside the strip.
+  cardLayer: CardLayer;
+  contextBundle: ContextBundle | null;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {
@@ -2532,6 +2541,8 @@ export function BottomCardStrip({
   onPassThroughOriginChange,
   onPassThroughDestChange,
   containerRef,
+  cardLayer,
+  contextBundle,
 }: Props) {
   const isNonAnchor = selectionKind === 'non-anchor' && nonAnchorBundle != null;
   // Anchor selections only — keeps the existing per-anchor card logic gated
@@ -2912,11 +2923,24 @@ export function BottomCardStrip({
           paddingBottom: 6,
         }}
       >
-        <SegmentFilterPanel
-          value={segmentFilter}
-          onChange={onSegmentFilterChange}
-          compact={isPerZip || isNonAnchor}
-        />
+        {cardLayer === 'commute' && (
+          <SegmentFilterPanel
+            value={segmentFilter}
+            onChange={onSegmentFilterChange}
+            compact={isPerZip || isNonAnchor}
+          />
+        )}
+        {cardLayer === 'context' && (
+          <ContextCards
+            bundle={contextBundle}
+            selectedZip={selectedZip}
+            racFile={racFile}
+            wacFile={wacFile}
+            odSummary={odSummary}
+          />
+        )}
+        {cardLayer === 'commute' && (
+          <>
         {isPerZip && (
           <CardsForOd
             scope={scope}
@@ -3109,6 +3133,8 @@ export function BottomCardStrip({
                 onDestChange={onPassThroughDestChange}
               />
             )}
+          </>
+        )}
           </>
         )}
       </div>

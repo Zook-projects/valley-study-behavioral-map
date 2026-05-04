@@ -28,6 +28,8 @@ import type {
   ZipMeta,
 } from '../types/flow';
 import type { OdBlocksFile, OdSummaryFile, RacFile, WacFile } from '../types/lodes';
+import type { ContextBundle, ContextEnvelope, ContextTopic } from '../types/context';
+import { ContextLayerToggle, type CardLayer } from '../components/ContextLayerToggle';
 import { buildHeatmapGeoJson } from '../lib/heatmapPoints';
 import type { HeatmapSide } from '../components/HeatmapModeToggle';
 import {
@@ -263,6 +265,12 @@ export function CommuteView() {
   // density heatmap painted under the flow arcs. Optional load: on a failed
   // fetch the heatmap layer simply doesn't render.
   const [odBlocks, setOdBlocks] = useState<OdBlocksFile | null>(null);
+  // v2 regional context layer — six topic JSONs at place / county / state.
+  // Loaded lazily so a missing file doesn't block the LEHD commute view.
+  // All six topics render together when Layer = Context, so there's no
+  // per-topic selection state.
+  const [contextBundle, setContextBundle] = useState<ContextBundle | null>(null);
+  const [cardLayer, setCardLayer] = useState<CardLayer>('commute');
   const [mode, setMode] = useState<Mode>('inbound');
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
   // Non-anchor place bundle. Set when the user selects a real ZIP that isn't
@@ -425,6 +433,50 @@ export function CommuteView() {
         setOdBlocks(ob);
       })
       .catch((err) => console.error('data load failed', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Regional context — six topic JSONs loaded in parallel. Any 404 (e.g.,
+  // a topic whose fetcher hasn't been run yet) leaves that topic's slot
+  // null; ContextCards renders a "no data" placeholder.
+  useEffect(() => {
+    let cancelled = false;
+    const topics: ContextTopic[] = [
+      'demographics',
+      'education',
+      'employment',
+      'housing',
+      'commerce',
+      'tourism',
+    ];
+    Promise.all(
+      topics.map((t) =>
+        fetch(`${DATA_BASE}/context/${t}.json`)
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then((envelopes) => {
+      if (cancelled) return;
+      const bundle = {} as ContextBundle;
+      topics.forEach((t, i) => {
+        const env = envelopes[i] as ContextEnvelope | null;
+        // Synthesize an empty envelope shell on failed fetch so consumers
+        // can rely on every key being present.
+        bundle[t] =
+          env ??
+          ({
+            topic: t,
+            vintageRange: { start: 0, end: 0 },
+            sources: [],
+            state: null,
+            counties: [],
+            places: [],
+          } as ContextEnvelope);
+      });
+      setContextBundle(bundle);
+    });
     return () => {
       cancelled = true;
     };
@@ -979,6 +1031,7 @@ export function CommuteView() {
         heatmapVisible={heatmapData != null && viewLayer === 'heatmap'}
         heatmapLegendSide={heatmapSide}
         segmentFilter={segmentFilter}
+        contextBundle={contextBundle}
       />
       <main className="relative w-full md:flex-1">
         {/* Map area wrapper — gives the absolutely-positioned MapCanvas
@@ -1026,6 +1079,19 @@ export function CommuteView() {
           viewLayer={viewLayer}
         />
 
+        {/* Layer toggle — floats above the bottom card strip in the lower-left
+            corner. Same vertical anchor as the credit chip on the right. The
+            strip's height varies; both elements track it via bottomStripHeight. */}
+        <div
+          className="absolute left-4 z-30 pointer-events-auto"
+          style={{ bottom: bottomStripHeight + 8 }}
+        >
+          <ContextLayerToggle
+            layer={cardLayer}
+            onLayerChange={setCardLayer}
+          />
+        </div>
+
         {/* Credit chip — docked to the right edge just above the bottom
             card strip. Strip height varies by view type (aggregate / anchor
             / non-anchor) and by segment-filter expansion; the chip's bottom
@@ -1052,6 +1118,8 @@ export function CommuteView() {
           onClearSegmentFilter={() =>
             handleSegmentFilterChange({ axis: 'all', buckets: [] })
           }
+          cardLayer={cardLayer}
+          onClearContext={() => setCardLayer('commute')}
         />
 
         {/* Region / Workplace export — top-right of the map. Renders for
@@ -1358,6 +1426,8 @@ export function CommuteView() {
           passThroughDest={passThroughDest}
           onPassThroughOriginChange={handlePassThroughOrigin}
           onPassThroughDestChange={handlePassThroughDest}
+          cardLayer={cardLayer}
+          contextBundle={contextBundle}
         />
       </main>
     </div>

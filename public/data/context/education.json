@@ -1,0 +1,1284 @@
+{
+  "topic": "education",
+  "vintageRange": {
+    "start": 2010,
+    "end": 2024
+  },
+  "sources": [
+    {
+      "id": "ACS5_SUBJECT",
+      "agency": "U.S. Census Bureau",
+      "dataset": "ACS 5-Year Subject Tables (S1501)",
+      "endpoint": "https://api.census.gov/data/2024/acs/acs5/subject",
+      "lastPulled": "2026-05-04"
+    }
+  ],
+  "state": {
+    "fips": "08",
+    "name": "Colorado",
+    "latest": {
+      "eduLessHs": 126229,
+      "eduHs": 808163,
+      "eduSomeCol": 784975,
+      "eduBach": 1151206,
+      "eduGradPlus": 720463,
+      "pctBachPlus": 45.7
+    },
+    "trend": {
+      "pctBachPlus": [
+        {
+          "year": 2010,
+          "value": 36.6
+        },
+        {
+          "year": 2011,
+          "value": 36.9
+        },
+        {
+          "year": 2012,
+          "value": 37.1
+        },
+        {
+          "year": 2013,
+          "value": 37.3
+        },
+        {
+          "year": 2014,
+          "value": 37.5
+        },
+        {
+          "year": 2015,
+          "value": 38.1
+        },
+        {
+          "year": 2016,
+          "value": 38.7
+        },
+        {
+          "year": 2017,
+          "value": 39.4
+        },
+        {
+          "year": 2018,
+          "value": 40.1
+        },
+        {
+          "year": 2019,
+          "value": 40.9
+        },
+        {
+          "year": 2020,
+          "value": 41.6
+        },
+        {
+          "year": 2021,
+          "value": 42.8
+        },
+        {
+          "year": 2022,
+          "value": 43.7
+        },
+        {
+          "year": 2023,
+          "value": 44.7
+        },
+        {
+          "year": 2024,
+          "value": 45.7
+        }
+      ]
+    }
+  },
+  "counties": [
+    {
+      "fips": "037",
+      "geoid": "08037",
+      "name": "Eagle County",
+      "latest": {
+        "eduLessHs": 687,
+        "eduHs": 7613,
+        "eduSomeCol": 6124,
+        "eduBach": 13475,
+        "eduGradPlus": 6955,
+        "pctBachPlus": 50.9
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 42.1
+          },
+          {
+            "year": 2011,
+            "value": 43.3
+          },
+          {
+            "year": 2012,
+            "value": 45.0
+          },
+          {
+            "year": 2013,
+            "value": 44.9
+          },
+          {
+            "year": 2014,
+            "value": 45.0
+          },
+          {
+            "year": 2015,
+            "value": 46.7
+          },
+          {
+            "year": 2016,
+            "value": 45.0
+          },
+          {
+            "year": 2017,
+            "value": 45.1
+          },
+          {
+            "year": 2018,
+            "value": 48.1
+          },
+          {
+            "year": 2019,
+            "value": 47.2
+          },
+          {
+            "year": 2020,
+            "value": 50.5
+          },
+          {
+            "year": 2021,
+            "value": 50.9
+          },
+          {
+            "year": 2022,
+            "value": 51.8
+          },
+          {
+            "year": 2023,
+            "value": 50.3
+          },
+          {
+            "year": 2024,
+            "value": 50.9
+          }
+        ]
+      }
+    },
+    {
+      "fips": "045",
+      "geoid": "08045",
+      "name": "Garfield County",
+      "latest": {
+        "eduLessHs": 2765,
+        "eduHs": 10175,
+        "eduSomeCol": 9084,
+        "eduBach": 8955,
+        "eduGradPlus": 5137,
+        "pctBachPlus": 33.6
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 22.1
+          },
+          {
+            "year": 2011,
+            "value": 22.1
+          },
+          {
+            "year": 2012,
+            "value": 22.7
+          },
+          {
+            "year": 2013,
+            "value": 24.1
+          },
+          {
+            "year": 2014,
+            "value": 26.8
+          },
+          {
+            "year": 2015,
+            "value": 29.7
+          },
+          {
+            "year": 2016,
+            "value": 29.1
+          },
+          {
+            "year": 2017,
+            "value": 30.2
+          },
+          {
+            "year": 2018,
+            "value": 30.0
+          },
+          {
+            "year": 2019,
+            "value": 31.0
+          },
+          {
+            "year": 2020,
+            "value": 32.0
+          },
+          {
+            "year": 2021,
+            "value": 32.9
+          },
+          {
+            "year": 2022,
+            "value": 33.7
+          },
+          {
+            "year": 2023,
+            "value": 33.4
+          },
+          {
+            "year": 2024,
+            "value": 33.6
+          }
+        ]
+      }
+    },
+    {
+      "fips": "077",
+      "geoid": "08077",
+      "name": "Mesa County",
+      "latest": {
+        "eduLessHs": 1855,
+        "eduHs": 31324,
+        "eduSomeCol": 26922,
+        "eduBach": 24378,
+        "eduGradPlus": 11997,
+        "pctBachPlus": 32.3
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 25.1
+          },
+          {
+            "year": 2011,
+            "value": 25.4
+          },
+          {
+            "year": 2012,
+            "value": 24.4
+          },
+          {
+            "year": 2013,
+            "value": 25.5
+          },
+          {
+            "year": 2014,
+            "value": 25.0
+          },
+          {
+            "year": 2015,
+            "value": 26.3
+          },
+          {
+            "year": 2016,
+            "value": 26.1
+          },
+          {
+            "year": 2017,
+            "value": 27.2
+          },
+          {
+            "year": 2018,
+            "value": 27.4
+          },
+          {
+            "year": 2019,
+            "value": 28.2
+          },
+          {
+            "year": 2020,
+            "value": 27.4
+          },
+          {
+            "year": 2021,
+            "value": 29.3
+          },
+          {
+            "year": 2022,
+            "value": 30.0
+          },
+          {
+            "year": 2023,
+            "value": 30.6
+          },
+          {
+            "year": 2024,
+            "value": 32.3
+          }
+        ]
+      }
+    },
+    {
+      "fips": "097",
+      "geoid": "08097",
+      "name": "Pitkin County",
+      "latest": {
+        "eduLessHs": 217,
+        "eduHs": 1733,
+        "eduSomeCol": 1929,
+        "eduBach": 5162,
+        "eduGradPlus": 3503,
+        "pctBachPlus": 62.8
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 61.4
+          },
+          {
+            "year": 2011,
+            "value": 58.8
+          },
+          {
+            "year": 2012,
+            "value": 55.4
+          },
+          {
+            "year": 2013,
+            "value": 56.3
+          },
+          {
+            "year": 2014,
+            "value": 55.1
+          },
+          {
+            "year": 2015,
+            "value": 59.1
+          },
+          {
+            "year": 2016,
+            "value": 60.4
+          },
+          {
+            "year": 2017,
+            "value": 61.2
+          },
+          {
+            "year": 2018,
+            "value": 63.1
+          },
+          {
+            "year": 2019,
+            "value": 60.8
+          },
+          {
+            "year": 2020,
+            "value": 61.2
+          },
+          {
+            "year": 2021,
+            "value": 62.3
+          },
+          {
+            "year": 2022,
+            "value": 63.1
+          },
+          {
+            "year": 2023,
+            "value": 64.0
+          },
+          {
+            "year": 2024,
+            "value": 62.8
+          }
+        ]
+      }
+    }
+  ],
+  "places": [
+    {
+      "zip": "81601",
+      "name": "Glenwood Springs",
+      "kind": "place",
+      "placeGeoid": "0830780",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
+      "latest": {
+        "eduLessHs": 391,
+        "eduHs": 1452,
+        "eduSomeCol": 1506,
+        "eduBach": 1357,
+        "eduGradPlus": 1219,
+        "pctBachPlus": 36.3
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 29.0
+          },
+          {
+            "year": 2011,
+            "value": 30.4
+          },
+          {
+            "year": 2012,
+            "value": 28.8
+          },
+          {
+            "year": 2013,
+            "value": 26.2
+          },
+          {
+            "year": 2014,
+            "value": 28.8
+          },
+          {
+            "year": 2015,
+            "value": 33.8
+          },
+          {
+            "year": 2016,
+            "value": 32.0
+          },
+          {
+            "year": 2017,
+            "value": 37.4
+          },
+          {
+            "year": 2018,
+            "value": 36.8
+          },
+          {
+            "year": 2019,
+            "value": 40.1
+          },
+          {
+            "year": 2020,
+            "value": 39.1
+          },
+          {
+            "year": 2021,
+            "value": 41.0
+          },
+          {
+            "year": 2022,
+            "value": 38.6
+          },
+          {
+            "year": 2023,
+            "value": 38.1
+          },
+          {
+            "year": 2024,
+            "value": 36.3
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81611",
+      "name": "Aspen",
+      "kind": "place",
+      "placeGeoid": "0803620",
+      "countyGeoid": "08097",
+      "countyName": "Pitkin County",
+      "latest": {
+        "eduLessHs": 23,
+        "eduHs": 501,
+        "eduSomeCol": 805,
+        "eduBach": 2330,
+        "eduGradPlus": 1523,
+        "pctBachPlus": 69.6
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 70.6
+          },
+          {
+            "year": 2011,
+            "value": 68.0
+          },
+          {
+            "year": 2012,
+            "value": 65.7
+          },
+          {
+            "year": 2013,
+            "value": 63.1
+          },
+          {
+            "year": 2014,
+            "value": 62.0
+          },
+          {
+            "year": 2015,
+            "value": 64.5
+          },
+          {
+            "year": 2016,
+            "value": 64.5
+          },
+          {
+            "year": 2017,
+            "value": 63.0
+          },
+          {
+            "year": 2018,
+            "value": 63.7
+          },
+          {
+            "year": 2019,
+            "value": 66.3
+          },
+          {
+            "year": 2020,
+            "value": 65.9
+          },
+          {
+            "year": 2021,
+            "value": 65.0
+          },
+          {
+            "year": 2022,
+            "value": 65.1
+          },
+          {
+            "year": 2023,
+            "value": 68.3
+          },
+          {
+            "year": 2024,
+            "value": 69.6
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81615",
+      "name": "Snowmass Village",
+      "kind": "place",
+      "placeGeoid": "0871755",
+      "countyGeoid": "08097",
+      "countyName": "Pitkin County",
+      "latest": {
+        "eduLessHs": 13,
+        "eduHs": 398,
+        "eduSomeCol": 412,
+        "eduBach": 626,
+        "eduGradPlus": 846,
+        "pctBachPlus": 56.8
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 51.4
+          },
+          {
+            "year": 2011,
+            "value": 55.4
+          },
+          {
+            "year": 2012,
+            "value": 45.1
+          },
+          {
+            "year": 2013,
+            "value": 49.4
+          },
+          {
+            "year": 2014,
+            "value": 54.2
+          },
+          {
+            "year": 2015,
+            "value": 68.3
+          },
+          {
+            "year": 2016,
+            "value": 71.1
+          },
+          {
+            "year": 2017,
+            "value": 74.7
+          },
+          {
+            "year": 2018,
+            "value": 80.1
+          },
+          {
+            "year": 2019,
+            "value": 59.5
+          },
+          {
+            "year": 2020,
+            "value": 79.2
+          },
+          {
+            "year": 2021,
+            "value": 67.8
+          },
+          {
+            "year": 2022,
+            "value": 67.7
+          },
+          {
+            "year": 2023,
+            "value": 69.1
+          },
+          {
+            "year": 2024,
+            "value": 56.8
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81621",
+      "name": "Basalt",
+      "kind": "place",
+      "placeGeoid": "0804935",
+      "countyGeoid": "08097",
+      "countyName": "Pitkin County",
+      "latest": {
+        "eduLessHs": 5,
+        "eduHs": 254,
+        "eduSomeCol": 822,
+        "eduBach": 1327,
+        "eduGradPlus": 570,
+        "pctBachPlus": 57.2
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 35.8
+          },
+          {
+            "year": 2011,
+            "value": 48.4
+          },
+          {
+            "year": 2012,
+            "value": 52.8
+          },
+          {
+            "year": 2013,
+            "value": 63.0
+          },
+          {
+            "year": 2014,
+            "value": 59.3
+          },
+          {
+            "year": 2015,
+            "value": 61.1
+          },
+          {
+            "year": 2016,
+            "value": 56.8
+          },
+          {
+            "year": 2017,
+            "value": 58.3
+          },
+          {
+            "year": 2018,
+            "value": 50.7
+          },
+          {
+            "year": 2019,
+            "value": 58.8
+          },
+          {
+            "year": 2020,
+            "value": 50.1
+          },
+          {
+            "year": 2021,
+            "value": 56.6
+          },
+          {
+            "year": 2022,
+            "value": 56.1
+          },
+          {
+            "year": 2023,
+            "value": 59.3
+          },
+          {
+            "year": 2024,
+            "value": 57.2
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81623",
+      "name": "Carbondale",
+      "kind": "place",
+      "placeGeoid": "0812045",
+      "countyGeoid": "08097",
+      "countyName": "Pitkin County",
+      "latest": {
+        "eduLessHs": 473,
+        "eduHs": 356,
+        "eduSomeCol": 1116,
+        "eduBach": 1576,
+        "eduGradPlus": 1130,
+        "pctBachPlus": 53.0
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 40.6
+          },
+          {
+            "year": 2011,
+            "value": 36.9
+          },
+          {
+            "year": 2012,
+            "value": 41.6
+          },
+          {
+            "year": 2013,
+            "value": 41.1
+          },
+          {
+            "year": 2014,
+            "value": 42.1
+          },
+          {
+            "year": 2015,
+            "value": 43.0
+          },
+          {
+            "year": 2016,
+            "value": 43.9
+          },
+          {
+            "year": 2017,
+            "value": 42.0
+          },
+          {
+            "year": 2018,
+            "value": 40.9
+          },
+          {
+            "year": 2019,
+            "value": 45.7
+          },
+          {
+            "year": 2020,
+            "value": 48.9
+          },
+          {
+            "year": 2021,
+            "value": 49.7
+          },
+          {
+            "year": 2022,
+            "value": 57.1
+          },
+          {
+            "year": 2023,
+            "value": 56.3
+          },
+          {
+            "year": 2024,
+            "value": 53.0
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81630",
+      "name": "De Beque",
+      "kind": "place",
+      "placeGeoid": "0819355",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
+      "latest": {
+        "eduLessHs": 8,
+        "eduHs": 118,
+        "eduSomeCol": 85,
+        "eduBach": 35,
+        "eduGradPlus": 29,
+        "pctBachPlus": 18.2
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 11.3
+          },
+          {
+            "year": 2011,
+            "value": 9.3
+          },
+          {
+            "year": 2012,
+            "value": 13.1
+          },
+          {
+            "year": 2013,
+            "value": 16.1
+          },
+          {
+            "year": 2014,
+            "value": 12.5
+          },
+          {
+            "year": 2015,
+            "value": 12.1
+          },
+          {
+            "year": 2016,
+            "value": 14.5
+          },
+          {
+            "year": 2017,
+            "value": 14.8
+          },
+          {
+            "year": 2018,
+            "value": 15.6
+          },
+          {
+            "year": 2019,
+            "value": 16.2
+          },
+          {
+            "year": 2020,
+            "value": 16.6
+          },
+          {
+            "year": 2021,
+            "value": 17.9
+          },
+          {
+            "year": 2022,
+            "value": 15.3
+          },
+          {
+            "year": 2023,
+            "value": 15.7
+          },
+          {
+            "year": 2024,
+            "value": 18.2
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81635",
+      "name": "Parachute",
+      "kind": "place",
+      "placeGeoid": "0857400",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
+      "latest": {
+        "eduLessHs": 19,
+        "eduHs": 281,
+        "eduSomeCol": 276,
+        "eduBach": 74,
+        "eduGradPlus": 4,
+        "pctBachPlus": 10.7
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 5.0
+          },
+          {
+            "year": 2011,
+            "value": 4.2
+          },
+          {
+            "year": 2012,
+            "value": 6.2
+          },
+          {
+            "year": 2013,
+            "value": 8.3
+          },
+          {
+            "year": 2014,
+            "value": 7.8
+          },
+          {
+            "year": 2015,
+            "value": 10.2
+          },
+          {
+            "year": 2016,
+            "value": 8.6
+          },
+          {
+            "year": 2017,
+            "value": 8.6
+          },
+          {
+            "year": 2018,
+            "value": 7.0
+          },
+          {
+            "year": 2019,
+            "value": 9.5
+          },
+          {
+            "year": 2020,
+            "value": 6.1
+          },
+          {
+            "year": 2021,
+            "value": 8.0
+          },
+          {
+            "year": 2022,
+            "value": 7.6
+          },
+          {
+            "year": 2023,
+            "value": 9.4
+          },
+          {
+            "year": 2024,
+            "value": 10.7
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81647",
+      "name": "New Castle",
+      "kind": "place",
+      "placeGeoid": "0853395",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
+      "latest": {
+        "eduLessHs": 113,
+        "eduHs": 1103,
+        "eduSomeCol": 444,
+        "eduBach": 688,
+        "eduGradPlus": 351,
+        "pctBachPlus": 32.1
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 21.7
+          },
+          {
+            "year": 2011,
+            "value": 25.0
+          },
+          {
+            "year": 2012,
+            "value": 24.3
+          },
+          {
+            "year": 2013,
+            "value": 21.7
+          },
+          {
+            "year": 2014,
+            "value": 26.1
+          },
+          {
+            "year": 2015,
+            "value": 35.3
+          },
+          {
+            "year": 2016,
+            "value": 29.1
+          },
+          {
+            "year": 2017,
+            "value": 35.3
+          },
+          {
+            "year": 2018,
+            "value": 38.4
+          },
+          {
+            "year": 2019,
+            "value": 38.7
+          },
+          {
+            "year": 2020,
+            "value": 35.6
+          },
+          {
+            "year": 2021,
+            "value": 40.2
+          },
+          {
+            "year": 2022,
+            "value": 41.2
+          },
+          {
+            "year": 2023,
+            "value": 36.4
+          },
+          {
+            "year": 2024,
+            "value": 32.1
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81650",
+      "name": "Rifle",
+      "kind": "place",
+      "placeGeoid": "0864255",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
+      "latest": {
+        "eduLessHs": 518,
+        "eduHs": 2208,
+        "eduSomeCol": 1450,
+        "eduBach": 880,
+        "eduGradPlus": 367,
+        "pctBachPlus": 19.4
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 12.4
+          },
+          {
+            "year": 2011,
+            "value": 11.2
+          },
+          {
+            "year": 2012,
+            "value": 11.1
+          },
+          {
+            "year": 2013,
+            "value": 12.0
+          },
+          {
+            "year": 2014,
+            "value": 18.2
+          },
+          {
+            "year": 2015,
+            "value": 17.9
+          },
+          {
+            "year": 2016,
+            "value": 19.0
+          },
+          {
+            "year": 2017,
+            "value": 19.2
+          },
+          {
+            "year": 2018,
+            "value": 17.8
+          },
+          {
+            "year": 2019,
+            "value": 16.2
+          },
+          {
+            "year": 2020,
+            "value": 14.2
+          },
+          {
+            "year": 2021,
+            "value": 16.1
+          },
+          {
+            "year": 2022,
+            "value": 16.4
+          },
+          {
+            "year": 2023,
+            "value": 18.1
+          },
+          {
+            "year": 2024,
+            "value": 19.4
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81652",
+      "name": "Silt",
+      "kind": "place",
+      "placeGeoid": "0870195",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
+      "latest": {
+        "eduLessHs": 113,
+        "eduHs": 713,
+        "eduSomeCol": 533,
+        "eduBach": 404,
+        "eduGradPlus": 107,
+        "pctBachPlus": 21.7
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": 8.6
+          },
+          {
+            "year": 2011,
+            "value": 8.1
+          },
+          {
+            "year": 2012,
+            "value": 8.1
+          },
+          {
+            "year": 2013,
+            "value": 5.6
+          },
+          {
+            "year": 2014,
+            "value": 8.0
+          },
+          {
+            "year": 2015,
+            "value": 14.2
+          },
+          {
+            "year": 2016,
+            "value": 13.4
+          },
+          {
+            "year": 2017,
+            "value": 16.9
+          },
+          {
+            "year": 2018,
+            "value": 17.8
+          },
+          {
+            "year": 2019,
+            "value": 13.7
+          },
+          {
+            "year": 2020,
+            "value": 19.2
+          },
+          {
+            "year": 2021,
+            "value": 19.2
+          },
+          {
+            "year": 2022,
+            "value": 18.6
+          },
+          {
+            "year": 2023,
+            "value": 22.1
+          },
+          {
+            "year": 2024,
+            "value": 21.7
+          }
+        ]
+      }
+    },
+    {
+      "zip": "81654",
+      "name": "Old Snowmass",
+      "kind": "zcta",
+      "placeGeoid": null,
+      "countyGeoid": "08097",
+      "countyName": "Pitkin County",
+      "latest": {
+        "eduLessHs": 53,
+        "eduHs": 241,
+        "eduSomeCol": 58,
+        "eduBach": 558,
+        "eduGradPlus": 134,
+        "pctBachPlus": 57.9
+      },
+      "trend": {
+        "pctBachPlus": [
+          {
+            "year": 2010,
+            "value": null
+          },
+          {
+            "year": 2011,
+            "value": null
+          },
+          {
+            "year": 2012,
+            "value": null
+          },
+          {
+            "year": 2013,
+            "value": null
+          },
+          {
+            "year": 2014,
+            "value": null
+          },
+          {
+            "year": 2015,
+            "value": null
+          },
+          {
+            "year": 2016,
+            "value": null
+          },
+          {
+            "year": 2017,
+            "value": null
+          },
+          {
+            "year": 2018,
+            "value": null
+          },
+          {
+            "year": 2019,
+            "value": 21.1
+          },
+          {
+            "year": 2020,
+            "value": 32.8
+          },
+          {
+            "year": 2021,
+            "value": 42.7
+          },
+          {
+            "year": 2022,
+            "value": 56.2
+          },
+          {
+            "year": 2023,
+            "value": 53.3
+          },
+          {
+            "year": 2024,
+            "value": 57.9
+          }
+        ]
+      }
+    }
+  ]
+}

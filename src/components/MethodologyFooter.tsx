@@ -7,6 +7,8 @@ import { CorridorLegend } from './CorridorLegend';
 import type { SegmentFilter, ZipMeta } from '../types/flow';
 import { isSegmentFilterAll } from '../lib/flowQueries';
 import type { HeatmapSide } from './HeatmapModeToggle';
+import type { ContextBundle } from '../types/context';
+import { collectSources } from '../lib/contextQueries';
 
 interface Props {
   bucketBreaks: [number, number, number, number];
@@ -23,6 +25,10 @@ interface Props {
   selectedZip: string | null;
   zips: ZipMeta[];
   segmentFilter: SegmentFilter;
+  // Optional regional context bundle. When present, the footer appends a
+  // "Regional context sources" section listing every agency drawn on by the
+  // six topic JSONs along with their last-pulled date.
+  contextBundle?: ContextBundle | null;
 }
 
 // Friendly label for the active segment filter — mirrors wording used
@@ -70,6 +76,7 @@ export function MethodologyFooter({
   selectedZip,
   zips,
   segmentFilter,
+  contextBundle = null,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
 
@@ -285,6 +292,33 @@ export function MethodologyFooter({
             Statistics (LODES), Version 8, 2023, JT00. Accessed via the
             City of Glenwood Springs Valley Behavioral Map.
           </p>
+          {contextBundle && (() => {
+            const sources = collectSources(contextBundle);
+            if (sources.length === 0) return null;
+            return (
+              <div className="mt-3 pt-2 border-t" style={{ borderColor: 'var(--panel-border)' }}>
+                <div
+                  className="uppercase tracking-widest mb-1"
+                  style={{ fontSize: 10, color: 'var(--text-dim)' }}
+                >
+                  Regional context sources
+                </div>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  {sources.map((s) => (
+                    <li key={s.id}>
+                      <span style={{ color: 'var(--text-h)' }}>{s.agency}</span>
+                      {' — '}
+                      {s.dataset}
+                      {' '}
+                      <span style={{ color: 'var(--text-dim)' }}>
+                        (last pulled {s.lastPulled})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

@@ -16,9 +16,14 @@ dist-ssr
 scripts/.osrm-corridor-cache.json
 scripts/.osrm-distance-cache.json
 scripts/__pycache__
+scripts/context_builders/__pycache__
 
 # LODES bulk download + filtered cache (pulled by scripts/fetch-lodes.py)
 data/lodes-cache/
+
+# Regional context cache — Census/BLS/BEA/HUD/Zillow/CDOR/Socrata
+# (pulled by scripts/fetch-context-*.py)
+data/context-cache/
 
 # Census ZIP→city crosswalk cache (pulled by scripts/zip_places.py)
 data/uszips-cache/
