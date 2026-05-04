@@ -54,7 +54,7 @@ export interface FlowRow {
   destPlace: string;
   workerCount: number;
   year: number;
-  source: 'LEHD';             // future-proofed for Placer/ACS/RFTA
+  source: 'LEHD';             // future-proofed for ACS/RFTA
   // Ordered list of corridor IDs the flow traverses. Empty for self-flows
   // (origin == dest) and any flow whose endpoints reclassified to ALL_OTHER.
   corridorPath: CorridorId[];

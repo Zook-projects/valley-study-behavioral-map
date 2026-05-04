@@ -250,8 +250,8 @@ The build:
    is byte-stable: two consecutive builds against the same inputs
    produce identical files.
 
-Each flow row carries `source: "LEHD"` so future v2 layers (Placer.ai,
-ACS journey-to-work, RFTA boardings) can be merged into the same JSON
+Each flow row carries `source: "LEHD"` so future v2 layers (ACS
+journey-to-work, RFTA boardings) can be merged into the same JSON
 shape.
 
 ## Project structure

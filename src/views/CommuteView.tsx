@@ -1,13 +1,7 @@
-// CommuteView — top-level layout for the commute (LEHD LODES) dataset. The
-// shell App.tsx renders this when `dataset === 'commute'`; the visitor view
-// is its sibling. The body below is the original App.tsx code preserved
-// verbatim so the commute view's behavior is unchanged by the dataset
-// refactor — only the import paths shifted by one directory and the export
-// name changed from `App` to `CommuteView`.
-//
-// Loads flows-inbound.json, flows-outbound.json,
-// zips.json, and corridors.json on mount, owns selection + mode state, and
-// composes DashboardTile + MapCanvas + the corridor hover tooltip.
+// CommuteView — top-level layout for the commute (LEHD LODES) dataset.
+// Loads flows-inbound.json, flows-outbound.json, zips.json, and corridors.json
+// on mount, owns selection + mode state, and composes DashboardTile +
+// MapCanvas + the corridor hover tooltip.
 //
 // Mode is strictly exclusive: at any moment the map renders either inbound
 // flows (workplace anchor's home-ZIP fan-in) or outbound flows (residence
@@ -34,8 +28,6 @@ import type {
   ZipMeta,
 } from '../types/flow';
 import type { OdBlocksFile, OdSummaryFile, RacFile, WacFile } from '../types/lodes';
-import type { Dataset } from '../types/dataset';
-import { DatasetToggle } from '../components/DatasetToggle';
 import { buildHeatmapGeoJson } from '../lib/heatmapPoints';
 import type { HeatmapSide } from '../components/HeatmapModeToggle';
 import {
@@ -256,16 +248,7 @@ function TooltipBody({
   );
 }
 
-interface CommuteViewProps {
-  // Top-level dataset selector state — owned by App.tsx and threaded in so
-  // the DatasetToggle can be rendered inside this view's map area (anchored
-  // to the map rather than fixed to the viewport, which prevents the toggle
-  // from overlapping the full-width dashboard panel on mobile).
-  dataset: Dataset;
-  onDatasetChange: (next: Dataset) => void;
-}
-
-export function CommuteView({ dataset, onDatasetChange }: CommuteViewProps) {
+export function CommuteView() {
   const [flowsInbound, setFlowsInbound] = useState<FlowRow[] | null>(null);
   const [flowsOutbound, setFlowsOutbound] = useState<FlowRow[] | null>(null);
   const [zips, setZips] = useState<ZipMeta[] | null>(null);
@@ -1042,16 +1025,6 @@ export function CommuteView({ dataset, onDatasetChange }: CommuteViewProps) {
           heatmapData={heatmapData}
           viewLayer={viewLayer}
         />
-
-        {/* Top-level dataset selector — anchored inside the map area so it
-            never overlaps the full-width dashboard panel on mobile. Mobile:
-            top-right of the map. Desktop: top-left of the map area (just
-            inside the map's left edge, matching the prior viewport-fixed
-            placement of `left-[396px]`). z-index above the SVG overlay
-            and active-filter chips so it stays clickable across views. */}
-        <div className="absolute top-2 right-2 md:right-auto md:left-2 md:top-3 z-40">
-          <DatasetToggle dataset={dataset} onChange={onDatasetChange} />
-        </div>
 
         {/* Credit chip — docked to the right edge just above the bottom
             card strip. Strip height varies by view type (aggregate / anchor
