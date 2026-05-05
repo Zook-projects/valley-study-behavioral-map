@@ -63,6 +63,21 @@ ZILLOW_ZHVI_CONDO_STATE = "https://files.zillowstatic.com/research/public_csvs/z
 ZILLOW_ZORI_ZIP = "https://files.zillowstatic.com/research/public_csvs/zori/Zip_zori_uc_sfrcondomfr_sm_month.csv"
 ZILLOW_ZORI_CITY = "https://files.zillowstatic.com/research/public_csvs/zori/City_zori_uc_sfrcondomfr_sm_month.csv"
 
+# Bedroom-tier ZHVI — 1, 2, 3, 4, 5+ bedroom counts at every geography level.
+# Same tier filter as the all-homes ZHVI (mid-tier 0.33–0.67), smoothed + sa.
+def _bedroom_url(geo: str, n: int) -> str:
+    return (
+        f"https://files.zillowstatic.com/research/public_csvs/zhvi/"
+        f"{geo}_zhvi_bdrmcnt_{n}_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
+    )
+
+# Metro-level CSVs include a "United States" row (RegionType == "country").
+# We fetch the metro file for every variant and filter to that single row to
+# get the national benchmark used in the Housing Market chart series.
+ZILLOW_ZHVI_METRO       = "https://files.zillowstatic.com/research/public_csvs/zhvi/Metro_zhvi_uc_sfrcondo_tier_0.33_0.67_sm_sa_month.csv"
+ZILLOW_ZHVI_SFR_METRO   = "https://files.zillowstatic.com/research/public_csvs/zhvi/Metro_zhvi_uc_sfr_sm_sa_month.csv"
+ZILLOW_ZHVI_CONDO_METRO = "https://files.zillowstatic.com/research/public_csvs/zhvi/Metro_zhvi_uc_condo_sm_sa_month.csv"
+
 ZILLOW_TARGETS_ZIP = sorted(ANCHOR_ZIPS)
 ZILLOW_CITY_NAMES = [
     "Glenwood Springs", "Aspen", "Snowmass Village", "Basalt",
@@ -165,7 +180,27 @@ def fetch_zillow() -> None:
         # ZORI rents
         (ZILLOW_ZORI_ZIP,    "zori-zip.csv",    "zori-zip.json",    "RegionName", lambda r: r.get("RegionName") in ZILLOW_TARGETS_ZIP),
         (ZILLOW_ZORI_CITY,   "zori-city.csv",   "zori-city.json",   "RegionName", lambda r: r.get("RegionName") in ZILLOW_CITY_NAMES and r.get("State") == "CO"),
+        # United States benchmark — the all-homes / SFR / Condo metro CSVs each
+        # include a 'country' row for the U.S. RegionType filter is the cleanest
+        # way to pick it up regardless of where Zillow puts it in the file.
+        (ZILLOW_ZHVI_METRO,       "zhvi-us.csv",       "zhvi-us.json",       "RegionName", lambda r: r.get("RegionType") == "country"),
+        (ZILLOW_ZHVI_SFR_METRO,   "zhvi-sfr-us.csv",   "zhvi-sfr-us.json",   "RegionName", lambda r: r.get("RegionType") == "country"),
+        (ZILLOW_ZHVI_CONDO_METRO, "zhvi-condo-us.csv", "zhvi-condo-us.json", "RegionName", lambda r: r.get("RegionType") == "country"),
     ]
+    # Bedroom-tier ZHVI: 5 bedroom counts × 4 geography levels + metro/US.
+    for n in (1, 2, 3, 4, 5):
+        targets.extend([
+            (_bedroom_url("Zip", n),    f"zhvi-br{n}-zip.csv",    f"zhvi-br{n}-zip.json",
+             "RegionName", lambda r: r.get("RegionName") in ZILLOW_TARGETS_ZIP),
+            (_bedroom_url("City", n),   f"zhvi-br{n}-city.csv",   f"zhvi-br{n}-city.json",
+             "RegionName", lambda r: r.get("RegionName") in ZILLOW_CITY_NAMES and r.get("State") == "CO"),
+            (_bedroom_url("County", n), f"zhvi-br{n}-county.csv", f"zhvi-br{n}-county.json",
+             "RegionName", lambda r: r.get("RegionName") in ZILLOW_COUNTY_NAMES and r.get("State") == "CO"),
+            (_bedroom_url("State", n),  f"zhvi-br{n}-state.csv",  f"zhvi-br{n}-state.json",
+             "RegionName", lambda r: r.get("RegionName") == "Colorado"),
+            (_bedroom_url("Metro", n),  f"zhvi-br{n}-us.csv",     f"zhvi-br{n}-us.json",
+             "RegionName", lambda r: r.get("RegionType") == "country"),
+        ])
     for url, csv_name, json_name, key_field, match_fn in targets:
         path = _download_zillow(url, csv_name)
         if path is None:
@@ -173,14 +208,20 @@ def fetch_zillow() -> None:
         rows = _zillow_filter_records(_parse_zillow_csv(path), match_fn)
         norm = _zillow_to_normalized(rows, key_field=key_field)
         # Override key for state-level so the builder can match by 'CO'
-        if "state" in json_name:
+        if json_name.endswith("-state.json"):
             for r in norm:
                 r["key"] = "CO"
+        # Override key for the U.S. national benchmark so the builder can
+        # match by 'US'.
+        if json_name.endswith("-us.json"):
+            for r in norm:
+                r["key"] = "US"
+                r["name"] = "United States"
         # Override key for county to use 5-digit GEOID. Zillow County CSV
         # carries 'StateCodeFIPS' + 'MunicipalCodeFIPS' columns; we don't
         # have those preserved in our slim filter — county GEOID lookup
         # against the County name is sufficient for our 4 counties.
-        if "county" in json_name:
+        if "-county" in json_name:
             name_to_geoid = {
                 "Garfield County": f"{STATE_FIPS}045",
                 "Pitkin County": f"{STATE_FIPS}097",

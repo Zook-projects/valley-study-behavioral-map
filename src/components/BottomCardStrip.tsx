@@ -346,7 +346,7 @@ function Card({
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  width?: number;
+  width?: number | string;
   // When true, the card uses its `width` as a min-width floor and expands to
   // fill remaining space in the strip's flex row (used in the aggregate view
   // so the four cards take up the full width to the right of the dashboard
@@ -361,10 +361,13 @@ function Card({
   const sizeStyle: React.CSSProperties = grow
     ? { minWidth: width }
     : { width };
+  // String widths (e.g. "100%") let DashboardView render this card inside a
+  // flexible grid cell rather than the legacy fixed-width strip.
+  const fluid = typeof width === 'string';
   if (maxHeight !== undefined) sizeStyle.maxHeight = maxHeight;
   return (
     <div
-      className={`glass rounded-md p-3 flex flex-col gap-2 min-h-0 ${grow ? 'flex-1' : 'shrink-0'}`}
+      className={`glass rounded-md p-3 flex flex-col gap-2 min-h-0 ${grow ? 'flex-1' : fluid ? '' : 'shrink-0'}`}
       style={sizeStyle}
     >
       <div>
@@ -1306,7 +1309,7 @@ function MultiSparkline({
 // as supplementary against the amber (inflow) / white (outflow) pair.
 const RESIDENT_COLOR = '#9ca3af';
 
-function CardsForOd({
+export function CardsForOd({
   scope,
   inflowLatest,
   inflowTrend,
@@ -1315,6 +1318,8 @@ function CardsForOd({
   withinLatest,
   withinTrend,
   trendDomain,
+  width = 260,
+  minChartHeight,
 }: {
   scope: string;
   inflowLatest: { totalJobs: number } | null;
@@ -1327,6 +1332,13 @@ function CardsForOd({
   withinLatest: { totalJobs: number } | null;
   withinTrend: TrendPoint[];
   trendDomain?: [number, number];
+  // Optional width override. Default 260 keeps the legacy fixed-width strip
+  // sizing. Pass "100%" (or another string) to render the card fluid so it
+  // fills its grid/flex parent — used by DashboardView.
+  width?: number | string;
+  // Optional minimum height for the chart container so the sparkline gets
+  // enough vertical room when the card sits in a tall grid cell.
+  minChartHeight?: number;
 }) {
   if (!inflowLatest && !outflowLatest && !withinLatest) return null;
   const sparkSeries: {
@@ -1363,7 +1375,7 @@ function CardsForOd({
     <Card
       title={`${scope} · Workforce flows (OD)`}
       subtitle="Commuters · live-and-work · 2002–2023"
-      width={260}
+      width={width}
     >
       <div className="flex gap-3">
         {inflowLatest && (
@@ -1389,7 +1401,10 @@ function CardsForOd({
         )}
       </div>
       {sparkSeries.length > 0 && (
-        <div className="flex-1 min-h-0">
+        <div
+          className="flex-1 min-h-0"
+          style={minChartHeight ? { minHeight: minChartHeight } : undefined}
+        >
           <MultiSparkline series={sparkSeries} yDomain={trendDomain} fill />
         </div>
       )}
@@ -1545,7 +1560,7 @@ function MetricRow({
   );
 }
 
-function WorkplaceMetricsCard({
+export function WorkplaceMetricsCard({
   scope,
   selectedZip,
   selectedPartner,
@@ -1923,6 +1938,27 @@ interface Props {
   // a floating overlay by CommuteView, not inside the strip.
   cardLayer: CardLayer;
   contextBundle: ContextBundle | null;
+  // Dashboard view renders Top inflow / Top outflow as full-width lists in
+  // StatsForZip, so the duplicate compact Cards inside the strip are hidden
+  // when this is true. Default false preserves the map-side strip layout.
+  hidePartnerCards?: boolean;
+  // Dashboard view renders the WorkplaceMetricsCard inline in the left column
+  // of the Workforce section. When true, the strip skips it to avoid the
+  // duplicate. Default false preserves the map-side strip layout.
+  hideWorkplaceMetrics?: boolean;
+  // Dashboard view renders the Workforce flows (OD) chart inline in the left
+  // column of the Workforce section. When true, the strip skips its
+  // CardsForOd render to avoid the duplicate. Default false.
+  hideOdFlows?: boolean;
+  // Dashboard view's region (aggregate) layout drops the segment filter
+  // panel from the strip. Default false preserves the map-side layout.
+  hideSegmentFilter?: boolean;
+  // Dashboard view docks the strip inline within a panel rather than
+  // overlaying the map. When true, the outer wrapper uses static (normal
+  // flow) positioning so the parent's height tracks the cards' natural
+  // height — no absolute-positioning dead space, no growth pressure on
+  // the section above. Default false preserves the map-overlay layout.
+  inline?: boolean;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {
@@ -2042,7 +2078,7 @@ function aggregateBlocks(
   };
 }
 
-function perZipBlocks(
+export function perZipBlocks(
   racEntry: RacFile['entries'][number] | null,
   wacEntry: WacFile['entries'][number] | null,
   odEntry: OdSummaryEntry | null,
@@ -2543,6 +2579,11 @@ export function BottomCardStrip({
   containerRef,
   cardLayer,
   contextBundle,
+  hidePartnerCards = false,
+  hideWorkplaceMetrics = false,
+  hideOdFlows = false,
+  hideSegmentFilter = false,
+  inline = false,
 }: Props) {
   const isNonAnchor = selectionKind === 'non-anchor' && nonAnchorBundle != null;
   // Anchor selections only — keeps the existing per-anchor card logic gated
@@ -2913,8 +2954,12 @@ export function BottomCardStrip({
   return (
     <div
       ref={containerRef}
-      className="absolute left-0 right-0 bottom-0 z-20 pointer-events-auto"
-      style={{ paddingBottom: 16 }}
+      className={
+        inline
+          ? 'relative w-full pointer-events-auto'
+          : 'absolute left-0 right-0 bottom-0 z-20 pointer-events-auto'
+      }
+      style={{ paddingBottom: inline ? 0 : 16 }}
     >
       <div
         className="flex gap-2 px-4 overflow-x-auto"
@@ -2923,7 +2968,7 @@ export function BottomCardStrip({
           paddingBottom: 6,
         }}
       >
-        {cardLayer === 'commute' && (
+        {cardLayer === 'commute' && !hideSegmentFilter && (
           <SegmentFilterPanel
             value={segmentFilter}
             onChange={onSegmentFilterChange}
@@ -2941,7 +2986,7 @@ export function BottomCardStrip({
         )}
         {cardLayer === 'commute' && (
           <>
-        {isPerZip && (
+        {!hideOdFlows && isPerZip && (
           <CardsForOd
             scope={scope}
             // When a partner is selected, the OD card collapses to a single
@@ -2982,7 +3027,7 @@ export function BottomCardStrip({
             trendDomain={odDomain}
           />
         )}
-        {isPerZip && selectedZip && (
+        {!hideWorkplaceMetrics && isPerZip && selectedZip && (
           <WorkplaceMetricsCard
             scope={scope}
             selectedZip={selectedZip}
@@ -3008,7 +3053,7 @@ export function BottomCardStrip({
             segmentFilter={segmentFilter}
           />
         )}
-        {isNonAnchor && nonAnchorBundle && (
+        {!hideOdFlows && isNonAnchor && nonAnchorBundle && (
           <CardsForOd
             scope={scope}
             // Non-anchor view = bundle residents commuting OUT to anchor
@@ -3048,7 +3093,7 @@ export function BottomCardStrip({
           onSegmentFilterChange={onSegmentFilterChange}
           odMixOverride={odMixOverride}
         />
-        {isNonAnchor && nonAnchorBundle && (
+        {!hidePartnerCards && isNonAnchor && nonAnchorBundle && (
           <Card
             title={`${scope} · Top outflow`}
             subtitle="Anchor workplaces · latest year"
@@ -3063,62 +3108,66 @@ export function BottomCardStrip({
         )}
         {isPerZip && odEntry && (
           <>
-            <Card
-              title={`${scope} · Top inflow`}
-              subtitle="Where workers commute from · latest year"
-              width={260}
-              maxHeight={320}
-            >
-              <PartnerList
-                partners={
-                  filterActive || directionActive
-                    ? filterPartners(
-                        odEntry.topPartners.inflow,
-                        flowsInbound,
-                        odEntry.zip,
-                        'inflow',
-                      )
-                    : odEntry.topPartners.inflow
-                }
-                denominator={
-                  (blocks.inflowLatest?.totalJobs ?? 0) +
-                  (blocks.withinLatest?.totalJobs ?? 0)
-                }
-                withinZip={
-                  blocks.withinLatest && odEntry.zip
-                    ? { zip: odEntry.zip, workers: blocks.withinLatest.totalJobs }
-                    : undefined
-                }
-              />
-            </Card>
-            <Card
-              title={`${scope} · Top outflow`}
-              subtitle="Where residents commute to · latest year"
-              width={260}
-              maxHeight={320}
-            >
-              <PartnerList
-                partners={
-                  filterActive || directionActive
-                    ? filterPartners(
-                        odEntry.topPartners.outflow,
-                        flowsOutbound,
-                        odEntry.zip,
-                        'outflow',
-                      )
-                    : odEntry.topPartners.outflow
-                }
-                denominator={
-                  (blocks.outflowLatest?.totalJobs ?? 0) +
-                  (blocks.withinLatest?.totalJobs ?? 0)
-                }
-                withinZip={
-                  blocks.withinLatest && odEntry.zip
-                    ? { zip: odEntry.zip, workers: blocks.withinLatest.totalJobs }
-                    : undefined
-                }
-              />
-            </Card>
+            {!hidePartnerCards && (
+              <>
+                <Card
+                  title={`${scope} · Top inflow`}
+                  subtitle="Where workers commute from · latest year"
+                  width={260}
+                  maxHeight={320}
+                >
+                  <PartnerList
+                    partners={
+                      filterActive || directionActive
+                        ? filterPartners(
+                            odEntry.topPartners.inflow,
+                            flowsInbound,
+                            odEntry.zip,
+                            'inflow',
+                          )
+                        : odEntry.topPartners.inflow
+                    }
+                    denominator={
+                      (blocks.inflowLatest?.totalJobs ?? 0) +
+                      (blocks.withinLatest?.totalJobs ?? 0)
+                    }
+                    withinZip={
+                      blocks.withinLatest && odEntry.zip
+                        ? { zip: odEntry.zip, workers: blocks.withinLatest.totalJobs }
+                        : undefined
+                    }
+                  />
+                </Card>
+                <Card
+                  title={`${scope} · Top outflow`}
+                  subtitle="Where residents commute to · latest year"
+                  width={260}
+                  maxHeight={320}
+                >
+                  <PartnerList
+                    partners={
+                      filterActive || directionActive
+                        ? filterPartners(
+                            odEntry.topPartners.outflow,
+                            flowsOutbound,
+                            odEntry.zip,
+                            'outflow',
+                          )
+                        : odEntry.topPartners.outflow
+                    }
+                    denominator={
+                      (blocks.outflowLatest?.totalJobs ?? 0) +
+                      (blocks.withinLatest?.totalJobs ?? 0)
+                    }
+                    withinZip={
+                      blocks.withinLatest && odEntry.zip
+                        ? { zip: odEntry.zip, workers: blocks.withinLatest.totalJobs }
+                        : undefined
+                    }
+                  />
+                </Card>
+              </>
+            )}
             {passThrough && passThrough.byAnchor[odEntry.zip] && (
               <PassThroughCard
                 anchorZip={odEntry.zip}

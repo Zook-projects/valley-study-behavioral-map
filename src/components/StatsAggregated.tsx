@@ -46,6 +46,16 @@ interface Props {
   zips: ZipMeta[];
   // Precomputed OSRM drive-distance lookup. Null = use Haversine fallback only.
   driveDistance: DriveDistanceMap | null;
+  // Section layout. Default 'stacked' — the original Map-view layout (hero +
+  // accordion above, rankings below). 'side-by-side' lays the hero+accordion
+  // and the rankings into a 2-column grid for wider surfaces (the Dashboard
+  // view). The internal rankingFilter still wires both halves together so
+  // clicking a row in the rankings narrows the headline tiles.
+  layout?: 'stacked' | 'side-by-side';
+  // When true, the accordion of stat tail items renders pre-expanded so all
+  // sub-line context is visible without click. Used by the Dashboard view's
+  // region pane where vertical real estate is plentiful.
+  defaultExpanded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,8 +233,16 @@ function AccordionRow({
   );
 }
 
-function LayoutAccordion({ items }: { items: StatItem[] }) {
-  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+function LayoutAccordion({
+  items,
+  defaultExpanded = false,
+}: {
+  items: StatItem[];
+  defaultExpanded?: boolean;
+}) {
+  const [openIds, setOpenIds] = useState<Set<string>>(
+    () => (defaultExpanded ? new Set(items.map((it) => it.id)) : new Set()),
+  );
   const toggle = (id: string) =>
     setOpenIds((prev) => {
       const next = new Set(prev);
@@ -285,7 +303,13 @@ function HeroRow({ item }: { item: StatItem }) {
   );
 }
 
-function LayoutHero({ items }: { items: StatItem[] }) {
+function LayoutHero({
+  items,
+  defaultExpanded = false,
+}: {
+  items: StatItem[];
+  defaultExpanded?: boolean;
+}) {
   const heroIds = new Set(['workforce']);
   const heroItems = items.filter((it) => heroIds.has(it.id));
   const tailItems = items.filter((it) => !heroIds.has(it.id));
@@ -295,7 +319,7 @@ function LayoutHero({ items }: { items: StatItem[] }) {
         <HeroRow key={it.id} item={it} />
       ))}
       <div className="mt-1">
-        <LayoutAccordion items={tailItems} />
+        <LayoutAccordion items={tailItems} defaultExpanded={defaultExpanded} />
       </div>
     </div>
   );
@@ -701,6 +725,8 @@ export function StatsAggregated(props: Props) {
     return `${rankingFilter.size} ZIPs`;
   }, [filterActive, rankingFilter, props.zips]);
 
+  const sideBySide = props.layout === 'side-by-side';
+
   return (
     <div>
       {filterActive && filterLabel && (
@@ -726,13 +752,33 @@ export function StatsAggregated(props: Props) {
           </button>
         </div>
       )}
-      <LayoutHero items={items} />
-      <AnchorRankings
-        rankings={rankings}
-        selectedFilter={rankingFilter}
-        onToggleFilter={toggleRankingFilter}
-        directionFilter={props.directionFilter}
-      />
+      {sideBySide ? (
+        // Two-column on md+: hero/accordion left, rankings right. Stacks
+        // back to a single column on mobile so neither half collapses.
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          <div className="min-w-0">
+            <LayoutHero items={items} defaultExpanded={props.defaultExpanded} />
+          </div>
+          <div className="min-w-0">
+            <AnchorRankings
+              rankings={rankings}
+              selectedFilter={rankingFilter}
+              onToggleFilter={toggleRankingFilter}
+              directionFilter={props.directionFilter}
+            />
+          </div>
+        </div>
+      ) : (
+        <>
+          <LayoutHero items={items} defaultExpanded={props.defaultExpanded} />
+          <AnchorRankings
+            rankings={rankings}
+            selectedFilter={rankingFilter}
+            onToggleFilter={toggleRankingFilter}
+            directionFilter={props.directionFilter}
+          />
+        </>
+      )}
     </div>
   );
 }

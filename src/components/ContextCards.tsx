@@ -8,8 +8,12 @@
 // No sparklines — text-only. Per the v2 spec the cards are a glanceable
 // snapshot, not a full data exploration.
 
-import { useState } from 'react';
+import { useId, useMemo, useState } from 'react';
+import { area as d3Area, line as d3Line } from 'd3-shape';
 import type {
+  CommerceAnnualRow,
+  CommerceMonthlyRow,
+  CommerceTrend,
   ContextBundle,
   ContextLatest,
   ContextTopic,
@@ -30,6 +34,20 @@ interface Props {
   racFile: RacFile;
   wacFile: WacFile;
   odSummary: OdSummaryFile;
+  // Optional topic subset. When provided, only these topics render — used
+  // by DashboardView to split the cards across Demographics / Commerce /
+  // Housing sections. Defaults to VISIBLE_TOPICS so the Map view's
+  // BottomCardStrip Demographics layer keeps showing all five.
+  topics?: ContextTopic[];
+  // Optional controlled-state hooks for the Commerce card. When provided,
+  // the variant + cadence toggles are mirrored to the parent so other
+  // surfaces (e.g. CommerceComparisons in DashboardView) can stay in sync.
+  // Omit them and the card manages its own state, preserving the original
+  // BottomCardStrip behavior.
+  commerceVariant?: CommerceVariant;
+  onCommerceVariantChange?: (v: CommerceVariant) => void;
+  commerceCadence?: CommerceCadence;
+  onCommerceCadenceChange?: (v: CommerceCadence) => void;
 }
 
 // Aggregate-view county order (fixed editorial sequence). Mesa County is
@@ -83,12 +101,28 @@ const HOUSING_VARIANT_CHIP_LABEL: Record<HousingVariant, string> = {
 // "business throughput" metric (typically what cities cite in EDC briefs);
 // Retail Sales narrows to true retail-to-consumer; Net Taxable Sales is the
 // state-tax base.
-type CommerceVariant = 'gross' | 'retail' | 'taxable';
+export type CommerceVariant = 'gross' | 'retail' | 'taxable';
+
+// Commerce-card cadence — controls whether the inline sparkline shows the
+// 10-point annual series (default) or the 120-point monthly series. Monthly
+// surfaces seasonality (vital for tourism-driven economies); annual is the
+// glanceable headline. Cadence only affects the sparkline; the headline
+// number remains the latest complete year regardless.
+export type CommerceCadence = 'annual' | 'monthly';
 
 const COMMERCE_VARIANT_KEY: Record<CommerceVariant, string> = {
   gross: 'cdorGrossSales',
   retail: 'cdorRetailSales',
   taxable: 'cdorNetTaxableSales',
+};
+
+// Maps the variant to the field name on a CommerceAnnualRow / CommerceMonthlyRow
+// (which use short keys: gross / retail / taxable, not the long CDOR
+// column names). Used by the sparkline + comparison charts.
+export const COMMERCE_VARIANT_TREND_KEY: Record<CommerceVariant, 'gross' | 'retail' | 'taxable'> = {
+  gross: 'gross',
+  retail: 'retail',
+  taxable: 'taxable',
 };
 
 const COMMERCE_VARIANT_LABEL: Record<CommerceVariant, string> = {
@@ -101,6 +135,11 @@ const COMMERCE_VARIANT_CHIP_LABEL: Record<CommerceVariant, string> = {
   gross: 'Gross',
   retail: 'Retail',
   taxable: 'Taxable',
+};
+
+const COMMERCE_CADENCE_LABEL: Record<CommerceCadence, string> = {
+  annual: 'Annual',
+  monthly: 'Monthly',
 };
 
 // One headline metric per topic. Commerce is special: its key is variant-
@@ -289,7 +328,20 @@ function buildRows(
   if (selectedZip) {
     const { place, county, state } = getPlaceWithRails(bundle, topic, selectedZip);
     const rows: Row[] = [];
-    if (place) rows.push(fmtRow(place.name, place.latest));
+    if (place) {
+      // Commerce-only: append "(X% of <County>)" to the place row when the
+      // shareOfCounty precompute is available. Other topics fall through to
+      // the plain row.
+      let placeLabel = place.name;
+      if (topic === 'commerce' && place.shareOfCounty?.latest && county) {
+        const measure = COMMERCE_VARIANT_TREND_KEY[commerceVariant];
+        const share = place.shareOfCounty.latest[measure];
+        if (typeof share === 'number' && isFinite(share)) {
+          placeLabel = `${place.name} (${(share * 100).toFixed(0)}% of ${county.name.replace(/ County$/, '')})`;
+        }
+      }
+      rows.push(fmtRow(placeLabel, place.latest));
+    }
     if (county) rows.push(fmtRow(county.name, county.latest));
     if (state) rows.push(fmtRow(state.name, state.latest));
     return rows;
@@ -346,12 +398,130 @@ function VariantToggle<V extends string>({
   );
 }
 
+/**
+ * Compact sparkline scoped to the Commerce card. Reads either the annual
+ * (10 points, 2016–latest) or monthly (~120 points) series from a
+ * CommerceTrend and projects the active variant (gross / retail / taxable)
+ * onto a fixed 200×40 SVG. Stretches horizontally to fill its container
+ * (preserveAspectRatio="none"). Latest-value dot rendered as a separately
+ * positioned HTML element so it stays a perfect circle.
+ */
+const SPARK_VB_W = 200;
+const SPARK_VB_H = 40;
+
+function CommerceSparkline({
+  trend,
+  variant,
+  cadence,
+  ariaLabel,
+}: {
+  trend: CommerceTrend | undefined;
+  variant: CommerceVariant;
+  cadence: CommerceCadence;
+  ariaLabel: string;
+}) {
+  const gradId = useId();
+  const measure = COMMERCE_VARIANT_TREND_KEY[variant];
+
+  const geometry = useMemo(() => {
+    if (!trend) return null;
+    type Pt = { x: number; y: number };
+    const rows = cadence === 'annual' ? trend.annual : trend.monthly;
+    if (!rows || rows.length < 2) return null;
+
+    // Annual: x = year. Monthly: x = year * 12 + month so the series is
+    // ordered and evenly spaced on the time axis.
+    const points: Pt[] = rows.map((r) => {
+      const yr = (r as CommerceAnnualRow).year;
+      const mo = (r as CommerceMonthlyRow).month;
+      const x = cadence === 'monthly' ? yr * 12 + (mo ?? 0) : yr;
+      const y = (r as CommerceAnnualRow | CommerceMonthlyRow)[measure];
+      return { x, y };
+    });
+
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const xMin = Math.min(...xs);
+    const xMax = Math.max(...xs);
+    const yMin = Math.min(...ys, 0);
+    const yMax = Math.max(...ys);
+    const xSpan = xMax - xMin || 1;
+    const ySpan = yMax - yMin || 1;
+    const sx = (x: number) => ((x - xMin) / xSpan) * (SPARK_VB_W - 4) + 2;
+    const sy = (y: number) =>
+      SPARK_VB_H - 4 - ((y - yMin) / ySpan) * (SPARK_VB_H - 8);
+    const linePath =
+      d3Line<Pt>()
+        .x((d) => sx(d.x))
+        .y((d) => sy(d.y))(points) ?? '';
+    const areaPath =
+      d3Area<Pt>()
+        .x((d) => sx(d.x))
+        .y0(SPARK_VB_H)
+        .y1((d) => sy(d.y))(points) ?? '';
+    const last = points[points.length - 1];
+    const latestRow = rows[rows.length - 1];
+    const yearLabel = (latestRow as CommerceAnnualRow).year;
+    return {
+      linePath,
+      areaPath,
+      lastX: sx(last.x),
+      lastY: sy(last.y),
+      lastValue: last.y,
+      yearLabel,
+    };
+  }, [trend, cadence, measure]);
+
+  if (!geometry) return null;
+
+  return (
+    <div className="relative w-full" style={{ height: SPARK_VB_H }}>
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${SPARK_VB_W} ${SPARK_VB_H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={ariaLabel}
+        style={{ display: 'block' }}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={geometry.areaPath} fill={`url(#${gradId})`} />
+        <path
+          d={geometry.linePath}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth={1.25}
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <span
+        className="absolute pointer-events-none rounded-full"
+        style={{
+          width: 4,
+          height: 4,
+          background: 'var(--accent)',
+          left: `calc(${(geometry.lastX / SPARK_VB_W) * 100}% - 2px)`,
+          top: `calc(${(geometry.lastY / SPARK_VB_H) * 100}% - 2px)`,
+        }}
+      />
+    </div>
+  );
+}
+
 function TopicCard({
   topic,
   headlineLabel,
   rows,
   sourceLine,
   variantToggle,
+  cadenceToggle,
+  sparkline,
   stretch = false,
 }: {
   topic: ContextTopic;
@@ -359,6 +529,12 @@ function TopicCard({
   rows: Row[];
   sourceLine: string | null;
   variantToggle?: React.ReactNode;
+  // Optional Annual/Monthly toggle, rendered next to the variant toggle.
+  // Used by Commerce; other topics omit.
+  cadenceToggle?: React.ReactNode;
+  // Optional inline trend chart rendered below the data rows. Used by
+  // Commerce; other topics omit.
+  sparkline?: React.ReactNode;
   // When true the card flex-grows to fill available width (Demographics
   // layer fills the strip on wide screens); when false it stays at the
   // fixed 240px width used by the LEHD-side card layout.
@@ -396,7 +572,12 @@ function TopicCard({
             {sourceLine}
           </div>
         )}
-        {variantToggle}
+        {(variantToggle || cadenceToggle) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {variantToggle}
+            {cadenceToggle}
+          </div>
+        )}
       </div>
       {allEmpty ? (
         <div
@@ -431,6 +612,7 @@ function TopicCard({
           ))}
         </ul>
       )}
+      {sparkline && <div className="mt-1">{sparkline}</div>}
     </div>
   );
 }
@@ -447,10 +629,29 @@ function latestHeadlineYear(
   commerceVariant: CommerceVariant,
   housingVariant: HousingVariant,
 ): number | null {
-  const headlineKey = headlineKeyFor(topic, commerceVariant, housingVariant);
   let maxYear: number | null = null;
+
+  // Commerce uses the new structured trend shape: { annual: [...], monthly: [...] }
+  // — a single multi-measure series rather than per-metric arrays. Grab the
+  // last complete annual year (which is also what `latest` reflects).
+  if (topic === 'commerce') {
+    const visitCommerce = (trend: ContextTrend | undefined) => {
+      const annual = (trend as CommerceTrend | undefined)?.annual;
+      if (!annual || annual.length === 0) return;
+      const last = annual[annual.length - 1].year;
+      if (maxYear === null || last > maxYear) maxYear = last;
+    };
+    if (env.state?.trend) visitCommerce(env.state.trend);
+    for (const c of env.counties) visitCommerce(c.trend);
+    for (const p of env.places) visitCommerce(p.trend);
+    return maxYear;
+  }
+
+  const headlineKey = headlineKeyFor(topic, commerceVariant, housingVariant);
   const visit = (trend: ContextTrend | undefined) => {
-    const series = trend?.[headlineKey];
+    const series = (trend as Record<string, { year: number; value: number | null }[]> | undefined)?.[
+      headlineKey
+    ];
     if (!series || series.length === 0) return;
     const last = series[series.length - 1].year;
     if (maxYear === null || last > maxYear) maxYear = last;
@@ -486,12 +687,31 @@ export function ContextCards({
   racFile,
   wacFile,
   odSummary,
+  topics,
+  commerceVariant: commerceVariantProp,
+  onCommerceVariantChange,
+  commerceCadence: commerceCadenceProp,
+  onCommerceCadenceChange,
 }: Props) {
-  // Per-card variant state (not lifted). Defaults follow the v2 spec:
+  // Per-card variant state. When the parent passes a controlled value (used
+  // by DashboardView so the Commerce card and the comparison charts share a
+  // toggle), defer to it; otherwise keep self-managed state for legacy call
+  // sites. Defaults follow the v2 spec:
   //   Commerce → Gross Sales (broadest "business throughput")
   //   Housing  → All homes (Zillow's flagship sfrcondo mid-tier series)
-  const [commerceVariant, setCommerceVariant] = useState<CommerceVariant>('gross');
+  const [commerceVariantLocal, setCommerceVariantLocal] = useState<CommerceVariant>('gross');
+  const [commerceCadenceLocal, setCommerceCadenceLocal] = useState<CommerceCadence>('annual');
   const [housingVariant, setHousingVariant] = useState<HousingVariant>('all');
+  const commerceVariant = commerceVariantProp ?? commerceVariantLocal;
+  const setCommerceVariant = (v: CommerceVariant) => {
+    if (onCommerceVariantChange) onCommerceVariantChange(v);
+    if (commerceVariantProp === undefined) setCommerceVariantLocal(v);
+  };
+  const commerceCadence = commerceCadenceProp ?? commerceCadenceLocal;
+  const setCommerceCadence = (v: CommerceCadence) => {
+    if (onCommerceCadenceChange) onCommerceCadenceChange(v);
+    if (commerceCadenceProp === undefined) setCommerceCadenceLocal(v);
+  };
 
   if (!bundle) {
     return (
@@ -500,9 +720,10 @@ export function ContextCards({
       </div>
     );
   }
+  const renderTopics = topics ?? VISIBLE_TOPICS;
   return (
     <>
-      {VISIBLE_TOPICS.map((topic) => {
+      {renderTopics.map((topic) => {
         // Employment card pulls from LODES (RAC/WAC/OD) instead of the
         // BLS QCEW path. Three rows × one geography (selected ZIP or
         // regional aggregate) — explicitly different shape from the other
@@ -529,6 +750,8 @@ export function ContextCards({
         const baseHeadlineLabel = headlineLabelFor(topic, commerceVariant, housingVariant);
         const headlineLabel = `${baseHeadlineLabel} · ${geoSuffix}`;
         let variantToggle: React.ReactNode | undefined;
+        let cadenceToggle: React.ReactNode | undefined;
+        let sparkline: React.ReactNode | undefined;
         if (topic === 'commerce') {
           variantToggle = (
             <VariantToggle<CommerceVariant>
@@ -539,6 +762,42 @@ export function ContextCards({
               ariaLabel="CDOR sales metric"
             />
           );
+          cadenceToggle = (
+            <VariantToggle<CommerceCadence>
+              value={commerceCadence}
+              onChange={setCommerceCadence}
+              options={['annual', 'monthly']}
+              labels={COMMERCE_CADENCE_LABEL}
+              ariaLabel="Trend cadence"
+            />
+          );
+          // Pull the sparkline source: place trend when a workplace ZIP is
+          // selected, otherwise fall back to the containing county for the
+          // selected place; in aggregate mode use Garfield (the central
+          // county for the study area) so the card always shows a series.
+          let sparkTrend: CommerceTrend | undefined;
+          let sparkLabel = 'Colorado';
+          if (selectedZip) {
+            const { place, county } = getPlaceWithRails(bundle, 'commerce', selectedZip);
+            const t = (place?.trend ?? county?.trend) as CommerceTrend | undefined;
+            if (t && (t.annual?.length ?? 0) > 0) {
+              sparkTrend = t;
+              sparkLabel = place?.name ?? county?.name ?? sparkLabel;
+            }
+          }
+          if (!sparkTrend) {
+            const garfield = env.counties.find((c) => c.geoid === '08045');
+            sparkTrend = garfield?.trend as CommerceTrend | undefined;
+            sparkLabel = garfield?.name ?? sparkLabel;
+          }
+          sparkline = sparkTrend ? (
+            <CommerceSparkline
+              trend={sparkTrend}
+              variant={commerceVariant}
+              cadence={commerceCadence}
+              ariaLabel={`${COMMERCE_VARIANT_LABEL[commerceVariant]} trend, ${sparkLabel}, ${commerceCadence}`}
+            />
+          ) : undefined;
         } else if (topic === 'housing') {
           variantToggle = (
             <VariantToggle<HousingVariant>
@@ -558,6 +817,8 @@ export function ContextCards({
             rows={rows}
             sourceLine={sourceLine}
             variantToggle={variantToggle}
+            cadenceToggle={cadenceToggle}
+            sparkline={sparkline}
             stretch
           />
         );

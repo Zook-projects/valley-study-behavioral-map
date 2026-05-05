@@ -17,18 +17,13 @@ import type { ViewLayer } from '../components/ViewLayerToggle';
 import type {
   ActiveCorridorAggregation,
   CorridorFlowEntry,
-  CorridorGraph,
   CorridorId,
-  CorridorRecord,
   DirectionFilter,
   FlowRow,
   Mode,
-  PassThroughFile,
   SegmentFilter,
   ZipMeta,
 } from '../types/flow';
-import type { OdBlocksFile, OdSummaryFile, RacFile, WacFile } from '../types/lodes';
-import type { ContextBundle, ContextEnvelope, ContextTopic } from '../types/context';
 import { ContextLayerToggle, type CardLayer } from '../components/ContextLayerToggle';
 import { buildHeatmapGeoJson } from '../lib/heatmapPoints';
 import type { HeatmapSide } from '../components/HeatmapModeToggle';
@@ -39,14 +34,11 @@ import {
   filterByDirection,
   filterForSelection,
   isAnchorZip,
-  unionFlowsByPair,
-  type DriveDistanceMap,
 } from '../lib/flowQueries';
 import {
-  buildCorridorFlowIndex,
   buildVisibleCorridorMap,
-  indexCorridors,
 } from '../lib/corridors';
+import type { FlowData } from '../lib/useFlowData';
 import {
   buildEastWestTransitFlows,
   filterEastWestTransits,
@@ -65,8 +57,6 @@ interface HoverState {
   clientX: number;
   clientY: number;
 }
-
-const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
 /** Pretty-format a tooltip row's place + ZIP label. */
 function placeLabel(zips: ZipMeta[], zip: string): string {
@@ -250,26 +240,28 @@ function TooltipBody({
   );
 }
 
-export function CommuteView() {
-  const [flowsInbound, setFlowsInbound] = useState<FlowRow[] | null>(null);
-  const [flowsOutbound, setFlowsOutbound] = useState<FlowRow[] | null>(null);
-  const [zips, setZips] = useState<ZipMeta[] | null>(null);
-  const [corridorIndex, setCorridorIndex] = useState<Map<CorridorId, CorridorRecord> | null>(null);
-  const [flowIndex, setFlowIndex] = useState<Map<CorridorId, CorridorFlowEntry[]> | null>(null);
-  const [racFile, setRacFile] = useState<RacFile | null>(null);
-  const [wacFile, setWacFile] = useState<WacFile | null>(null);
-  const [odSummary, setOdSummary] = useState<OdSummaryFile | null>(null);
-  const [driveDistance, setDriveDistance] = useState<DriveDistanceMap | null>(null);
-  const [passThrough, setPassThrough] = useState<PassThroughFile | null>(null);
-  // Block-level OD data (latest year only) — drives the workplace/residential
-  // density heatmap painted under the flow arcs. Optional load: on a failed
-  // fetch the heatmap layer simply doesn't render.
-  const [odBlocks, setOdBlocks] = useState<OdBlocksFile | null>(null);
-  // v2 regional context layer — six topic JSONs at place / county / state.
-  // Loaded lazily so a missing file doesn't block the LEHD commute view.
-  // All six topics render together when Layer = Context, so there's no
-  // per-topic selection state.
-  const [contextBundle, setContextBundle] = useState<ContextBundle | null>(null);
+interface CommuteViewProps {
+  data: FlowData;
+}
+
+export function CommuteView({ data }: CommuteViewProps) {
+  // Data is now provided by the parent (App.tsx via useFlowData) so it can be
+  // shared with the Dashboard view without re-fetching on tab switches.
+  const {
+    flowsInbound,
+    flowsOutbound,
+    flowsRegional,
+    zips,
+    corridorIndex,
+    flowIndex,
+    racFile,
+    wacFile,
+    odSummary,
+    driveDistance,
+    passThrough,
+    odBlocks,
+    contextBundle,
+  } = data;
   const [cardLayer, setCardLayer] = useState<CardLayer>('commute');
   const [mode, setMode] = useState<Mode>('inbound');
   const [selectedZip, setSelectedZip] = useState<string | null>(null);
@@ -368,130 +360,7 @@ export function CommuteView() {
     return () => ro.disconnect();
   }, [flowsInbound]);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      fetch(`${DATA_BASE}/flows-inbound.json`).then((r) => r.json()),
-      fetch(`${DATA_BASE}/flows-outbound.json`).then((r) => r.json()),
-      fetch(`${DATA_BASE}/zips.json`).then((r) => r.json()),
-      fetch(`${DATA_BASE}/corridors.json`).then((r) => r.json()),
-      fetch(`${DATA_BASE}/rac.json`).then((r) => r.json()),
-      fetch(`${DATA_BASE}/wac.json`).then((r) => r.json()),
-      fetch(`${DATA_BASE}/od-summary.json`).then((r) => r.json()),
-      // Drive-distance is precomputed by scripts/build-drive-distance.py
-      // against the public OSRM demo. Treat as optional — on a failed load the
-      // mean-distance stat falls back to Haversine × detour-factor.
-      fetch(`${DATA_BASE}/drive-distance.json`)
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-      // Pass-through flows — optional. Built by scripts/build-passthrough.py
-      // from the latest LODES year. When missing the Pass-Through Traffic
-      // card simply doesn't render.
-      fetch(`${DATA_BASE}/flows-passthrough.json`)
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-      // Block-level OD — latest LODES year only, drives the heatmap layer.
-      // Optional: on a failed load the heatmap layer is skipped silently.
-      fetch(`${DATA_BASE}/od-blocks.json`)
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null),
-    ])
-      .then(([fi, fo, z, cg, rac, wac, od, dd, pt, ob]: [
-        FlowRow[],
-        FlowRow[],
-        ZipMeta[],
-        CorridorGraph,
-        RacFile,
-        WacFile,
-        OdSummaryFile,
-        DriveDistanceMap | null,
-        PassThroughFile | null,
-        OdBlocksFile | null,
-      ]) => {
-        if (cancelled) return;
-        // Guard against an old cached JSON (no per-pair segments block) —
-        // the segment filter would silently no-op on those rows. Dev-only
-        // warning; production builds skip the check.
-        if (import.meta.env.DEV) {
-          const missing = fi.find((f) => !f.segments) ?? fo.find((f) => !f.segments);
-          if (missing) {
-            console.warn(
-              'flow rows are missing per-pair segment breakdowns — segment filter will be inactive. Re-run scripts/build-data.py.',
-            );
-          }
-        }
-        setFlowsInbound(fi);
-        setFlowsOutbound(fo);
-        setZips(z);
-        setCorridorIndex(indexCorridors(cg));
-        setFlowIndex(buildCorridorFlowIndex(fi, fo));
-        setRacFile(rac);
-        setWacFile(wac);
-        setOdSummary(od);
-        setDriveDistance(dd);
-        setPassThrough(pt);
-        setOdBlocks(ob);
-      })
-      .catch((err) => console.error('data load failed', err));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Regional context — six topic JSONs loaded in parallel. Any 404 (e.g.,
-  // a topic whose fetcher hasn't been run yet) leaves that topic's slot
-  // null; ContextCards renders a "no data" placeholder.
-  useEffect(() => {
-    let cancelled = false;
-    const topics: ContextTopic[] = [
-      'demographics',
-      'education',
-      'employment',
-      'housing',
-      'commerce',
-      'tourism',
-    ];
-    Promise.all(
-      topics.map((t) =>
-        fetch(`${DATA_BASE}/context/${t}.json`)
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ),
-    ).then((envelopes) => {
-      if (cancelled) return;
-      const bundle = {} as ContextBundle;
-      topics.forEach((t, i) => {
-        const env = envelopes[i] as ContextEnvelope | null;
-        // Synthesize an empty envelope shell on failed fetch so consumers
-        // can rely on every key being present.
-        bundle[t] =
-          env ??
-          ({
-            topic: t,
-            vintageRange: { start: 0, end: 0 },
-            sources: [],
-            state: null,
-            counties: [],
-            places: [],
-          } as ContextEnvelope);
-      });
-      setContextBundle(bundle);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Regional flow union — deduped union of inbound + outbound. Powers the
-  // synthetic 'regional' mode used in the aggregate (no-ZIP-selected) view.
-  // Anchor↔anchor pairs collapse to a single row (identical workerCount and
-  // segments in both build outputs); anchor→non-anchor and non-anchor→anchor
-  // pairs each appear once. The result is the smallest correct universe of
-  // flows that "touch at least one anchor."
-  const flowsRegional = useMemo<FlowRow[] | null>(() => {
-    if (!flowsInbound || !flowsOutbound) return null;
-    return unionFlowsByPair(flowsInbound, flowsOutbound);
-  }, [flowsInbound, flowsOutbound]);
+  // (Data loading lifted to App.tsx via useFlowData — see ../lib/useFlowData.ts.)
 
   // effectiveMode = 'regional' when no ZIP is selected (aggregate view) so the
   // map / corridor pipeline draws the unioned universe. When a ZIP is selected
@@ -583,12 +452,8 @@ export function CommuteView() {
     ).flows;
   }, [selectionKind, nonAnchorBundle, directionFilteredInbound]);
 
-  // Mode-aware aggregation lifted up so the corridor legend (in
-  // DashboardTile) and the renderer (MapCanvas) share one set of breaks.
-  const visibleCorridorMap = useMemo(() => {
-    if (!corridorIndex || !flowIndex) return null;
-    return buildVisibleCorridorMap(corridorIndex, flowIndex, visibleFlows, effectiveMode);
-  }, [corridorIndex, flowIndex, visibleFlows, effectiveMode]);
+  // (visibleCorridorMap was previously computed here for the loading guard.
+  // MapCanvas reads `visualVisibleCorridorMap` instead — see below.)
 
   // ----- Visual-only override (corridor rendering) --------------------------
   // In aggregate view the corridor visualization is locked to inbound — the
@@ -628,7 +493,6 @@ export function CommuteView() {
   // aggregateCorridor; regional mode dedupes by flowId so the duplication
   // doesn't double-count.
   const visualFlowIndex = useMemo(() => {
-    if (!flowIndex) return null;
     if (eastWestTransits.length === 0) return flowIndex;
     const augmented = new Map<CorridorId, CorridorFlowEntry[]>();
     for (const [cid, list] of flowIndex) augmented.set(cid, list.slice());
@@ -654,11 +518,9 @@ export function CommuteView() {
     return augmented;
   }, [flowIndex, eastWestTransits]);
 
-  const visualFlows: FlowRow[] | null =
+  const visualFlows: FlowRow[] =
     selectionKind === 'aggregate'
-      ? flowsInbound
-        ? [...flowsInbound, ...visualEastWestTransits]
-        : flowsInbound
+      ? [...flowsInbound, ...visualEastWestTransits]
       : flows;
   const visualDirectionFiltered: FlowRow[] =
     selectionKind === 'aggregate'
@@ -679,7 +541,6 @@ export function CommuteView() {
     visualMode,
   ]);
   const visualVisibleCorridorMap = useMemo(() => {
-    if (!corridorIndex || !visualFlowIndex) return null;
     return buildVisibleCorridorMap(
       corridorIndex,
       visualFlowIndex,
@@ -945,28 +806,10 @@ export function CommuteView() {
     setSelectedPartner(null);
   };
 
-  if (
-    !flowsInbound ||
-    !flowsOutbound ||
-    !zips ||
-    !corridorIndex ||
-    !flowIndex ||
-    !flows ||
-    !visibleCorridorMap ||
-    !visualFlows ||
-    !visualVisibleCorridorMap ||
-    !racFile ||
-    !wacFile ||
-    !odSummary
-  ) {
-    return (
-      <div className="min-h-screen w-full md:w-screen md:h-screen flex items-center justify-center">
-        <div className="text-xs uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>
-          Loading flow data…
-        </div>
-      </div>
-    );
-  }
+  // Loading guard previously lived here. Data is now guaranteed non-null by
+  // the FlowData prop contract (App.tsx renders a global loading screen until
+  // the useFlowData hook resolves the required files), so the per-view guard
+  // is no longer necessary.
 
   const headerFor = (s: HoverState) =>
     `${s.aggregation.corridor.label} — ${fmtInt(s.aggregation.total)} workers`;
@@ -997,7 +840,7 @@ export function CommuteView() {
     hover.corridorId !== suppressedHover;
 
   return (
-    <div className="min-h-screen w-full flex flex-col relative md:w-screen md:h-screen md:flex-row" style={{ background: 'var(--bg-base)' }}>
+    <div className="w-full flex flex-col relative md:flex-row md:flex-1 md:min-h-0" style={{ background: 'var(--bg-base)' }}>
       <DashboardTile
         flows={flows}
         directionFilteredFlows={directionFilteredFlows}

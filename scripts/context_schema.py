@@ -121,6 +121,11 @@ def build_envelope(
             "latest": d.get("latest"),
             "trend": d.get("trend", {}),
         }
+        # Pass through any topic-specific extras (e.g., commerce's
+        # `shareOfCounty`) without coupling them to the shared schema.
+        for k, v in d.items():
+            if k not in ("latest", "trend"):
+                place_entry[k] = v
         places.append(place_entry)
 
     return {
