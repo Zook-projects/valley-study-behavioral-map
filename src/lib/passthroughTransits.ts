@@ -110,10 +110,14 @@ export function filterEastWestTransits(
   directionFilter: DirectionFilter,
 ): FlowRow[] {
   if (directionFilter === 'all') return transits;
-  // 'up-valley' is east + anchor-only; transits never touch anchor ZIPs
-  // (they use GW_E/GW_W sentinels), so up-valley behaves like east here.
+  // 'up-valley' EXCLUDES synthetic east-west transits — their destination is
+  // GW_E (eastern I-70 beyond the anchor envelope, e.g., Eagle/Vail and
+  // beyond), which isn't a valid up-valley place of work. Suppressing them
+  // here prevents the regional flow layer from rendering eastern I-70 as a
+  // workplace destination.
   // 'down-valley' is a west alias.
-  const eastward = directionFilter === 'east' || directionFilter === 'up-valley';
+  if (directionFilter === 'up-valley') return [];
+  const eastward = directionFilter === 'east';
   const westward = directionFilter === 'west' || directionFilter === 'down-valley';
   return transits.filter((f) => {
     if (f.originZip === GW_W_ZIP && f.destZip === GW_E_ZIP) return eastward;

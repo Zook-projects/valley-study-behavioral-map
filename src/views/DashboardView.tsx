@@ -393,6 +393,7 @@ export function DashboardView({ data }: Props) {
               >
                 Workforce, Jobs &amp; OD Flows
               </h2>
+              <WorkforceAboutCard />
               {selectedZip == null || selectedZip === 'ALL_OTHER' ? (
                 <StatsAggregated
                   flowsInbound={flowsInbound}
@@ -448,6 +449,7 @@ export function DashboardView({ data }: Props) {
                         withinTrend={perZipBlockData.withinTrend}
                         width="100%"
                         minChartHeight={220}
+                        expanded
                       />
                     </div>
                   </div>
@@ -676,6 +678,95 @@ export function DashboardView({ data }: Props) {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// About-this-data card for the Workforce, Jobs & OD Flows section. Mirrors
+// the HousingMarketSection AboutDataCard pattern: a nested rounded panel
+// holding a short LODES description plus a compact metadata grid (Source /
+// Metric / Cadence / Coverage). Always visible — the deeper methodology
+// notes still live in MethodologyFooter beneath the map view.
+// ---------------------------------------------------------------------------
+function WorkforceAboutCard() {
+  return (
+    <div
+      className="rounded-md p-3 flex flex-col gap-2 mb-3"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--panel-border)',
+      }}
+    >
+      <div>
+        <div
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: 'var(--text-h)' }}
+        >
+          About this data
+        </div>
+        <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
+          LEHD Origin–Destination Employment Statistics (LODES)
+        </div>
+      </div>
+      <p className="text-[11px] leading-snug" style={{ color: 'var(--text)' }}>
+        LODES synthesizes Census Bureau unemployment-insurance wage records,
+        federal employment files, and demographic data into annual job counts
+        paired by residence ZIP and workplace ZIP. Coverage uses job-type
+        JT00 — primary plus secondary jobs (a worker holding two jobs is
+        counted twice) and federal civilian jobs — but excludes self-employed,
+        military, and informal labor. Resort-area workforce (Aspen / Snowmass
+        / Basalt corridor) is a known LEHD undercount because seasonal, J-1,
+        and 1099 contractor labor falls outside the QCEW UI coverage that
+        feeds LODES; figures for 81611, 81615, 81621, and 81654 should be
+        read as a floor rather than a census.
+      </p>
+      <ul className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 mt-1">
+        <li className="flex flex-col">
+          <span
+            className="text-[9px] uppercase tracking-wider"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            Source
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>
+            U.S. Census Bureau · LEHD LODES v8
+          </span>
+        </li>
+        <li className="flex flex-col">
+          <span
+            className="text-[9px] uppercase tracking-wider"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            Metric
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>
+            OD job counts (JT00 · all jobs)
+          </span>
+        </li>
+        <li className="flex flex-col">
+          <span
+            className="text-[9px] uppercase tracking-wider"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            Cadence
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>
+            Annual · ~2-year release lag
+          </span>
+        </li>
+        <li className="flex flex-col">
+          <span
+            className="text-[9px] uppercase tracking-wider"
+            style={{ color: 'var(--text-dim)' }}
+          >
+            Coverage
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>
+            2002 → 2023 · Colorado
+          </span>
+        </li>
+      </ul>
     </div>
   );
 }

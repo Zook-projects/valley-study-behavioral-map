@@ -43,6 +43,97 @@ export function isAnchorZip(zip: string): boolean {
   return ANCHOR_ZIPS.includes(zip);
 }
 
+/**
+ * The six Roaring Fork Valley workplace anchors — Glenwood Springs, Aspen,
+ * Snowmass Village, Basalt, Carbondale, Old Snowmass. The Up Valley filter
+ * scopes flows to commutes whose place of work lands in this set, so that
+ * residents east of Glenwood on I-70 (Eagle, Vail) commuting back into the
+ * Roaring Fork are captured as up-valley commuters even though their flow
+ * trends west in raw longitude. Excludes the five western-I-70 anchors
+ * (Rifle, Parachute, New Castle, Silt, De Beque) which are not "up valley".
+ */
+export const ROARING_FORK_ANCHOR_ZIPS = [
+  '81601', // Glenwood Springs
+  '81611', // Aspen
+  '81615', // Snowmass Village
+  '81621', // Basalt
+  '81623', // Carbondale
+  '81654', // Old Snowmass
+];
+
+/** True when zip is one of the six Roaring Fork Valley anchor workplaces. */
+export function isRoaringForkAnchorZip(zip: string): boolean {
+  return ROARING_FORK_ANCHOR_ZIPS.includes(zip);
+}
+
+/**
+ * Inner Roaring Fork workplaces (Carbondale, Basalt, Old Snowmass, Snowmass
+ * Village, Aspen) — the five RF anchors south of the Colorado River /
+ * I-70 junction at Glenwood. Down Valley filtering excludes flows whose
+ * residence is on eastern I-70 and destination is one of these workplaces,
+ * because traveling from Eagle / Vail / Avon down I-70 then south up the
+ * Roaring Fork is an up-valley commute, not a down-valley commute, even
+ * though the raw east → west bearing reads as westbound.
+ */
+export const INNER_ROARING_FORK_ANCHOR_ZIPS = [
+  '81611', // Aspen
+  '81615', // Snowmass Village
+  '81621', // Basalt
+  '81623', // Carbondale
+  '81654', // Old Snowmass
+];
+
+/** True when zip is one of the five inner Roaring Fork anchor workplaces. */
+export function isInnerRoaringForkAnchorZip(zip: string): boolean {
+  return INNER_ROARING_FORK_ANCHOR_ZIPS.includes(zip);
+}
+
+/**
+ * True when the origin ZIP is east of Glenwood Springs in longitude and
+ * is NOT one of the eleven anchor workplaces. This is a broader predicate
+ * than `isEasternI70Residence` — it drops the latitude floor so Front-Range,
+ * South-Park, and Arkansas-Valley origins (Colorado Springs, Leadville,
+ * Buena Vista, Salida, Castle Rock, etc.) also qualify. Used by the Down
+ * Valley filter so commutes routed through the I-70 east corridor into
+ * the inner Roaring Fork are dropped, since the trip terminates up the
+ * Roaring Fork rather than down.
+ */
+export function isEastOfGlenwoodNonAnchorResidence(originZip: string, zips: ZipMeta[]): boolean {
+  if (originZip === 'ALL_OTHER') return false;
+  if (isAnchorZip(originZip)) return false;
+  const o = zips.find((z) => z.zip === originZip);
+  const gw = zips.find((z) => z.zip === '81601');
+  if (!o || !gw) return false;
+  if (o.lng == null || gw.lng == null) return false;
+  return o.lng - gw.lng > EW_THRESHOLD_DEG;
+}
+
+/**
+ * True when the origin ZIP looks like a residence on I-70 east of Glenwood
+ * Springs (Eagle/Vail/Avon/Edwards/Gypsum/Minturn through Summit County and
+ * beyond) — i.e., east of Glenwood in longitude AND not significantly south
+ * of Glenwood (so the south-leaning Roaring Fork ZIPs are excluded). Used by
+ * the Up Valley filter so that east-I-70 residents commuting back into the
+ * Roaring Fork are kept even though their flow trends west in raw bearing.
+ */
+export function isEasternI70Residence(originZip: string, zips: ZipMeta[]): boolean {
+  if (originZip === 'ALL_OTHER') return false;
+  // Exclude Roaring Fork anchors (south of GW in latitude — not eastern I-70).
+  if (isRoaringForkAnchorZip(originZip)) return false;
+  // Exclude western I-70 anchors (west of GW in longitude — not east).
+  if (isAnchorZip(originZip)) return false;
+  const o = zips.find((z) => z.zip === originZip);
+  const gw = zips.find((z) => z.zip === '81601');
+  if (!o || !gw) return false;
+  if (o.lng == null || gw.lng == null || o.lat == null || gw.lat == null) return false;
+  // East of Glenwood in longitude.
+  if (o.lng - gw.lng <= EW_THRESHOLD_DEG) return false;
+  // Not significantly south of Glenwood (separates I-70 east corridor from
+  // the Roaring Fork, which trends south-southeast). 0.1 degrees ≈ 11 km.
+  if (o.lat < gw.lat - 0.1) return false;
+  return true;
+}
+
 export interface AggregatedSummary {
   totalWorkers: number;
   crossZipCommuters: number;      // absolute count of workers commuting across
@@ -442,17 +533,50 @@ export function filterByDirection(
   filter: DirectionFilter,
 ): FlowRow[] {
   if (filter === 'all') return flows;
-  // 'up-valley' = east + anchor-workplace-only. 'down-valley' = west alias.
-  const directionTarget: Direction =
-    filter === 'up-valley' ? 'east' :
-    filter === 'down-valley' ? 'west' :
-    filter;
-  const anchorOnly = filter === 'up-valley';
+  // 'up-valley' = (east-bearing into any of the 11 anchor workplaces) UNION
+  // (residence on eastern I-70 commuting into the six Roaring Fork anchors).
+  // The second clause keeps Eagle/Vail-area residents who commute back into
+  // the Roaring Fork — their raw longitude delta is west, but they are
+  // moving up-valley once they cross Glenwood. 'down-valley' is a west alias.
+  if (filter === 'up-valley') {
+    return flows.filter((f) => {
+      if (f.originZip === 'ALL_OTHER' || f.destZip === 'ALL_OTHER') return false;
+      // Path A: classic east-bearing commute landing in any anchor workplace.
+      if (isAnchorZip(f.destZip)) {
+        if (f.originZip === f.destZip) return true;
+        if (classifyDirection(f.originZip, f.destZip, zips) === 'east') return true;
+      }
+      // Path B: residence on eastern I-70 commuting into a RF anchor.
+      if (isRoaringForkAnchorZip(f.destZip) && isEasternI70Residence(f.originZip, zips)) {
+        return true;
+      }
+      return false;
+    });
+  }
+  const directionTarget: Direction = filter === 'down-valley' ? 'west' : filter;
+  const isDownValley = filter === 'down-valley';
   return flows.filter((f) => {
     if (f.originZip === 'ALL_OTHER' || f.destZip === 'ALL_OTHER') return false;
-    if (anchorOnly && !isAnchorZip(f.destZip)) return false;
     if (f.originZip === f.destZip) return true;
-    return classifyDirection(f.originZip, f.destZip, zips) === directionTarget;
+    if (classifyDirection(f.originZip, f.destZip, zips) !== directionTarget) return false;
+    // Down Valley refinement: any east-of-Glenwood non-anchor origin
+    // commuting up into the inner Roaring Fork (Carbondale, Basalt, Old
+    // Snowmass, Snowmass Village, Aspen) is an up-valley commute, even
+    // though the raw bearing reads as westbound. This drops Eagle / Vail
+    // / Avon / Edwards on I-70, plus Front-Range / South-Park / Arkansas-
+    // Valley origins (Colorado Springs, Leadville, Buena Vista, Castle
+    // Rock, Canon City, etc.) whose shortest path into the inner RF
+    // routes through the I-70 east corridor. Glenwood Springs is
+    // intentionally NOT in the inner-RF set, so Eagle/Vail → Glenwood
+    // remains a valid down-I-70 destination.
+    if (
+      isDownValley &&
+      isInnerRoaringForkAnchorZip(f.destZip) &&
+      isEastOfGlenwoodNonAnchorResidence(f.originZip, zips)
+    ) {
+      return false;
+    }
+    return true;
   });
 }
 

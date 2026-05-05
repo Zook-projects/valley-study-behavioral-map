@@ -54,6 +54,7 @@ import {
   filteredLatestTotal,
   filteredOdLatestTotal,
   filteredTrendSeries,
+  isAnchorZip,
   isSegmentFilterAll,
   meanCommuteMiles,
   type DriveDistanceMap,
@@ -1115,6 +1116,7 @@ function MultiSparkline({
   series,
   yDomain,
   fill = false,
+  axes = false,
 }: {
   series: { name: string; points: TrendPoint[]; color: string; dotColor: string }[];
   yDomain?: [number, number];
@@ -1122,27 +1124,40 @@ function MultiSparkline({
   // of rendering at a fixed pixel height. The viewBox + preserveAspectRatio
   // "none" lets the chart stretch into whatever space the parent allocates.
   fill?: boolean;
+  // When true, render as a "real" chart with y-axis labels on the left,
+  // x-axis year labels on the bottom, horizontal gridlines, and a baseline
+  // pinned to 0 (unless yDomain is explicitly provided). Used by the
+  // expanded Workforce-flows-(OD) card on the dashboard.
+  axes?: boolean;
 }) {
   const gradId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
 
-  const yearsAndScales = useMemo(() => {
+  const domainInfo = useMemo(() => {
     const flat = series.flatMap((s) => s.points);
     if (flat.length < 2) return null;
     const ys = flat.map((p) => p.value);
     const xs = flat.map((p) => p.year);
     const xMin = Math.min(...xs);
     const xMax = Math.max(...xs);
-    const yMin = yDomain ? yDomain[0] : Math.min(...ys);
+    // Axes mode pins the baseline to 0 by default so the chart reads as a
+    // genuine zero-anchored chart rather than the auto-zoomed sparkline.
+    const yMin = yDomain ? yDomain[0] : axes ? 0 : Math.min(...ys);
     const yMax = yDomain ? yDomain[1] : Math.max(...ys);
+    return { xMin, xMax, yMin, yMax };
+  }, [series, yDomain, axes]);
+
+  const yearsAndScales = useMemo(() => {
+    if (!domainInfo) return null;
+    const { xMin, xMax, yMin, yMax } = domainInfo;
     const xSpan = xMax - xMin || 1;
     const ySpan = yMax - yMin || 1;
     const sx = (x: number) => ((x - xMin) / xSpan) * (SPARK_VB_W - 4) + 2;
     const sy = (y: number) =>
       LINE_BAND_H - 4 - ((y - yMin) / ySpan) * (LINE_BAND_H - 8);
     return { sx, sy };
-  }, [series, yDomain]);
+  }, [domainInfo]);
 
   const geometry = useMemo(() => {
     if (!yearsAndScales) return null;
@@ -1194,10 +1209,16 @@ function MultiSparkline({
           return { name: s.name, year: nearest.year, value: nearest.value, color: s.dotColor };
         });
 
+  // Y-axis tick values for axes mode. Three evenly spaced ticks (max / mid /
+  // 0) so the chart reads at a glance without crowding labels.
+  const yTicks = axes && domainInfo
+    ? [domainInfo.yMax, (domainInfo.yMin + domainInfo.yMax) / 2, domainInfo.yMin]
+    : null;
+
   // Same trick as the single-series Sparkline — render dots as overlay HTML
   // so they stay perfect circles under the SVG's non-uniform horizontal
   // stretch.
-  return (
+  const chartArea = (
     <div
       ref={wrapperRef}
       className="relative w-full"
@@ -1228,6 +1249,27 @@ function MultiSparkline({
             </linearGradient>
           ))}
         </defs>
+        {/* Horizontal gridlines + zero baseline in axes mode. Dashed at the
+            top + middle, solid at the bottom so the zero line reads as the
+            chart's anchor. */}
+        {axes && yTicks && yTicks.map((tick, i) => {
+          const ty = sy(tick);
+          const isBaseline = i === yTicks.length - 1;
+          return (
+            <line
+              key={`grid-${i}`}
+              x1={0}
+              x2={SPARK_VB_W}
+              y1={ty}
+              y2={ty}
+              stroke="var(--rule)"
+              strokeWidth={isBaseline ? 1 : 0.5}
+              strokeDasharray={isBaseline ? undefined : '2 2'}
+              vectorEffect="non-scaling-stroke"
+              opacity={isBaseline ? 0.6 : 0.35}
+            />
+          );
+        })}
         {geometry.map((g, i) => (
           <path
             key={`a-${i}`}
@@ -1303,6 +1345,37 @@ function MultiSparkline({
       )}
     </div>
   );
+
+  if (!axes || !yTicks || !domainInfo) return chartArea;
+
+  // Axes mode: y-axis labels stacked on the left, x-axis year labels on the
+  // bottom. The gutter widths are kept small (28px / 14px) so the chart area
+  // dominates the card real estate.
+  return (
+    <div
+      className="flex flex-col w-full"
+      style={{ height: fill ? '100%' : SPARK_VB_H }}
+    >
+      <div className="flex flex-1 min-h-0">
+        <div
+          className="flex flex-col justify-between text-[9px] tnum pr-1.5 shrink-0"
+          style={{ color: 'var(--text-dim)', width: 36, textAlign: 'right' }}
+        >
+          {yTicks.map((tick, i) => (
+            <span key={`ylabel-${i}`}>{fmtInt(tick)}</span>
+          ))}
+        </div>
+        <div className="flex-1 min-w-0">{chartArea}</div>
+      </div>
+      <div
+        className="flex justify-between text-[9px] tnum mt-1"
+        style={{ color: 'var(--text-dim)', paddingLeft: 36 }}
+      >
+        <span>{domainInfo.xMin}</span>
+        <span>{domainInfo.xMax}</span>
+      </div>
+    </div>
+  );
 }
 
 // Third-series color for "Resident workers" — neutral slate so it reads
@@ -1320,6 +1393,7 @@ export function CardsForOd({
   trendDomain,
   width = 260,
   minChartHeight,
+  expanded = false,
 }: {
   scope: string;
   inflowLatest: { totalJobs: number } | null;
@@ -1339,6 +1413,10 @@ export function CardsForOd({
   // Optional minimum height for the chart container so the sparkline gets
   // enough vertical room when the card sits in a tall grid cell.
   minChartHeight?: number;
+  // When true, the card grows to fill its flex-column parent vertically and
+  // the sparkline is rendered as a genuine zero-anchored chart with axis
+  // labels. Used by the DashboardView anchor view's left column.
+  expanded?: boolean;
 }) {
   if (!inflowLatest && !outflowLatest && !withinLatest) return null;
   const sparkSeries: {
@@ -1376,6 +1454,7 @@ export function CardsForOd({
       title={`${scope} · Workforce flows (OD)`}
       subtitle="Commuters · live-and-work · 2002–2023"
       width={width}
+      grow={expanded}
     >
       <div className="flex gap-3">
         {inflowLatest && (
@@ -1405,7 +1484,12 @@ export function CardsForOd({
           className="flex-1 min-h-0"
           style={minChartHeight ? { minHeight: minChartHeight } : undefined}
         >
-          <MultiSparkline series={sparkSeries} yDomain={trendDomain} fill />
+          <MultiSparkline
+            series={sparkSeries}
+            yDomain={trendDomain}
+            fill
+            axes={expanded}
+          />
         </div>
       )}
     </Card>
@@ -2358,12 +2442,26 @@ function PassThroughCard({
       // East/West buckets — keeping them in would smuggle perpendicular
       // pass-through pairs into a directional view. Gateway-aware so a
       // GW_E / GW_W endpoint resolves to the correct bearing without a
-      // lat/lng row in zips.json.
-      if (
-        directionFilter !== 'all' &&
-        gatewayAwareDirection(p.originZip, p.destZip, zips) !== directionFilter
-      ) {
-        continue;
+      // lat/lng row in zips.json. Valley-terminology values map onto
+      // bearings: up-valley → east, down-valley → west (the additive
+      // eastern-I-70-residence path used for commuter flows doesn't apply
+      // to pass-through pairs, which by construction have no anchor
+      // workplace).
+      if (directionFilter !== 'all') {
+        const bearingTarget =
+          directionFilter === 'up-valley' ? 'east' :
+          directionFilter === 'down-valley' ? 'west' :
+          directionFilter;
+        if (gatewayAwareDirection(p.originZip, p.destZip, zips) !== bearingTarget) {
+          continue;
+        }
+        // up-valley additionally requires the destination (workplace) to be
+        // one of the 11 anchor ZIPs. Without this, east-bearing pass-through
+        // pairs that terminate beyond the envelope (GW_E / Eagle / Vail) leak
+        // "Eastern I-70 · beyond envelope" into the workplace column.
+        if (directionFilter === 'up-valley' && !isAnchorZip(p.destZip)) {
+          continue;
+        }
       }
       // Origin column reflects the (current dest filter) constraint.
       if (!destZipsSet || destZipsSet.has(p.destZip)) {

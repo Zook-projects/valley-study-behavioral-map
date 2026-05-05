@@ -34,8 +34,8 @@ import { fmtInt, fmtPct } from '../lib/format';
 const DIRECTION_FILTER_LABEL: Record<Exclude<DirectionFilter, 'all'>, string> = {
   east: 'east-direction',
   west: 'west-direction',
-  'up-valley': 'up-valley (anchor workplaces)',
-  'down-valley': 'down-valley',
+  'up-valley': 'up-valley (anchor workplaces + eastern-I-70 residences)',
+  'down-valley': 'down-valley (excludes eastern-I-70 → inner-RF commutes)',
 };
 
 interface Props {
@@ -113,13 +113,20 @@ function buildItems(
   const mappedShare =
     mappedWorkforceTotal > 0 ? summary.totalWorkers / mappedWorkforceTotal : 0;
 
+  // The 'workforce' hero item is built in StatsAggregated so it can switch
+  // label/value with the active rankings axis (Total / Inbound / Outbound /
+  // Local). buildItems still emits a placeholder item here so the hero ID
+  // anchor stays in the items list — StatsAggregated overrides it before
+  // rendering. Keeps the legacy mappedShare computation around so the
+  // override has a sensible fallback when axis === 'total'.
+  void mappedShare;
   const items: StatItem[] = [
     {
       id: 'workforce',
       label: 'Total Workforce',
       value: fmtInt(summary.totalWorkers),
       sub: 'working within the 11 workplace ZIP codes',
-      secondary: `${fmtPct(mappedShare)} of mapped workforce`,
+      secondary: undefined,
     },
     {
       id: 'cross-zip',
@@ -377,6 +384,37 @@ function valueFor(r: AnchorRanking, axis: RankAxis): number {
   return r.withinZip;
 }
 
+// Hero-row label / sub / secondary descriptor per axis. The hero swaps
+// these when the user picks a tab in the Workplace ZIP Code Rankings so
+// the headline metric tracks the rankings the user is actively reading.
+const HERO_BY_AXIS: Record<RankAxis, {
+  label: string;
+  sub: string;
+  // Used in the secondary line as: "X% of {secondaryDescriptor}".
+  secondaryDescriptor: string;
+}> = {
+  total: {
+    label: 'Total Workforce',
+    sub: 'working within the 11 workplace ZIP codes',
+    secondaryDescriptor: 'mapped workforce',
+  },
+  inbound: {
+    label: 'Inbound Commuters',
+    sub: 'workers commuting INTO the 11 workplace ZIP codes',
+    secondaryDescriptor: 'regional inbound commuters',
+  },
+  outbound: {
+    label: 'Outbound Commuters',
+    sub: 'residents commuting OUT of the 11 ZIP codes for work',
+    secondaryDescriptor: 'regional outbound commuters',
+  },
+  local: {
+    label: 'Local Workforce',
+    sub: 'workers living and working in the same ZIP code',
+    secondaryDescriptor: 'regional local workforce',
+  },
+};
+
 function fmtAxisValue(v: number, axis: RankAxis): string {
   void axis;
   return fmtInt(v);
@@ -414,6 +452,8 @@ function AnchorRankings({
   selectedFilter,
   onToggleFilter,
   directionFilter,
+  axis,
+  onAxisChange,
 }: {
   rankings: AnchorRanking[];
   // Set of currently-selected workplace ZIPs. When non-empty the rows in
@@ -423,8 +463,12 @@ function AnchorRankings({
   selectedFilter: Set<string>;
   onToggleFilter: (zip: string) => void;
   directionFilter: DirectionFilter;
+  // Lifted axis state — owned by StatsAggregated so the hero row stays in
+  // sync with whichever axis tab the user has selected here.
+  axis: RankAxis;
+  onAxisChange: (next: RankAxis) => void;
 }) {
-  const [axis, setAxis] = useState<RankAxis>('total');
+  const setAxis = onAxisChange;
   const [sortBy, setSortBy] = useState<RankSortBy>('count');
 
   const regionalTotal = useMemo(
@@ -659,6 +703,12 @@ export function StatsAggregated(props: Props) {
     () => new Set(),
   );
   const filterActive = rankingFilter.size > 0;
+  // Lifted from AnchorRankings so the hero row above the rankings can swap
+  // its label, value, and share line whenever the user picks a different
+  // axis tab. Cross-filtering (rankingFilter) composes with the axis: the
+  // hero shows the per-axis sum for the selected anchors, or for the full
+  // 11 anchors when no rankings rows are toggled.
+  const [rankingAxis, setRankingAxis] = useState<RankAxis>('total');
 
   const toggleRankingFilter = (zip: string) => {
     setRankingFilter((prev) => {
@@ -693,7 +743,7 @@ export function StatsAggregated(props: Props) {
     [props.flowsInbound],
   );
 
-  const items = buildItems(
+  const baseItems = buildItems(
     {
       ...props,
       flowsInbound: narrowedFlowsInbound,
@@ -718,6 +768,49 @@ export function StatsAggregated(props: Props) {
       ),
     [props.directionFilteredInbound, props.directionFilteredOutbound, props.zips],
   );
+
+  // Un-direction-filtered ranking baseline — used as the denominator for
+  // the hero's "% of regional X" share line. With no direction or ranking
+  // filter active the share resolves to 100%; activating either filter
+  // shrinks it to the visible slice of the regional total for the axis.
+  const unfilteredRankings = useMemo(
+    () =>
+      computeAnchorRankings(
+        props.flowsInbound,
+        props.flowsOutbound ?? [],
+        props.zips,
+      ),
+    [props.flowsInbound, props.flowsOutbound, props.zips],
+  );
+
+  // Per-axis hero numerator: sum the active axis across the rankings the
+  // user has highlighted (all anchors when no rankings rows are toggled).
+  const heroAxisRankings = useMemo(
+    () => (filterActive ? rankings.filter((r) => rankingFilter.has(r.zip)) : rankings),
+    [filterActive, rankings, rankingFilter],
+  );
+  const heroAxisValue = useMemo(
+    () => heroAxisRankings.reduce((sum, r) => sum + valueFor(r, rankingAxis), 0),
+    [heroAxisRankings, rankingAxis],
+  );
+  const heroAxisBaseline = useMemo(
+    () => unfilteredRankings.reduce((sum, r) => sum + valueFor(r, rankingAxis), 0),
+    [unfilteredRankings, rankingAxis],
+  );
+  const heroAxisShare = heroAxisBaseline > 0 ? heroAxisValue / heroAxisBaseline : 0;
+  const heroDescriptor = HERO_BY_AXIS[rankingAxis];
+  const heroItem: StatItem = {
+    id: 'workforce',
+    label: heroDescriptor.label,
+    value: fmtInt(heroAxisValue),
+    sub: heroDescriptor.sub,
+    secondary: `${fmtPct(heroAxisShare)} of ${heroDescriptor.secondaryDescriptor}`,
+  };
+  // Replace the buildItems placeholder workforce row with the axis-aware
+  // hero so LayoutHero (which keys off id === 'workforce') picks up the
+  // live rankings axis selection. Done after heroItem is constructed so
+  // the temporal-dead-zone reference order is correct.
+  const items = baseItems.map((item) => (item.id === 'workforce' ? heroItem : item));
 
   // Friendly label for the active filter — surfaced above the hero so the
   // user always knows the headline tiles are scoped. Single-ZIP filter
@@ -772,6 +865,8 @@ export function StatsAggregated(props: Props) {
               selectedFilter={rankingFilter}
               onToggleFilter={toggleRankingFilter}
               directionFilter={props.directionFilter}
+              axis={rankingAxis}
+              onAxisChange={setRankingAxis}
             />
           </div>
         </div>
@@ -783,6 +878,8 @@ export function StatsAggregated(props: Props) {
             selectedFilter={rankingFilter}
             onToggleFilter={toggleRankingFilter}
             directionFilter={props.directionFilter}
+            axis={rankingAxis}
+            onAxisChange={setRankingAxis}
           />
         </>
       )}

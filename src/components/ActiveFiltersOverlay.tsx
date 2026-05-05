@@ -97,8 +97,8 @@ export function ActiveFiltersOverlay({
   const directionLabel =
     directionFilter === 'east' ? 'Eastbound only' :
     directionFilter === 'west' ? 'Westbound only' :
-    directionFilter === 'up-valley' ? 'Up Valley only (anchor workplaces)' :
-    directionFilter === 'down-valley' ? 'Down Valley only' :
+    directionFilter === 'up-valley' ? 'Up Valley only (anchor workplaces + eastern-I-70 residences)' :
+    directionFilter === 'down-valley' ? 'Down Valley only (excludes eastern-I-70 → inner-RF commutes)' :
     'Filtered';
 
   const segmentBucketsLabel =
@@ -109,7 +109,7 @@ export function ActiveFiltersOverlay({
       : 'all buckets';
 
   return (
-    <div className="absolute top-20 left-4 z-30 flex flex-col items-start gap-1.5 pointer-events-none">
+    <div className="absolute top-3 left-3 z-30 flex flex-col items-start gap-1.5 pointer-events-none">
       {directionActive && (
         <Chip
           label={`Filtered: ${directionLabel} · ${fmtInt(directionNumerator)} of ${fmtInt(directionDenominator)} flows shown`}

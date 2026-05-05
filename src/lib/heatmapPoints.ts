@@ -237,15 +237,15 @@ export function buildHeatmapGeoJson(
   // Map valley-terminology values to their underlying east/west bearing for
   // the partner-bearing comparison. up-valley = east + anchor-workplace-only
   // (constraint applied below alongside the bearing check); down-valley = west.
+  // The flow-arc layer also includes an eastern-I-70-residence path for
+  // up-valley (see filterByDirection), but the heatmap doesn't render
+  // non-anchor residences so the additive path collapses to the bearing
+  // path here.
   const bearingTarget: 'east' | 'west' | null =
     directionFilter === 'up-valley' ? 'east' :
     directionFilter === 'down-valley' ? 'west' :
     directionFilter === 'east' || directionFilter === 'west' ? directionFilter :
     null;
-  // up-valley restricts to flows whose workplace ZIP is one of the 11 anchors.
-  // In homeBlocks (inbound side) the workplace IS the block's anchorZip, which
-  // is always an anchor by construction — so the constraint only bites on the
-  // workplace side, where the partner zip is the workplace.
   const upValleyAnchorWorkplace = directionFilter === 'up-valley';
 
   // Block-level partner filter. In cross-anchor mode it pins partners to
