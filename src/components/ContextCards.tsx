@@ -48,6 +48,11 @@ interface Props {
   onCommerceVariantChange?: (v: CommerceVariant) => void;
   commerceCadence?: CommerceCadence;
   onCommerceCadenceChange?: (v: CommerceCadence) => void;
+  // When true, the Commerce headline card omits its inline sparkline. Used
+  // by DashboardView's restructured Commerce section, where the trend now
+  // renders as a standalone full-size chart on the left side and the
+  // headline card on the right is reduced to KPI rows + toggles.
+  hideCommerceSparkline?: boolean;
 }
 
 // Aggregate-view county order (fixed editorial sequence). Mesa County is
@@ -125,19 +130,19 @@ export const COMMERCE_VARIANT_TREND_KEY: Record<CommerceVariant, 'gross' | 'reta
   taxable: 'taxable',
 };
 
-const COMMERCE_VARIANT_LABEL: Record<CommerceVariant, string> = {
+export const COMMERCE_VARIANT_LABEL: Record<CommerceVariant, string> = {
   gross: 'Gross Sales',
   retail: 'Retail Sales',
   taxable: 'Net Taxable Sales',
 };
 
-const COMMERCE_VARIANT_CHIP_LABEL: Record<CommerceVariant, string> = {
+export const COMMERCE_VARIANT_CHIP_LABEL: Record<CommerceVariant, string> = {
   gross: 'Gross',
   retail: 'Retail',
   taxable: 'Taxable',
 };
 
-const COMMERCE_CADENCE_LABEL: Record<CommerceCadence, string> = {
+export const COMMERCE_CADENCE_LABEL: Record<CommerceCadence, string> = {
   annual: 'Annual',
   monthly: 'Monthly',
 };
@@ -360,7 +365,7 @@ function buildRows(
   return rows;
 }
 
-function VariantToggle<V extends string>({
+export function VariantToggle<V extends string>({
   value,
   onChange,
   options,
@@ -692,6 +697,7 @@ export function ContextCards({
   onCommerceVariantChange,
   commerceCadence: commerceCadenceProp,
   onCommerceCadenceChange,
+  hideCommerceSparkline = false,
 }: Props) {
   // Per-card variant state. When the parent passes a controlled value (used
   // by DashboardView so the Commerce card and the comparison charts share a
@@ -790,7 +796,7 @@ export function ContextCards({
             sparkTrend = garfield?.trend as CommerceTrend | undefined;
             sparkLabel = garfield?.name ?? sparkLabel;
           }
-          sparkline = sparkTrend ? (
+          sparkline = sparkTrend && !hideCommerceSparkline ? (
             <CommerceSparkline
               trend={sparkTrend}
               variant={commerceVariant}

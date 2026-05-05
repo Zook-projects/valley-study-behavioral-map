@@ -44,6 +44,8 @@ import {
 } from '../components/BottomCardStrip';
 import { FlowDataTables } from '../components/dashboard/FlowDataTables';
 import { HousingMarketSection } from '../components/dashboard/HousingMarketSection';
+import { CommerceTimeSeriesChart } from '../components/dashboard/CommerceTimeSeriesChart';
+import { CommerceDataSetTile } from '../components/dashboard/CommerceDataSetTile';
 
 interface Props {
   data: FlowData;
@@ -585,10 +587,11 @@ export function DashboardView({ data }: Props) {
             </div>
           </section>
 
-          {/* Section — Commerce: headline card + three peer-comparison bar
-              charts (counties, anchor places, place share of county). All
-              four surfaces share the variant + cadence toggle lifted into
-              DashboardView state. */}
+          {/* Section — Commerce: 2-column grid. Left = real timeseries chart
+              (zero y-axis baseline, hover tooltip). Right = headline KPI
+              card on top, then Counties bar chart, then (Anchor places +
+              Place share of county) side-by-side. All four surfaces share
+              the variant + cadence toggle lifted into DashboardView state. */}
           <section
             id="commerce"
             ref={setSectionRef('commerce')}
@@ -604,26 +607,51 @@ export function DashboardView({ data }: Props) {
             >
               Commerce
             </h2>
+            {/* The section is split into two row-grids that share a column
+                template (1fr / 1.2fr — chart narrower so the comparison
+                cards on the right have more horizontal room). Row 1 pairs
+                the data-set descriptor with the headline KPI strip; both
+                cells stretch to a common height (CSS grid default), so the
+                two cards visually match. Row 2 pairs the timeseries chart
+                with the comparison stack; the chart card flex-grows its
+                inner SVG so it fills the comparison stack's height. */}
             <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-3">
-                <ContextCards
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] grid-cols-1">
+                <CommerceDataSetTile />
+                <div className="flex flex-wrap gap-3 min-w-0">
+                  <ContextCards
+                    bundle={contextBundle}
+                    selectedZip={selectedZip}
+                    racFile={racFile}
+                    wacFile={wacFile}
+                    odSummary={odSummary}
+                    topics={['commerce']}
+                    commerceVariant={commerceVariant}
+                    onCommerceVariantChange={setCommerceVariant}
+                    commerceCadence={commerceCadence}
+                    onCommerceCadenceChange={setCommerceCadence}
+                    hideCommerceSparkline
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] grid-cols-1 items-stretch">
+                <CommerceTimeSeriesChart
                   bundle={contextBundle}
                   selectedZip={selectedZip}
-                  racFile={racFile}
-                  wacFile={wacFile}
-                  odSummary={odSummary}
-                  topics={['commerce']}
-                  commerceVariant={commerceVariant}
-                  onCommerceVariantChange={setCommerceVariant}
-                  commerceCadence={commerceCadence}
-                  onCommerceCadenceChange={setCommerceCadence}
+                  variant={commerceVariant}
+                  cadence={commerceCadence}
+                  onVariantChange={setCommerceVariant}
+                  onCadenceChange={setCommerceCadence}
                 />
+                <div className="min-w-0">
+                  <CommerceComparisons
+                    bundle={contextBundle}
+                    selectedZip={selectedZip}
+                    variant={commerceVariant}
+                    onSelectPlace={handleSelectZip}
+                  />
+                </div>
               </div>
-              <CommerceComparisons
-                bundle={contextBundle}
-                selectedZip={selectedZip}
-                variant={commerceVariant}
-              />
             </div>
           </section>
 

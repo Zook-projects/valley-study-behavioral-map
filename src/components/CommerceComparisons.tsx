@@ -27,7 +27,7 @@ import type {
   ContextCountyEntry,
   ContextPlaceEntry,
 } from '../types/context';
-import { fmtInt } from '../lib/format';
+import { fmtCompactUSD } from '../lib/format';
 import {
   COMMERCE_VARIANT_TREND_KEY,
   type CommerceVariant,
@@ -37,6 +37,11 @@ interface Props {
   bundle: ContextBundle | null;
   selectedZip: string | null;
   variant: CommerceVariant;
+  // When provided, the Anchor Places + Place Share rows become clickable
+  // and call this with the row's ZIP. Toggling the same row off (i.e.,
+  // clicking the currently selected anchor) is the parent's job — pass
+  // null when the same ZIP is being deselected.
+  onSelectPlace?: (zip: string | null) => void;
 }
 
 // Soft tint per containing county so place bars carry geographic context
@@ -48,15 +53,6 @@ const COUNTY_TINT: Record<string, string> = {
   '08037': 'var(--corridor-3)', // Eagle
   '08077': 'var(--corridor-4)', // Mesa
 };
-
-// Compact USD label for axis-end annotations: $1.2B, $850M, $42M.
-function fmtCompactUSD(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `$${(n / 1e6).toFixed(0)}M`;
-  if (abs >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
-  return `$${fmtInt(n)}`;
-}
 
 function pickAnnualLatest(
   trend: CommerceTrend | undefined,
@@ -83,6 +79,7 @@ function HorizontalBars({
   emptyLabel,
   ariaLabel,
   axisMax,
+  onRowClick,
 }: {
   rows: BarRow[];
   formatValue: (v: number) => string;
@@ -91,6 +88,10 @@ function HorizontalBars({
   // Optional hard upper bound for the axis. When omitted, derived from the
   // max value in `rows`.
   axisMax?: number;
+  // When provided, each row becomes a button that calls this with its
+  // `key`. The current implementation in CommerceComparisons routes that
+  // through to a ZIP-keyed selection callback in DashboardView.
+  onRowClick?: (key: string) => void;
 }) {
   const max = useMemo(() => {
     if (axisMax !== undefined) return axisMax;
@@ -117,16 +118,11 @@ function HorizontalBars({
       {rows.map((r) => {
         const pct = (r.value / max) * 100;
         const fill = r.highlight ? 'var(--accent)' : (r.fill ?? 'var(--corridor-1)');
-        return (
-          <li
-            key={r.key}
-            className="grid items-center gap-2"
-            style={{
-              gridTemplateColumns: '120px 1fr 70px',
-            }}
-          >
+        const clickable = onRowClick != null;
+        const inner = (
+          <>
             <span
-              className="text-[10px] truncate"
+              className="text-[10px] truncate text-left"
               style={{
                 color: r.highlight ? 'var(--accent)' : 'var(--text-h)',
                 fontWeight: r.highlight ? 600 : 400,
@@ -158,6 +154,35 @@ function HorizontalBars({
             >
               {formatValue(r.value)}
             </span>
+          </>
+        );
+        return (
+          <li
+            key={r.key}
+            className="grid items-center gap-2"
+            style={{
+              gridTemplateColumns: '120px 1fr 70px',
+            }}
+          >
+            {clickable ? (
+              <button
+                type="button"
+                onClick={() => onRowClick?.(r.key)}
+                aria-pressed={!!r.highlight}
+                className="grid items-center gap-2 text-left rounded-sm transition-colors hover:bg-white/5 focus:outline-none focus-visible:ring-1 px-1 -mx-1 py-0.5"
+                style={{
+                  gridTemplateColumns: '120px 1fr 70px',
+                  // The button spans the full row's grid columns by
+                  // re-declaring its own grid; the parent <li> still
+                  // governs vertical rhythm.
+                  gridColumn: '1 / -1',
+                }}
+              >
+                {inner}
+              </button>
+            ) : (
+              inner
+            )}
           </li>
         );
       })}
@@ -176,8 +201,7 @@ function ChartCard({
 }) {
   return (
     <div
-      className="glass rounded-md p-3 flex flex-col gap-2"
-      style={{ flex: '1 1 280px', minWidth: 280 }}
+      className="glass rounded-md p-3 flex flex-col gap-2 min-w-0"
     >
       <div>
         <div
@@ -204,7 +228,14 @@ export function CommerceComparisons({
   bundle,
   selectedZip,
   variant,
+  onSelectPlace,
 }: Props) {
+  // Toggle helper: clicking the currently selected anchor clears the
+  // filter; clicking any other anchor sets it. Mirrors how the rest of
+  // the dashboard treats "click again to deselect."
+  const handleRowClick = onSelectPlace
+    ? (zip: string) => onSelectPlace(zip === selectedZip ? null : zip)
+    : undefined;
   const measure = COMMERCE_VARIANT_TREND_KEY[variant];
 
   const { countyRows, placeRows, shareRows, latestYear } = useMemo(() => {
@@ -283,7 +314,7 @@ export function CommerceComparisons({
   const yearTag = latestYear ? ` · ${latestYear}` : '';
 
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-col gap-3">
       <ChartCard
         title={`Counties · ${variantLabel}${yearTag}`}
         subtitle="Eagle / Garfield / Mesa / Pitkin"
@@ -295,29 +326,41 @@ export function CommerceComparisons({
           ariaLabel="County comparison"
         />
       </ChartCard>
-      <ChartCard
-        title={`Anchor places · ${variantLabel}${yearTag}`}
-        subtitle="Bars tinted by containing county"
-      >
-        <HorizontalBars
-          rows={placeRows}
-          formatValue={fmtCompactUSD}
-          emptyLabel="no place data"
-          ariaLabel="Anchor place comparison"
-        />
-      </ChartCard>
-      <ChartCard
-        title={`Place share of county · ${variantLabel}${yearTag}`}
-        subtitle="Each place as % of its containing county"
-      >
-        <HorizontalBars
-          rows={shareRows}
-          formatValue={(v) => `${v.toFixed(1)}%`}
-          emptyLabel="no share data"
-          ariaLabel="Place share of containing county"
-          axisMax={100}
-        />
-      </ChartCard>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <ChartCard
+          title={`Anchor places · ${variantLabel}${yearTag}`}
+          subtitle={
+            handleRowClick
+              ? 'Click a place to scope the dashboard to that anchor'
+              : 'Bars tinted by containing county'
+          }
+        >
+          <HorizontalBars
+            rows={placeRows}
+            formatValue={fmtCompactUSD}
+            emptyLabel="no place data"
+            ariaLabel="Anchor place comparison"
+            onRowClick={handleRowClick}
+          />
+        </ChartCard>
+        <ChartCard
+          title={`Place share of county · ${variantLabel}${yearTag}`}
+          subtitle={
+            handleRowClick
+              ? 'Click to scope the dashboard'
+              : 'Each place as % of its containing county'
+          }
+        >
+          <HorizontalBars
+            rows={shareRows}
+            formatValue={(v) => `${v.toFixed(1)}%`}
+            emptyLabel="no share data"
+            ariaLabel="Place share of containing county"
+            axisMax={100}
+            onRowClick={handleRowClick}
+          />
+        </ChartCard>
+      </div>
     </div>
   );
 }

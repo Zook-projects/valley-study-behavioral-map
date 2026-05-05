@@ -162,7 +162,7 @@ function typeValue(latest: ContextLatest | null, axisKey: string): number | null
 // ---------------------------------------------------------------------------
 // Shared chart frame (mirrors FlowCharts.ChartFrame)
 // ---------------------------------------------------------------------------
-function ChartFrame({
+export function ChartFrame({
   title,
   subtitle,
   children,
@@ -195,6 +195,69 @@ function ChartFrame({
         )}
       </div>
       <div className="flex-1 flex flex-col">{children}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data-set descriptor tile — anchors the left column of the Housing section
+// with a plain-language explanation of what Zillow ZHVI is and how to read
+// the rest of the panel. Mirrors the visual language of HeadlineStats so
+// the two cards balance across the row.
+// ---------------------------------------------------------------------------
+function HousingDataSetTile() {
+  return (
+    <div
+      className="rounded-md p-3 flex flex-col gap-2"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--panel-border)',
+      }}
+    >
+      <div>
+        <div
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: 'var(--text-h)' }}
+        >
+          About this data
+        </div>
+        <div className="text-[10px]" style={{ color: 'var(--text-dim)' }}>
+          Zillow Home Value Index (ZHVI)
+        </div>
+      </div>
+      <p className="text-[11px] leading-snug" style={{ color: 'var(--text)' }}>
+        ZHVI is a smoothed, seasonally adjusted measure of typical home value
+        across a region and housing type. It reflects the 35th–65th percentile
+        of homes — neither the cheapest nor the most expensive — so it tracks
+        the value of a middle-of-the-market home rather than a sale-price
+        average skewed by listings at the extremes.
+      </p>
+      <ul className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1">
+        <li className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-dim)' }}>
+            Source
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>Zillow Research</span>
+        </li>
+        <li className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-dim)' }}>
+            Metric
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>ZHVI ($USD)</span>
+        </li>
+        <li className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-dim)' }}>
+            Cadence
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>Monthly · annualized</span>
+        </li>
+        <li className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-wider" style={{ color: 'var(--text-dim)' }}>
+            Coverage
+          </span>
+          <span className="text-[11px]" style={{ color: 'var(--text-h)' }}>2000 → latest</span>
+        </li>
+      </ul>
     </div>
   );
 }
@@ -315,8 +378,71 @@ function TimeSeriesChart({
     return out;
   }, [xMin, xMax]);
 
+  // Hover state — year currently focused by the user's cursor. The tooltip
+  // surfaces the value for every visible series at that year.
+  const [hoverYear, setHoverYear] = useState<number | null>(null);
+
+  // Map a viewBox-space x coord (within plot bounds) → nearest integer year
+  // that has data on at least one series. Snapping keeps the tooltip aligned
+  // with the actual data points instead of interpolating between them.
+  const allYears = useMemo(() => {
+    const set = new Set<number>();
+    for (const s of series) for (const p of s.trend) set.add(p.year);
+    return Array.from(set).sort((a, b) => a - b);
+  }, [series]);
+
+  const xToYear = (xViewBox: number): number | null => {
+    if (allYears.length === 0) return null;
+    const xData = sx.invert(xViewBox);
+    let best = allYears[0];
+    let bestDist = Math.abs(allYears[0] - xData);
+    for (let i = 1; i < allYears.length; i++) {
+      const d = Math.abs(allYears[i] - xData);
+      if (d < bestDist) { bestDist = d; best = allYears[i]; }
+    }
+    return best;
+  };
+
+  const handleMove = (e: React.MouseEvent<SVGRectElement>) => {
+    const svg = e.currentTarget.ownerSVGElement;
+    if (!svg) return;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+    const local = pt.matrixTransform(ctm.inverse());
+    const xInPlot = local.x - M.left;
+    if (xInPlot < 0 || xInPlot > innerW) return;
+    const yr = xToYear(xInPlot);
+    if (yr != null) setHoverYear(yr);
+  };
+
+  // Per-series value at the focused year (used for the dots + tooltip rows).
+  const focused = useMemo(() => {
+    if (hoverYear == null) return null;
+    const rows = series
+      .map((s) => {
+        const pt = s.trend.find((p) => p.year === hoverYear);
+        if (!pt) return null;
+        return { geo: s.geo, color: s.color, value: pt.value };
+      })
+      .filter((x): x is { geo: Geography; color: string; value: number } => x != null)
+      .sort((a, b) => b.value - a.value);
+    if (rows.length === 0) return null;
+    return { year: hoverYear, rows };
+  }, [hoverYear, series]);
+
+  // Tooltip x in % of viewBox so the floating HTML label can absolutely
+  // position itself relative to the SVG container.
+  const tooltipPct = useMemo(() => {
+    if (!focused) return null;
+    const cx = M.left + sx(focused.year);
+    return { left: (cx / W) * 100 };
+  }, [focused, sx, M.left]);
+
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 flex-1">
       {/* Legend */}
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {series.map((s) => {
@@ -345,64 +471,167 @@ function TimeSeriesChart({
           );
         })}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full" style={{ height: 280 }}>
-        <g transform={`translate(${M.left}, ${M.top})`}>
-          {/* Y gridlines + tick labels */}
-          {yTicks.map((t) => (
-            <g key={t}>
-              <line
-                x1={0}
-                x2={innerW}
-                y1={sy(t)}
-                y2={sy(t)}
-                stroke="var(--panel-border)"
-                strokeDasharray="2 3"
-              />
+      <div className="relative w-full flex-1 flex flex-col" style={{ minHeight: 240 }}>
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="w-full h-full"
+          style={{ display: 'block', flex: 1, minHeight: 200 }}
+          onMouseLeave={() => setHoverYear(null)}
+        >
+          <g transform={`translate(${M.left}, ${M.top})`}>
+            {/* Y gridlines + tick labels */}
+            {yTicks.map((t) => (
+              <g key={t}>
+                <line
+                  x1={0}
+                  x2={innerW}
+                  y1={sy(t)}
+                  y2={sy(t)}
+                  stroke="var(--panel-border)"
+                  strokeDasharray="2 3"
+                />
+                <text
+                  x={-6}
+                  y={sy(t)}
+                  fontSize="9"
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  fill="var(--text-dim)"
+                >
+                  {fmtDollarsCompact(t)}
+                </text>
+              </g>
+            ))}
+            {/* X tick labels */}
+            {xTicks.map((t) => (
               <text
-                x={-6}
-                y={sy(t)}
+                key={t}
+                x={sx(t)}
+                y={innerH + 14}
                 fontSize="9"
-                textAnchor="end"
-                dominantBaseline="middle"
+                textAnchor="middle"
                 fill="var(--text-dim)"
               >
-                {fmtDollarsCompact(t)}
+                {t}
               </text>
-            </g>
-          ))}
-          {/* X tick labels */}
-          {xTicks.map((t) => (
-            <text
-              key={t}
-              x={sx(t)}
-              y={innerH + 14}
-              fontSize="9"
-              textAnchor="middle"
-              fill="var(--text-dim)"
+            ))}
+            {/* Series lines */}
+            {series.map((s) => {
+              const isActive = activeId === s.geo.id;
+              const isDimmed = activeId != null && !isActive;
+              const path = lineGen(s.trend) ?? '';
+              return (
+                <path
+                  key={s.geo.id}
+                  d={path}
+                  fill="none"
+                  stroke={isActive ? 'var(--accent)' : s.color}
+                  strokeWidth={isActive ? 2.4 : 1.4}
+                  opacity={isDimmed ? 0.32 : 0.95}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => onActivate(s.geo.id)}
+                />
+              );
+            })}
+            {/* Hover guide + per-series dots */}
+            {focused && (
+              <g>
+                <line
+                  x1={sx(focused.year)}
+                  x2={sx(focused.year)}
+                  y1={0}
+                  y2={innerH}
+                  stroke="var(--accent)"
+                  strokeOpacity={0.5}
+                  strokeDasharray="3 3"
+                  vectorEffect="non-scaling-stroke"
+                />
+                {focused.rows.map((r) => (
+                  <circle
+                    key={r.geo.id}
+                    cx={sx(focused.year)}
+                    cy={sy(r.value)}
+                    r={3}
+                    fill={activeId === r.geo.id ? 'var(--accent)' : r.color}
+                    stroke="rgba(11,13,16,0.95)"
+                    strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
+            )}
+            {/* Transparent capture rect for hover events */}
+            <rect
+              x={0}
+              y={0}
+              width={innerW}
+              height={innerH}
+              fill="transparent"
+              pointerEvents="all"
+              onMouseMove={handleMove}
+            />
+          </g>
+        </svg>
+        {/* Floating tooltip — multi-series at the focused year. Sorted
+            descending by value so the user reads the leaderboard from the
+            top down. */}
+        {focused && tooltipPct && (
+          <div
+            className="pointer-events-none absolute rounded-md px-2 py-1.5 text-[10px]"
+            style={{
+              left: `${Math.min(95, Math.max(5, tooltipPct.left))}%`,
+              top: 4,
+              transform: 'translateX(-50%)',
+              background: 'rgba(11, 13, 16, 0.94)',
+              border: '1px solid var(--panel-border)',
+              color: 'var(--text-h)',
+              whiteSpace: 'nowrap',
+              lineHeight: 1.4,
+              maxHeight: 'calc(100% - 8px)',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              className="text-[10px] mb-0.5 pb-0.5"
+              style={{
+                color: 'var(--text-dim)',
+                borderBottom: '1px solid var(--panel-border)',
+              }}
             >
-              {t}
-            </text>
-          ))}
-          {/* Series lines */}
-          {series.map((s) => {
-            const isActive = activeId === s.geo.id;
-            const isDimmed = activeId != null && !isActive;
-            const path = lineGen(s.trend) ?? '';
-            return (
-              <path
-                key={s.geo.id}
-                d={path}
-                fill="none"
-                stroke={isActive ? 'var(--accent)' : s.color}
-                strokeWidth={isActive ? 2.4 : 1.4}
-                opacity={isDimmed ? 0.32 : 0.95}
-                style={{ cursor: 'pointer' }}
-                onClick={() => onActivate(s.geo.id)}
-              />
-            );
-          })}
-        </g>
-      </svg>
+              {focused.year}
+            </div>
+            <ul className="flex flex-col gap-0.5">
+              {focused.rows.slice(0, 8).map((r) => {
+                const isActive = activeId === r.geo.id;
+                return (
+                  <li
+                    key={r.geo.id}
+                    className="flex items-center gap-2 justify-between"
+                    style={{ color: isActive ? 'var(--accent)' : 'var(--text)' }}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className="inline-block rounded-full"
+                        style={{ width: 6, height: 6, background: r.color }}
+                      />
+                      {r.geo.label}
+                    </span>
+                    <span className="tnum" style={{ color: 'var(--text-h)' }}>
+                      {fmtDollarsCompact(r.value)}
+                    </span>
+                  </li>
+                );
+              })}
+              {focused.rows.length > 8 && (
+                <li className="text-[9px]" style={{ color: 'var(--text-dim)' }}>
+                  + {focused.rows.length - 8} more
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -708,14 +937,20 @@ export function HousingMarketSection({
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* Top row — headline statistics span full width. */}
-      <HeadlineStats geo={activeGeo} />
-
-      {/* Middle row — time series + radar */}
+      {/* Top section is split into two row-grids that share a column
+          template, so paired cards (About ↔ Stats, Chart ↔ Radar) match
+          heights via CSS grid's default stretch alignment. The 2nd row
+          uses items-stretch + flex-1 inside ChartFrame so the chart and
+          radar SVGs grow to fill the row. */}
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] grid-cols-1">
+        <HousingDataSetTile />
+        <HeadlineStats geo={activeGeo} />
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] grid-cols-1 items-stretch">
         <ChartFrame
           title="Typical Home Value by City"
-          subtitle="Zillow ZHVI · annual, 2000 → latest · click a series to focus"
+          subtitle="Zillow ZHVI · annual, 2000 → latest · hover for values"
         >
           <TimeSeriesChart
             geographies={geographies}
@@ -732,7 +967,7 @@ export function HousingMarketSection({
         </ChartFrame>
       </div>
 
-      {/* Bottom row — city comparison + housing-type bars */}
+      {/* Bottom row — city comparison + housing-type bars (unchanged) */}
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] grid-cols-1">
         <ChartFrame
           title="Typical Home City Comparison"

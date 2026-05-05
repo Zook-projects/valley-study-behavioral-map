@@ -108,6 +108,7 @@ function AnchorRankingsTable({
           case 'inbound': return r.inboundCommuters;
           case 'outbound': return r.outboundCommuters;
           case 'within': return r.withinZip;
+          case 'total': return r.inboundCommuters + r.withinZip;
           case 'localShare': return r.localShare;
           default: return 0;
         }
@@ -142,6 +143,7 @@ function AnchorRankingsTable({
             <SortHeader label="Inbound" sortKey="inbound" active={sortKey === 'inbound'} dir={sortDir} onSort={onSort} align="right" />
             <SortHeader label="Outbound" sortKey="outbound" active={sortKey === 'outbound'} dir={sortDir} onSort={onSort} align="right" />
             <SortHeader label="Within" sortKey="within" active={sortKey === 'within'} dir={sortDir} onSort={onSort} align="right" />
+            <SortHeader label="Total" sortKey="total" active={sortKey === 'total'} dir={sortDir} onSort={onSort} align="right" />
             <SortHeader label="Local Share" sortKey="localShare" active={sortKey === 'localShare'} dir={sortDir} onSort={onSort} align="right" />
           </tr>
         </thead>
@@ -168,6 +170,7 @@ function AnchorRankingsTable({
                 <td className="px-2 py-1.5 text-right" style={{ color: 'var(--text)' }}>{fmtInt(r.inboundCommuters)}</td>
                 <td className="px-2 py-1.5 text-right" style={{ color: 'var(--text)' }}>{fmtInt(r.outboundCommuters)}</td>
                 <td className="px-2 py-1.5 text-right" style={{ color: 'var(--text)' }}>{fmtInt(r.withinZip)}</td>
+                <td className="px-2 py-1.5 text-right" style={{ color: 'var(--text-h)' }}>{fmtInt(r.inboundCommuters + r.withinZip)}</td>
                 <td className="px-2 py-1.5 text-right" style={{ color: 'var(--text-dim)' }}>{fmtPct(r.localShare)}</td>
               </tr>
             );
