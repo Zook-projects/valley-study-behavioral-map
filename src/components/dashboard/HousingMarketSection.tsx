@@ -318,22 +318,39 @@ function HeadlineStats({ geo }: { geo: Geography | null }) {
 function TimeSeriesChart({
   geographies,
   activeId,
+  highlightId,
   onActivate,
+  typeKey = 'zhviAvg',
 }: {
   geographies: Geography[];
+  // Non-null when the user has clicked a city — narrows the rendered set
+  // to ONLY that city's line. Null = render all cities.
   activeId: string | null;
+  // Which city is visually highlighted in the legend / dots / tooltip.
+  // Falls back to the section's default city even when no filter is
+  // active, so the legend still shows a primary anchor.
+  highlightId: string | null;
   onActivate: (id: string) => void;
+  // Trend metric key (matches TYPE_AXES.key). Default is the average
+  // ZHVI trend; passing 'zhviSfr', 'zhvi3br', etc. retargets every line
+  // onto that housing-type's trend.
+  typeKey?: string;
 }) {
   // Compute year domain + value domain across all visible series. Filters
-  // out geographies that lack a 'zhvi' trend so the legend stays meaningful.
+  // out geographies that lack a trend for the active type key so the
+  // legend stays meaningful. When activeId is set we additionally filter
+  // to that city — clicking a bar in the city-comparison chart narrows
+  // the time series to a single line.
   const series = useMemo(() => {
+    const trendKey = TYPE_KEY_MAP[typeKey] ?? 'zhvi';
     return geographies
       .map((g, idx) => {
-        const trend = (g.trend?.zhvi ?? []).filter((p): p is TrendPoint & { value: number } => p.value != null);
+        const trend = (g.trend?.[trendKey] ?? []).filter((p): p is TrendPoint & { value: number } => p.value != null);
         return { geo: g, color: geoColor(idx), trend };
       })
-      .filter((s) => s.trend.length > 0);
-  }, [geographies]);
+      .filter((s) => s.trend.length > 0)
+      .filter((s) => activeId == null || s.geo.id === activeId);
+  }, [geographies, typeKey, activeId]);
 
   const { xMin, xMax, yMax } = useMemo(() => {
     let xMin = Infinity, xMax = -Infinity, yMax = 0;
@@ -446,7 +463,7 @@ function TimeSeriesChart({
       {/* Legend */}
       <div className="flex flex-wrap gap-x-3 gap-y-1">
         {series.map((s) => {
-          const isActive = activeId === s.geo.id;
+          const isActive = highlightId === s.geo.id;
           return (
             <button
               key={s.geo.id}
@@ -454,7 +471,7 @@ function TimeSeriesChart({
               className="flex items-center gap-1.5 text-[10px] tabular-nums"
               style={{
                 color: isActive ? 'var(--accent)' : 'var(--text)',
-                opacity: isActive || activeId == null ? 1 : 0.6,
+                opacity: isActive || highlightId == null ? 1 : 0.6,
               }}
             >
               <span
@@ -518,8 +535,8 @@ function TimeSeriesChart({
             ))}
             {/* Series lines */}
             {series.map((s) => {
-              const isActive = activeId === s.geo.id;
-              const isDimmed = activeId != null && !isActive;
+              const isActive = highlightId === s.geo.id;
+              const isDimmed = highlightId != null && !isActive;
               const path = lineGen(s.trend) ?? '';
               return (
                 <path
@@ -553,7 +570,7 @@ function TimeSeriesChart({
                     cx={sx(focused.year)}
                     cy={sy(r.value)}
                     r={3}
-                    fill={activeId === r.geo.id ? 'var(--accent)' : r.color}
+                    fill={highlightId === r.geo.id ? 'var(--accent)' : r.color}
                     stroke="rgba(11,13,16,0.95)"
                     strokeWidth={1}
                     vectorEffect="non-scaling-stroke"
@@ -603,7 +620,7 @@ function TimeSeriesChart({
             </div>
             <ul className="flex flex-col gap-0.5">
               {focused.rows.slice(0, 8).map((r) => {
-                const isActive = activeId === r.geo.id;
+                const isActive = highlightId === r.geo.id;
                 return (
                   <li
                     key={r.geo.id}
@@ -639,13 +656,22 @@ function TimeSeriesChart({
 // ---------------------------------------------------------------------------
 // Radar chart — Housing Type Comparison
 // ---------------------------------------------------------------------------
-function HousingTypeRadar({ geo }: { geo: Geography | null }) {
+function HousingTypeRadar({
+  geo,
+  selectedTypeKey,
+  onSelectType,
+}: {
+  geo: Geography | null;
+  selectedTypeKey?: string | null;
+  onSelectType?: (key: string) => void;
+}) {
   const values = useMemo(() => {
     return TYPE_AXES.map((a) => ({ ...a, value: typeValue(geo?.latest ?? null, a.key) }));
   }, [geo]);
   const maxVal = useMemo(() => {
     return values.reduce((m, v) => (v.value != null && v.value > m ? v.value : m), 0);
   }, [values]);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   // Wider-than-tall viewBox leaves horizontal room for labels like
   // "Single Family" on the left and "5+ Bedroom" on the right without
@@ -685,9 +711,30 @@ function HousingTypeRadar({ geo }: { geo: Geography | null }) {
     })
     .join(' ');
 
+  // Tooltip metrics — positioned in the SVG's viewBox coordinate space so
+  // the placement scales with the chart. Pinned slightly above the hovered
+  // dot, with overflow handling at the SVG edges.
+  const hover = hoverIdx != null ? values[hoverIdx] : null;
+  const hoverPoint = hoverIdx != null ? point(hoverIdx, hover?.value ?? 0) : null;
+  const tipW = 120;
+  const tipH = 32;
+  let tipX = 0;
+  let tipY = 0;
+  if (hoverPoint) {
+    tipX = Math.min(W - tipW - 4, Math.max(4, hoverPoint[0] - tipW / 2));
+    tipY = Math.max(4, hoverPoint[1] - tipH - 12);
+  }
+
   return (
-    <div className="flex items-center justify-center w-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxWidth: 380, height: 280 }}>
+    <div className="flex flex-1 items-center justify-center w-full h-full">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full mx-auto block"
+        style={{ maxWidth: 380, maxHeight: 320 }}
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label="Housing type comparison radar"
+      >
         {/* Concentric grid (octagons) */}
         {gridLevels.map((lvl) => {
           const pts = TYPE_AXES.map((_, i) => {
@@ -716,11 +763,35 @@ function HousingTypeRadar({ geo }: { geo: Geography | null }) {
           stroke="#4FB3A9"
           strokeWidth={1.6}
         />
-        {/* Data dots */}
+        {/* Data dots — invisible larger hit-target sits below each
+            visible dot so hover doesn't require pixel-perfect aim, and
+            clicks toggle the section's selected housing type. */}
         {values.map((v, i) => {
           const [x, y] = point(i, v.value ?? 0);
+          const active = hoverIdx === i;
+          const selected = selectedTypeKey === v.key;
           return (
-            <circle key={v.key} cx={x} cy={y} r={3} fill="#4FB3A9" />
+            <g key={v.key}>
+              <circle
+                cx={x}
+                cy={y}
+                r={12}
+                fill="transparent"
+                style={{ cursor: onSelectType ? 'pointer' : 'default' }}
+                onMouseEnter={() => setHoverIdx(i)}
+                onMouseLeave={() => setHoverIdx(null)}
+                onClick={() => onSelectType?.(v.key)}
+              />
+              <circle
+                cx={x}
+                cy={y}
+                r={selected ? 6 : active ? 5 : 3}
+                fill={selected ? 'var(--accent)' : '#4FB3A9'}
+                stroke={selected || active ? 'var(--text-h)' : 'none'}
+                strokeWidth={selected ? 1.5 : active ? 1 : 0}
+                pointerEvents="none"
+              />
+            </g>
           );
         })}
         {/* Axis labels */}
@@ -728,6 +799,7 @@ function HousingTypeRadar({ geo }: { geo: Geography | null }) {
           const [x, y] = labelPoint(i);
           // Anchor based on x position so labels don't overlap the polygon.
           const anchor = x < cx - 4 ? 'end' : x > cx + 4 ? 'start' : 'middle';
+          const selected = selectedTypeKey === a.key;
           return (
             <text
               key={a.key}
@@ -736,12 +808,50 @@ function HousingTypeRadar({ geo }: { geo: Geography | null }) {
               fontSize="9.5"
               textAnchor={anchor}
               dominantBaseline="middle"
-              fill="var(--text)"
+              fill={selected ? 'var(--accent)' : 'var(--text)'}
+              fontWeight={selected ? 600 : 400}
+              style={{ cursor: onSelectType ? 'pointer' : 'default' }}
+              onClick={() => onSelectType?.(a.key)}
             >
               {a.label}
             </text>
           );
         })}
+        {/* Tooltip — rendered last so it sits above all other layers. */}
+        {hover && hoverPoint && (
+          <g pointerEvents="none">
+            <rect
+              x={tipX}
+              y={tipY}
+              width={tipW}
+              height={tipH}
+              rx={4}
+              ry={4}
+              fill="rgba(15, 18, 24, 0.95)"
+              stroke="var(--panel-border)"
+              strokeWidth={1}
+            />
+            <text
+              x={tipX + tipW / 2}
+              y={tipY + 12}
+              fontSize="9"
+              textAnchor="middle"
+              fill="var(--text-dim)"
+            >
+              {hover.label}
+            </text>
+            <text
+              x={tipX + tipW / 2}
+              y={tipY + 24}
+              fontSize="11"
+              fontWeight={600}
+              textAnchor="middle"
+              fill="var(--text-h)"
+            >
+              {fmtDollarsCompact(hover.value)}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );
@@ -750,7 +860,15 @@ function HousingTypeRadar({ geo }: { geo: Geography | null }) {
 // ---------------------------------------------------------------------------
 // Housing-type bar chart — same eight categories
 // ---------------------------------------------------------------------------
-function HousingTypeBars({ geo }: { geo: Geography | null }) {
+function HousingTypeBars({
+  geo,
+  selectedTypeKey,
+  onSelectType,
+}: {
+  geo: Geography | null;
+  selectedTypeKey?: string | null;
+  onSelectType?: (key: string) => void;
+}) {
   const data = useMemo(() => {
     return TYPE_BAR_ORDER.map((a) => ({ ...a, value: typeValue(geo?.latest ?? null, a.key) }));
   }, [geo]);
@@ -768,6 +886,28 @@ function HousingTypeBars({ geo }: { geo: Geography | null }) {
   const yMax = useMemo(() => data.reduce((m, d) => (d.value != null && d.value > m ? d.value : m), 0), [data]);
   const y = useMemo(() => scaleLinear().domain([0, yMax * 1.18 || 1]).range([innerH, 0]), [yMax, innerH]);
 
+  // Value-based gradient: bars darken as their value increases. Map the
+  // smallest non-null value to a light teal and the largest to a deep
+  // teal, interpolating linearly in HSL-ish RGB space.
+  const yMin = useMemo(
+    () => data.reduce(
+      (m, d) => (d.value != null && (m == null || d.value < m) ? d.value : m),
+      null as number | null,
+    ),
+    [data],
+  );
+  const colorForValue = (v: number | null): string => {
+    if (v == null || yMax <= 0) return '#4FB3A9';
+    const lo = yMin ?? v;
+    const span = Math.max(1, yMax - lo);
+    const t = Math.min(1, Math.max(0, (v - lo) / span));
+    // Light end (low value): pale teal #B8E3DE
+    // Dark end (high value): deep teal #1F6B62
+    const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
+    const rgb = (r: number, g: number, b: number) => `rgb(${r}, ${g}, ${b})`;
+    return rgb(lerp(0xB8, 0x1F), lerp(0xE3, 0x6B), lerp(0xDE, 0x62));
+  };
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full" style={{ height: 240 }}>
       <g transform={`translate(${M.left}, ${M.top})`}>
@@ -776,15 +916,32 @@ function HousingTypeBars({ geo }: { geo: Geography | null }) {
           const xPos = x(d.key) ?? 0;
           const bw = x.bandwidth();
           const bh = innerH - y(v);
+          const selected = selectedTypeKey === d.key;
           return (
-            <g key={d.key}>
+            <g
+              key={d.key}
+              style={{ cursor: onSelectType ? 'pointer' : 'default' }}
+              onClick={() => onSelectType?.(d.key)}
+            >
+              {/* Hit-target — full column so the user can click anywhere
+                  in the bar's column band, not just on the colored bar. */}
+              <rect
+                x={xPos}
+                y={0}
+                width={bw}
+                height={innerH}
+                fill="transparent"
+                pointerEvents="all"
+              />
               <rect
                 x={xPos}
                 y={y(v)}
                 width={bw}
                 height={Math.max(0, bh)}
-                fill="#4FB3A9"
-                opacity={0.85}
+                fill={colorForValue(d.value)}
+                opacity={selected ? 1 : 0.95}
+                stroke={selected ? 'var(--accent)' : 'none'}
+                strokeWidth={selected ? 2 : 0}
                 rx={1}
               />
               {/* Value label on top of each bar */}
@@ -822,17 +979,22 @@ function CityComparisonBars({
   geographies,
   activeId,
   onActivate,
+  typeKey = 'zhviAvg',
 }: {
   geographies: Geography[];
   activeId: string | null;
   onActivate: (id: string) => void;
+  // Which housing-type metric drives the bar lengths. Defaults to the
+  // average ZHVI; switching to 'zhviSfr', 'zhvi3br', etc. retargets the
+  // ranking to that type so the section can pivot on housing type.
+  typeKey?: string;
 }) {
   const sorted = useMemo(() => {
     return geographies
-      .map((g, idx) => ({ geo: g, value: typeValue(g.latest, 'zhviAvg'), color: geoColor(idx) }))
+      .map((g, idx) => ({ geo: g, value: typeValue(g.latest, typeKey), color: geoColor(idx) }))
       .filter((d) => d.value != null && Number.isFinite(d.value))
       .sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
-  }, [geographies]);
+  }, [geographies, typeKey]);
 
   const W = 720;
   const H = 220;
@@ -926,6 +1088,25 @@ export function HousingMarketSection({
     () => geographies.find((g) => g.id === effectiveActiveId) ?? null,
     [geographies, effectiveActiveId],
   );
+  // Selected housing type (null = use the average ZHVI metric). When set,
+  // the time-series chart and the city-comparison chart both retarget to
+  // this metric so the user can pivot the section between Average,
+  // Single Family, Condo, or any of the bedroom buckets.
+  const [selectedTypeKey, setSelectedTypeKey] = useState<string | null>(null);
+  const typeKey = selectedTypeKey ?? 'zhviAvg';
+  const typeLabel = useMemo(
+    () => TYPE_AXES.find((t) => t.key === typeKey)?.label ?? 'Average',
+    [typeKey],
+  );
+  // Toggle handlers — clicking the active selection clears it back to the
+  // default. Mirrors the segmented-control style cross-filter the user
+  // expects from the rankings panel.
+  const handleSelectCity = (id: string) => {
+    setActiveId((prev) => (prev === id ? null : id));
+  };
+  const handleSelectType = (key: string) => {
+    setSelectedTypeKey((prev) => (prev === key ? null : key));
+  };
 
   if (!housing) {
     return (
@@ -950,20 +1131,26 @@ export function HousingMarketSection({
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] grid-cols-1 items-stretch">
         <ChartFrame
           title="Typical Home Value by City"
-          subtitle="Zillow ZHVI · annual, 2000 → latest · hover for values"
+          subtitle={`Zillow ZHVI · ${typeLabel} · annual, 2000 → latest · hover for values${activeId ? ` · filtered to ${activeGeo?.label ?? ''}` : ''}`}
         >
           <TimeSeriesChart
             geographies={geographies}
-            activeId={effectiveActiveId}
-            onActivate={(id) => setActiveId(id)}
+            activeId={activeId}
+            highlightId={effectiveActiveId}
+            onActivate={handleSelectCity}
+            typeKey={typeKey}
           />
         </ChartFrame>
 
         <ChartFrame
           title="Housing Type Comparison"
-          subtitle={activeGeo ? `${activeGeo.label} · radar` : 'radar'}
+          subtitle={activeGeo ? `${activeGeo.label} · radar · click an axis to pivot` : 'radar'}
         >
-          <HousingTypeRadar geo={activeGeo} />
+          <HousingTypeRadar
+            geo={activeGeo}
+            selectedTypeKey={selectedTypeKey}
+            onSelectType={handleSelectType}
+          />
         </ChartFrame>
       </div>
 
@@ -971,20 +1158,25 @@ export function HousingMarketSection({
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] grid-cols-1">
         <ChartFrame
           title="Typical Home City Comparison"
-          subtitle="Click a bar to filter the headline / radar / type chart"
+          subtitle={`Click a bar to filter the time series · metric: ${typeLabel}`}
         >
           <CityComparisonBars
             geographies={geographies}
             activeId={effectiveActiveId}
-            onActivate={(id) => setActiveId(id)}
+            onActivate={handleSelectCity}
+            typeKey={typeKey}
           />
         </ChartFrame>
 
         <ChartFrame
           title="Housing Type Comparison"
-          subtitle={activeGeo ? `${activeGeo.label} · bars` : 'bars'}
+          subtitle={activeGeo ? `${activeGeo.label} · bars · click to pivot` : 'bars'}
         >
-          <HousingTypeBars geo={activeGeo} />
+          <HousingTypeBars
+            geo={activeGeo}
+            selectedTypeKey={selectedTypeKey}
+            onSelectType={handleSelectType}
+          />
         </ChartFrame>
       </div>
     </div>

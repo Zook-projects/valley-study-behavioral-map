@@ -572,8 +572,8 @@ export function DashboardView({ data }: Props) {
             }}
           >
             <h2
-              className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-              style={{ color: 'var(--text-dim)' }}
+              className="text-base font-semibold uppercase tracking-wider mb-3"
+              style={{ color: 'var(--text-h)' }}
             >
               Demographics
             </h2>
@@ -604,8 +604,8 @@ export function DashboardView({ data }: Props) {
             }}
           >
             <h2
-              className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-              style={{ color: 'var(--text-dim)' }}
+              className="text-base font-semibold uppercase tracking-wider mb-3"
+              style={{ color: 'var(--text-h)' }}
             >
               Commerce
             </h2>
@@ -669,8 +669,8 @@ export function DashboardView({ data }: Props) {
             }}
           >
             <h2
-              className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-              style={{ color: 'var(--text-dim)' }}
+              className="text-base font-semibold uppercase tracking-wider mb-3"
+              style={{ color: 'var(--text-h)' }}
             >
               Housing Market
             </h2>

@@ -371,15 +371,25 @@ export function VariantToggle<V extends string>({
   options,
   labels,
   ariaLabel,
+  size = 'sm',
 }: {
   value: V;
   onChange: (v: V) => void;
   options: readonly V[];
   labels: Record<V, string>;
   ariaLabel: string;
+  // 'sm' (default) keeps the legacy compact toggle for the dashboard's
+  // RAC/WAC strip; 'lg' bumps padding + type so the Commerce KPI card
+  // reads at the same scale as the headline-section toggles.
+  size?: 'sm' | 'lg';
 }) {
+  const lg = size === 'lg';
   return (
-    <div className="inline-flex items-center gap-0.5 mt-1.5" role="group" aria-label={ariaLabel}>
+    <div
+      className={`inline-flex items-center ${lg ? 'gap-1 mt-2' : 'gap-0.5 mt-1.5'}`}
+      role="group"
+      aria-label={ariaLabel}
+    >
       {options.map((v) => {
         const active = value === v;
         return (
@@ -388,7 +398,9 @@ export function VariantToggle<V extends string>({
             type="button"
             onClick={() => onChange(v)}
             aria-pressed={active}
-            className="rounded-sm px-1.5 py-[2px] text-[9px] tnum transition-colors"
+            className={`rounded transition-colors tnum ${
+              lg ? 'px-2.5 py-1 text-xs font-medium' : 'rounded-sm px-1.5 py-[2px] text-[9px]'
+            }`}
             style={{
               color: active ? 'var(--accent)' : 'var(--text-dim)',
               background: active ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
@@ -528,6 +540,7 @@ function TopicCard({
   cadenceToggle,
   sparkline,
   stretch = false,
+  large = false,
 }: {
   topic: ContextTopic;
   headlineLabel: string;
@@ -544,6 +557,10 @@ function TopicCard({
   // layer fills the strip on wide screens); when false it stays at the
   // fixed 240px width used by the LEHD-side card layout.
   stretch?: boolean;
+  // Bumps the topic title, headline label, source line, and per-row
+  // label/value text up so the dashboard's Commerce KPI card reads at
+  // headline scale rather than the compact strip scale.
+  large?: boolean;
 }) {
   const allEmpty = rows.every((r) => r.value == null);
   return (
@@ -561,17 +578,20 @@ function TopicCard({
     >
       <div>
         <div
-          className="text-[10px] font-medium uppercase tracking-wider"
+          className={`${large ? 'text-xs' : 'text-[10px]'} font-medium uppercase tracking-wider`}
           style={{ color: 'var(--text-dim)' }}
         >
           {CONTEXT_TOPIC_LABELS[topic]}
         </div>
-        <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-h)' }}>
+        <div
+          className={`${large ? 'text-sm font-semibold' : 'text-[10px]'} mt-0.5`}
+          style={{ color: 'var(--text-h)' }}
+        >
           {headlineLabel}
         </div>
         {sourceLine && (
           <div
-            className="text-[9px] mt-0.5"
+            className={`${large ? 'text-[11px]' : 'text-[9px]'} mt-0.5`}
             style={{ color: 'var(--text-dim)' }}
           >
             {sourceLine}
@@ -586,27 +606,27 @@ function TopicCard({
       </div>
       {allEmpty ? (
         <div
-          className="text-[11px] mt-1"
+          className={`${large ? 'text-sm' : 'text-[11px]'} mt-1`}
           style={{ color: 'var(--text-dim)' }}
         >
           no data published
         </div>
       ) : (
-        <ul className="flex flex-col gap-0.5 mt-0.5">
+        <ul className={`flex flex-col ${large ? 'gap-1.5 mt-2' : 'gap-0.5 mt-0.5'}`}>
           {rows.map((r) => (
             <li
               key={r.label}
               className="flex items-baseline justify-between gap-2"
             >
               <span
-                className="text-[11px] truncate"
+                className={`${large ? 'text-sm' : 'text-[11px]'} truncate`}
                 style={{ color: 'var(--text-dim)' }}
                 title={r.label}
               >
                 {r.label}
               </span>
               <span
-                className="text-[12px] tnum"
+                className={`${large ? 'text-lg font-semibold' : 'text-[12px]'} tnum`}
                 style={{
                   color: r.value ? 'var(--text-h)' : 'var(--text-dim)',
                 }}
@@ -766,6 +786,7 @@ export function ContextCards({
               options={['gross', 'retail', 'taxable']}
               labels={COMMERCE_VARIANT_CHIP_LABEL}
               ariaLabel="CDOR sales metric"
+              size="lg"
             />
           );
           cadenceToggle = (
@@ -775,6 +796,7 @@ export function ContextCards({
               options={['annual', 'monthly']}
               labels={COMMERCE_CADENCE_LABEL}
               ariaLabel="Trend cadence"
+              size="lg"
             />
           );
           // Pull the sparkline source: place trend when a workplace ZIP is
@@ -826,6 +848,7 @@ export function ContextCards({
             cadenceToggle={cadenceToggle}
             sparkline={sparkline}
             stretch
+            large={topic === 'commerce'}
           />
         );
       })}
