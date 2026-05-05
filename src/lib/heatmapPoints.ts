@@ -52,6 +52,7 @@ import type {
 import {
   EW_THRESHOLD_DEG,
   NS_DOMINANCE_RATIO,
+  isAnchorZip,
   isSegmentFilterAll,
   sumBucketsFromAllAxes,
 } from './flowQueries';
@@ -233,6 +234,19 @@ export function buildHeatmapGeoJson(
   // ----- Filter setup --------------------------------------------------------
   const segmentActive = !isSegmentFilterAll(segmentFilter);
   const directionActive = directionFilter !== 'all';
+  // Map valley-terminology values to their underlying east/west bearing for
+  // the partner-bearing comparison. up-valley = east + anchor-workplace-only
+  // (constraint applied below alongside the bearing check); down-valley = west.
+  const bearingTarget: 'east' | 'west' | null =
+    directionFilter === 'up-valley' ? 'east' :
+    directionFilter === 'down-valley' ? 'west' :
+    directionFilter === 'east' || directionFilter === 'west' ? directionFilter :
+    null;
+  // up-valley restricts to flows whose workplace ZIP is one of the 11 anchors.
+  // In homeBlocks (inbound side) the workplace IS the block's anchorZip, which
+  // is always an anchor by construction — so the constraint only bites on the
+  // workplace side, where the partner zip is the workplace.
+  const upValleyAnchorWorkplace = directionFilter === 'up-valley';
 
   // Block-level partner filter. In cross-anchor mode it pins partners to
   // {X}; in same-side mode with a selectedPartner it pins to the partner's
@@ -270,7 +284,13 @@ export function buildHeatmapGeoJson(
             p.zip,
             zipMetaByZip,
           );
-          if (bearing !== directionFilter) continue;
+          if (bearing !== bearingTarget) continue;
+          // up-valley: workplace must be anchor. When this block represents
+          // workplaces (heatmapSide === 'workplace'), the partner IS the
+          // workplace, so require it to be an anchor ZIP. When the partner
+          // is a residence (heatmapSide === 'residence'), the workplace is
+          // b.anchorZip which is anchor by construction.
+          if (upValleyAnchorWorkplace && heatmapSide === 'workplace' && !isAnchorZip(p.zip)) continue;
         }
         const value = segmentActive
           ? sumBucketsFromAllAxes(p, segmentFilter)
@@ -301,7 +321,12 @@ export function buildHeatmapGeoJson(
           entry.partnerZip,
           zipMetaByZip,
         );
-        if (bearing !== directionFilter) continue;
+        if (bearing !== bearingTarget) continue;
+        // up-valley: cross-anchor centroid fallback only fires for non-anchor
+        // partner ZIPs (see fallbackAcc filter excluding anchorZipSet). When
+        // heatmapSide === 'workplace' those non-anchor partners ARE the
+        // workplace and therefore violate the anchor-workplace constraint.
+        if (upValleyAnchorWorkplace && heatmapSide === 'workplace') continue;
       }
 
       let weight = 0;

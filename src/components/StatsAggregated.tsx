@@ -31,6 +31,13 @@ import {
 } from '../lib/flowQueries';
 import { fmtInt, fmtPct } from '../lib/format';
 
+const DIRECTION_FILTER_LABEL: Record<Exclude<DirectionFilter, 'all'>, string> = {
+  east: 'east-direction',
+  west: 'west-direction',
+  'up-valley': 'up-valley (anchor workplaces)',
+  'down-valley': 'down-valley',
+};
+
 interface Props {
   // Inbound-only props are read; the outbound + mode props are accepted to
   // keep the DashboardTile call site stable but are intentionally ignored.
@@ -541,7 +548,7 @@ function AnchorRankings({
         )}
         {directionFilter !== 'all' && (
           <div className="opacity-80 mt-0.5">
-            Scoped to {directionFilter}-direction flows · ALL_OTHER excluded
+            Scoped to {DIRECTION_FILTER_LABEL[directionFilter]} flows · ALL_OTHER excluded
           </div>
         )}
       </div>

@@ -442,10 +442,17 @@ export function filterByDirection(
   filter: DirectionFilter,
 ): FlowRow[] {
   if (filter === 'all') return flows;
+  // 'up-valley' = east + anchor-workplace-only. 'down-valley' = west alias.
+  const directionTarget: Direction =
+    filter === 'up-valley' ? 'east' :
+    filter === 'down-valley' ? 'west' :
+    filter;
+  const anchorOnly = filter === 'up-valley';
   return flows.filter((f) => {
     if (f.originZip === 'ALL_OTHER' || f.destZip === 'ALL_OTHER') return false;
+    if (anchorOnly && !isAnchorZip(f.destZip)) return false;
     if (f.originZip === f.destZip) return true;
-    return classifyDirection(f.originZip, f.destZip, zips) === filter;
+    return classifyDirection(f.originZip, f.destZip, zips) === directionTarget;
   });
 }
 

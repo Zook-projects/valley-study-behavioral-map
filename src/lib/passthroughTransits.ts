@@ -16,7 +16,7 @@
 // only — left-panel stats and bottom-card aggregations consume the
 // un-augmented inbound/outbound datasets and never see these rows.
 
-import type { CorridorId, FlowRow, PassThroughFile } from '../types/flow';
+import type { CorridorId, DirectionFilter, FlowRow, PassThroughFile } from '../types/flow';
 
 // Corridor traversal from GW_W up I-70 to GWS and through Glenwood Canyon to
 // GW_E. Same list works for both directions — corridor-aggregation reads
@@ -107,12 +107,17 @@ export function buildEastWestTransitFlows(
  */
 export function filterEastWestTransits(
   transits: FlowRow[],
-  directionFilter: 'all' | 'east' | 'west',
+  directionFilter: DirectionFilter,
 ): FlowRow[] {
   if (directionFilter === 'all') return transits;
+  // 'up-valley' is east + anchor-only; transits never touch anchor ZIPs
+  // (they use GW_E/GW_W sentinels), so up-valley behaves like east here.
+  // 'down-valley' is a west alias.
+  const eastward = directionFilter === 'east' || directionFilter === 'up-valley';
+  const westward = directionFilter === 'west' || directionFilter === 'down-valley';
   return transits.filter((f) => {
-    if (f.originZip === GW_W_ZIP && f.destZip === GW_E_ZIP) return directionFilter === 'east';
-    if (f.originZip === GW_E_ZIP && f.destZip === GW_W_ZIP) return directionFilter === 'west';
+    if (f.originZip === GW_W_ZIP && f.destZip === GW_E_ZIP) return eastward;
+    if (f.originZip === GW_E_ZIP && f.destZip === GW_W_ZIP) return westward;
     return false;
   });
 }

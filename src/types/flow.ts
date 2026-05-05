@@ -15,8 +15,10 @@ export type Mode = 'inbound' | 'outbound' | 'regional';
 // classify as 'neutral'. See classifyDirection().
 export type Direction = 'east' | 'west' | 'neutral';
 
-// 3-state direction filter for the dashboard. 'all' = unfiltered.
-export type DirectionFilter = 'all' | 'east' | 'west';
+// Direction filter for the dashboard. 'all' = unfiltered.
+// 'up-valley' filters like 'east' but restricts flows to anchor-ZIP workplaces.
+// 'down-valley' is an alias for 'west' (valley-terminology label).
+export type DirectionFilter = 'all' | 'east' | 'west' | 'up-valley' | 'down-valley';
 
 // Per-pair worker breakdowns LODES publishes on every OD row. Within an axis
 // the buckets sum to workerCount within ±2 (LODES noise infusion). LODES does

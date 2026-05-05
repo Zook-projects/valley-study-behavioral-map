@@ -2982,6 +2982,7 @@ export function BottomCardStrip({
             racFile={racFile}
             wacFile={wacFile}
             odSummary={odSummary}
+            hideCommerceSparkline
           />
         )}
         {cardLayer === 'commute' && (

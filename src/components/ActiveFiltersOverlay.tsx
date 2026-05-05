@@ -95,7 +95,11 @@ export function ActiveFiltersOverlay({
   if (!directionActive && !selectedPartner && !segmentActive) return null;
 
   const directionLabel =
-    directionFilter === 'east' ? 'Eastbound only' : 'Westbound only';
+    directionFilter === 'east' ? 'Eastbound only' :
+    directionFilter === 'west' ? 'Westbound only' :
+    directionFilter === 'up-valley' ? 'Up Valley only (anchor workplaces)' :
+    directionFilter === 'down-valley' ? 'Down Valley only' :
+    'Filtered';
 
   const segmentBucketsLabel =
     segmentActive && segmentFilter.buckets.length > 0
