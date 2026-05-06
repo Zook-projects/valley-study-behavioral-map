@@ -60,13 +60,13 @@ export function TopBar({ view, onChange }: Props) {
         borderBottom: '1px solid var(--panel-border)',
       }}
     >
-      {/* Three-column layout: title left, tabs centered (flex-1 + center
-          alignment puts the tablist at the visual midpoint of the bar),
-          and an equally-sized spacer on the right so the tabs land in the
-          true center regardless of title length. */}
-      <div className="grid grid-cols-3 items-center px-3 md:px-4 h-12">
+      {/* Mobile: stack title above tabs (the desktop grid puts both on one
+          row, but at narrow widths the title's letter-spacing collides with
+          the tablist). md+ : three-column layout — title left, tabs at the
+          true visual center, spacer right. */}
+      <div className="flex flex-col items-center gap-0.5 py-1.5 px-3 md:grid md:grid-cols-3 md:items-center md:gap-0 md:py-0 md:h-12 md:px-4">
         <div
-          className="text-[14px] font-semibold uppercase tracking-[0.18em] truncate justify-self-start"
+          className="text-[11px] md:text-[14px] font-semibold uppercase tracking-[0.16em] md:tracking-[0.18em] truncate text-center md:text-left max-w-full md:justify-self-start"
           style={{ color: 'var(--text-h)' }}
         >
           Glenwood Springs&nbsp;
@@ -77,7 +77,7 @@ export function TopBar({ view, onChange }: Props) {
         <div
           role="tablist"
           aria-label="View"
-          className="flex items-stretch gap-0.5 justify-self-center"
+          className="flex items-stretch gap-0.5 md:justify-self-center"
           onKeyDown={handleKey}
         >
           {TABS.map((tab) => {

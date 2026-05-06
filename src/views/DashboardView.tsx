@@ -637,6 +637,7 @@ export function DashboardView({ data }: Props) {
                     commerceCadence={commerceCadence}
                     onCommerceCadenceChange={setCommerceCadence}
                     hideCommerceSparkline
+                    largeCommerce
                   />
                 </div>
               </div>

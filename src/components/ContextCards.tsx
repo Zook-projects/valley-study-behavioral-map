@@ -53,6 +53,11 @@ interface Props {
   // renders as a standalone full-size chart on the left side and the
   // headline card on the right is reduced to KPI rows + toggles.
   hideCommerceSparkline?: boolean;
+  // When true, the Commerce card renders with the large KPI typography
+  // (bigger headline, bigger row values). Used by DashboardView so the
+  // Commerce KPI card reads as the section anchor. The map's BottomCardStrip
+  // leaves it false so the Commerce card matches the other strip cards.
+  largeCommerce?: boolean;
 }
 
 // Aggregate-view county order (fixed editorial sequence). Mesa County is
@@ -220,7 +225,16 @@ const FORMATTERS: Record<ContextTopic, (v: number) => string> = {
   education: (v) => `${v.toFixed(1)}%`,
   employment: (v) => fmtInt(v),
   housing: (v) => `$${fmtInt(v)}`,
-  commerce: (v) => `$${fmtInt(v)}`,
+  commerce: (v) => {
+    // Commerce KPIs reach into the billions — full-digit dollar strings
+    // dominate the row and force the YoY chip off-screen on narrow cards.
+    // Compact to "$X.XX billion" / "$X.XX million" so the eye lands on the
+    // magnitude first and the change chip stays in line.
+    const abs = Math.abs(v);
+    if (abs >= 1e9) return `$${(v / 1e9).toFixed(2)} billion`;
+    if (abs >= 1e6) return `$${(v / 1e6).toFixed(2)} million`;
+    return `$${fmtInt(v)}`;
+  },
   tourism: (v) => `$${fmtInt(v)}`,
 };
 
@@ -770,6 +784,7 @@ export function ContextCards({
   commerceCadence: commerceCadenceProp,
   onCommerceCadenceChange,
   hideCommerceSparkline = false,
+  largeCommerce = false,
 }: Props) {
   // Per-card variant state. When the parent passes a controlled value (used
   // by DashboardView so the Commerce card and the comparison charts share a
@@ -907,7 +922,7 @@ export function ContextCards({
             cadenceToggle={cadenceToggle}
             sparkline={sparkline}
             stretch
-            large={topic === 'commerce'}
+            large={topic === 'commerce' && largeCommerce}
           />
         );
       })}
