@@ -75,7 +75,11 @@ PLACE_CODES: dict[str, dict] = {
     "81623": {
         "place_code": "12045",
         "place_name": "Carbondale",
-        "county_fips": "097",
+        # Carbondale sits in Garfield County (FIPS 045), not Pitkin (097).
+        # Carbondale Place straddles a sliver of Pitkin County but Census
+        # Bureau primary-county assignment is Garfield, which matches the
+        # municipal boundary and how every other public source files it.
+        "county_fips": "045",
         "kind": "place",
     },
     "81630": {

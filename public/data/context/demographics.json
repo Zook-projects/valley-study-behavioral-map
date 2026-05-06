@@ -2525,8 +2525,8 @@
       "name": "Carbondale",
       "kind": "place",
       "placeGeoid": "0812045",
-      "countyGeoid": "08097",
-      "countyName": "Pitkin County",
+      "countyGeoid": "08045",
+      "countyName": "Garfield County",
       "latest": {
         "population": 6637,
         "medianAge": 43.7,

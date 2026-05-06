@@ -264,6 +264,11 @@ function readNumber(latest: ContextLatest | null, key: string): number | null {
 interface Row {
   label: string;
   value: string | null;
+  // Optional YoY change (in percent, e.g. 5.2 for +5.2%). Currently only
+  // populated for the Commerce card, where each row carries the latest
+  // complete year vs. the prior year on the active variant. Null/undefined
+  // suppresses the chip.
+  changePct?: number | null;
 }
 
 /**
@@ -312,6 +317,25 @@ function buildEmploymentRows(
   };
 }
 
+/**
+ * Year-over-year % change on the Commerce trend's latest annual entry vs.
+ * the prior year, expressed as a percent (5.2 = +5.2%). Returns null when
+ * fewer than two annual rows exist or the prior year was zero/null.
+ */
+function commerceYoYPct(
+  trend: ContextTrend | undefined,
+  measure: 'gross' | 'retail' | 'taxable',
+): number | null {
+  const annual = (trend as CommerceTrend | undefined)?.annual;
+  if (!annual || annual.length < 2) return null;
+  const last = annual[annual.length - 1][measure];
+  const prior = annual[annual.length - 2][measure];
+  if (typeof last !== 'number' || typeof prior !== 'number' || !isFinite(last) || !isFinite(prior) || prior === 0) {
+    return null;
+  }
+  return ((last - prior) / prior) * 100;
+}
+
 function buildRows(
   env: ContextEnvelope,
   topic: ContextTopic,
@@ -322,12 +346,22 @@ function buildRows(
 ): Row[] {
   const key = headlineKeyFor(topic, commerceVariant, housingVariant);
   const fmt = FORMATTERS[topic];
+  const isCommerce = topic === 'commerce';
+  const commerceMeasure = COMMERCE_VARIANT_TREND_KEY[commerceVariant];
 
   // Helper to format a single value with the topic's formatter, or fall
-  // back to a dimmed em-dash placeholder.
-  const fmtRow = (label: string, latest: ContextLatest | null): Row => {
+  // back to a dimmed em-dash placeholder. For the Commerce card it also
+  // pulls the matching trend's YoY % onto the row so the card can render
+  // the change chip beside the value.
+  const fmtRow = (
+    label: string,
+    latest: ContextLatest | null,
+    trend?: ContextTrend,
+  ): Row => {
     const v = readNumber(latest, key);
-    return { label, value: v == null ? null : fmt(v) };
+    const row: Row = { label, value: v == null ? null : fmt(v) };
+    if (isCommerce) row.changePct = commerceYoYPct(trend, commerceMeasure);
+    return row;
   };
 
   if (selectedZip) {
@@ -345,10 +379,10 @@ function buildRows(
           placeLabel = `${place.name} (${(share * 100).toFixed(0)}% of ${county.name.replace(/ County$/, '')})`;
         }
       }
-      rows.push(fmtRow(placeLabel, place.latest));
+      rows.push(fmtRow(placeLabel, place.latest, place.trend));
     }
-    if (county) rows.push(fmtRow(county.name, county.latest));
-    if (state) rows.push(fmtRow(state.name, state.latest));
+    if (county) rows.push(fmtRow(county.name, county.latest, county.trend));
+    if (state) rows.push(fmtRow(state.name, state.latest, state.trend));
     return rows;
   }
 
@@ -359,9 +393,9 @@ function buildRows(
   const rows: Row[] = [];
   for (const fips of AGGREGATE_COUNTY_ORDER) {
     const c = env.counties.find((x) => x.geoid === fips);
-    if (c) rows.push(fmtRow(c.name, c.latest));
+    if (c) rows.push(fmtRow(c.name, c.latest, c.trend));
   }
-  if (env.state) rows.push(fmtRow(env.state.name, env.state.latest));
+  if (env.state) rows.push(fmtRow(env.state.name, env.state.latest, env.state.trend));
   return rows;
 }
 
@@ -625,14 +659,32 @@ function TopicCard({
               >
                 {r.label}
               </span>
-              <span
-                className={`${large ? 'text-lg font-semibold' : 'text-[12px]'} tnum`}
-                style={{
-                  color: r.value ? 'var(--text-h)' : 'var(--text-dim)',
-                }}
-              >
-                {r.value ?? '—'}
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`${large ? 'text-lg font-semibold' : 'text-[12px]'} tnum`}
+                  style={{
+                    color: r.value ? 'var(--text-h)' : 'var(--text-dim)',
+                  }}
+                >
+                  {r.value ?? '—'}
+                </span>
+                {r.changePct != null && (
+                  <span
+                    className={`${large ? 'text-xs' : 'text-[10px]'} tnum`}
+                    style={{
+                      // Match the dimmed grey used by the pie-chart legend's
+                      // percentages so the YoY chip reads as secondary
+                      // metadata rather than competing with the headline.
+                      color: 'var(--text-dim)',
+                      minWidth: large ? 56 : 44,
+                      textAlign: 'right',
+                    }}
+                    title={`${r.changePct >= 0 ? '+' : ''}${r.changePct.toFixed(2)}% vs. prior year`}
+                  >
+                    {r.changePct >= 0 ? '+' : ''}{r.changePct.toFixed(1)}%
+                  </span>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -789,16 +841,23 @@ export function ContextCards({
               size="lg"
             />
           );
-          cadenceToggle = (
-            <VariantToggle<CommerceCadence>
-              value={commerceCadence}
-              onChange={setCommerceCadence}
-              options={['annual', 'monthly']}
-              labels={COMMERCE_CADENCE_LABEL}
-              ariaLabel="Trend cadence"
-              size="lg"
-            />
-          );
+          // Cadence (Annual/Monthly) only drives the inline sparkline.
+          // When the sparkline is hidden (e.g. in DashboardView's
+          // Commerce section, where the standalone time-series chart
+          // owns its own cadence toggle), suppress the toggle here so
+          // the KPI card doesn't duplicate the control.
+          if (!hideCommerceSparkline) {
+            cadenceToggle = (
+              <VariantToggle<CommerceCadence>
+                value={commerceCadence}
+                onChange={setCommerceCadence}
+                options={['annual', 'monthly']}
+                labels={COMMERCE_CADENCE_LABEL}
+                ariaLabel="Trend cadence"
+                size="lg"
+              />
+            );
+          }
           // Pull the sparkline source: place trend when a workplace ZIP is
           // selected, otherwise fall back to the containing county for the
           // selected place; in aggregate mode use Garfield (the central
