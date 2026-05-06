@@ -560,8 +560,6 @@ export function CommerceComparisons({
     // gets a single neutral fill — sequential greys on closely-spaced
     // values were hard to discriminate. The selected anchor still
     // overrides to amber via the `highlight` channel.
-    const placeMin = placeData.reduce((m, d) => Math.min(m, d.value), Infinity);
-    const placeMax = placeData.reduce((m, d) => Math.max(m, d.value), -Infinity);
     const placeRows: BarRow[] = placeData
       .sort((a, b) => b.value - a.value)
       .map((d) => ({

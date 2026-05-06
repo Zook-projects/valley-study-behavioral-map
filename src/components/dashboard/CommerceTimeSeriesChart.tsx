@@ -129,7 +129,7 @@ function buildSeries(
   for (const spec of COUNTY_SERIES_SPEC) {
     const c = env.counties.find((x) => x.geoid === spec.geoid);
     if (!c) continue;
-    const points = buildPoints(c.trend as CommerceTrend | undefined, cadence, variant);
+    const points = buildPoints(c.trend as unknown as CommerceTrend | undefined, cadence, variant);
     if (points.length === 0) continue;
     series.push({
       key: spec.geoid,
