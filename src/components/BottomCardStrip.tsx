@@ -2043,6 +2043,19 @@ interface Props {
   // height — no absolute-positioning dead space, no growth pressure on
   // the section above. Default false preserves the map-overlay layout.
   inline?: boolean;
+  // Block-selection scope flag — when true, the strip pivots to render
+  // ONLY the OD flow card (block-derived totals) + a synthesized "Top
+  // partner places" card derived from blockSelectionBundle. Workplace
+  // Metrics, RAC/WAC trend cards, and Pass-Through are hidden because
+  // RAC/WAC ZIP-level files don't exist for an arbitrary block set.
+  blockScopeActive?: boolean;
+  blockSelectionBundle?: {
+    label: string;
+    selectedCount: number;
+    totalWorkers: number;
+    topRows: Array<{ place: string; zips: string[]; workerCount: number }>;
+    mode: Mode;
+  } | null;
 }
 
 function findEntry<T extends { zip: string }>(entries: T[], zip: string): T | null {
@@ -2682,6 +2695,8 @@ export function BottomCardStrip({
   hideOdFlows = false,
   hideSegmentFilter = false,
   inline = false,
+  blockScopeActive = false,
+  blockSelectionBundle = null,
 }: Props) {
   const isNonAnchor = selectionKind === 'non-anchor' && nonAnchorBundle != null;
   // Anchor selections only — keeps the existing per-anchor card logic gated
@@ -3083,7 +3098,55 @@ export function BottomCardStrip({
             hideCommerceSparkline
           />
         )}
-        {cardLayer === 'commute' && (
+        {cardLayer === 'commute' && blockScopeActive && blockSelectionBundle && (
+          <>
+            {/* OD flow card — single direction (matches the user's
+                block-scope mode). Inbound shows incoming workers to the
+                selected blocks; outbound shows outgoing workers/residents
+                from the selection. Trend is empty (block-derived totals
+                aren't computable as a multi-year series). */}
+            <CardsForOd
+              scope={blockSelectionBundle.label}
+              inflowLatest={
+                blockSelectionBundle.mode === 'inbound'
+                  ? { totalJobs: blockSelectionBundle.totalWorkers }
+                  : null
+              }
+              inflowTrend={[]}
+              outflowLatest={
+                blockSelectionBundle.mode === 'outbound'
+                  ? { totalJobs: blockSelectionBundle.totalWorkers }
+                  : null
+              }
+              outflowTrend={[]}
+              withinLatest={null}
+              withinTrend={[]}
+            />
+            {/* Workforce flows — synthesized PartnerList from the
+                block-derived top rows. Mirrors the non-anchor "Top outflow"
+                card pattern. */}
+            <Card
+              title={`${blockSelectionBundle.label} · ${
+                blockSelectionBundle.mode === 'inbound' ? 'Top origins' : 'Top destinations'
+              }`}
+              subtitle={`${blockSelectionBundle.mode === 'inbound' ? 'Where workers come from' : 'Where workers commute to'} · block-derived`}
+              width={260}
+              maxHeight={320}
+            >
+              <PartnerList
+                partners={blockSelectionBundle.topRows.map<OdPartner>((r) => ({
+                  zip: r.zips[0],
+                  place: r.place,
+                  workers: r.workerCount,
+                  zips: r.zips,
+                  trend: [],
+                }))}
+                denominator={blockSelectionBundle.totalWorkers}
+              />
+            </Card>
+          </>
+        )}
+        {cardLayer === 'commute' && !blockScopeActive && (
           <>
         {!hideOdFlows && isPerZip && (
           <CardsForOd

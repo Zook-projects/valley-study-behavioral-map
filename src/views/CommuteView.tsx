@@ -340,10 +340,38 @@ export function CommuteView({ data }: CommuteViewProps) {
   // contribution to each path. Reset effects below clear the selection any
   // time the underlying scope (zip / mode / heatmapSide / nonAnchorBundle)
   // changes — a stale selection would silently filter the new view.
-  const [blockSelectionActive, setBlockSelectionActive] = useState(false);
+  const [blockSelectionActive, setBlockSelectionActiveRaw] = useState(false);
   const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(
     () => new Set(),
   );
+  // Block-selection scope owns its own workplace/residence side (independent
+  // from the heatmap-layer's heatmapSide) and its own inbound/outbound mode.
+  // Both reset to their defaults whenever block selection turns on so the
+  // user always starts with a predictable scope.
+  //   - blockSelectionSide defaults to 'residence'
+  //   - blockSelectionMode defaults to 'outbound'
+  // When `blockScopeActive` (block selection on AND >=1 selection), these
+  // pivot: filterFlowsBySelectedBlocks reads them instead of visualMode /
+  // heatmapSide, the left panel and bottom cards switch to a synthetic
+  // block bundle, and the map's dashed branch primitive draws block→anchor.
+  const [blockSelectionSide, setBlockSelectionSide] = useState<HeatmapSide>('residence');
+  const [blockSelectionMode, setBlockSelectionMode] = useState<Mode>('outbound');
+  // Hide-blocks toggle — when on, MapCanvas filters its selection-circle
+  // layer to only render selected blocks (heatmap density underneath stays
+  // visible). Reset whenever block selection turns on/off so the next
+  // toggle-on never starts hidden.
+  const [blocksHidden, setBlocksHidden] = useState<boolean>(false);
+
+  const setBlockSelectionActive = (next: boolean) => {
+    setBlockSelectionActiveRaw(next);
+    // Always reset hide-blocks when toggling — keeps the next session fresh.
+    setBlocksHidden(false);
+    if (next) {
+      // Reset side/mode defaults whenever block selection turns ON.
+      setBlockSelectionSide('residence');
+      setBlockSelectionMode('outbound');
+    }
+  };
 
   // Escape-key dismiss for the pinned tooltip. Listens at the document level
   // so the user can close the pinned panel from anywhere on the page without
@@ -546,14 +574,19 @@ export function CommuteView({ data }: CommuteViewProps) {
   // (mode × heatmapSide × selectedZip × directionFilter × segmentFilter ×
   // selectedPartner) state, so the corridor visualization always tracks the
   // selectable layer the user is interacting with.
+  const blockScopeActive = blockSelectionActive && selectedBlocks.size > 0;
   const blockSelectedFlows = useMemo<FlowRow[]>(() => {
     if (!blockSelectionActive) return [];
     if (selectedBlocks.size === 0) return [];
     return filterFlowsBySelectedBlocks({
       odBlocks,
       zips,
-      mode: visualMode,
-      heatmapSide,
+      // Block selection now owns its own mode/side pair, independent of the
+      // canonical visualMode / heatmapSide. The selectable block universe
+      // is keyed off blockSelectionSide; the synthetic flow direction is
+      // keyed off blockSelectionMode.
+      mode: blockSelectionMode,
+      heatmapSide: blockSelectionSide,
       selectedZip,
       nonAnchorBundle,
       directionFilter,
@@ -567,14 +600,62 @@ export function CommuteView({ data }: CommuteViewProps) {
     selectedBlocks,
     odBlocks,
     zips,
-    visualMode,
-    heatmapSide,
+    blockSelectionMode,
+    blockSelectionSide,
     selectedZip,
     nonAnchorBundle,
     directionFilter,
     segmentFilter,
     selectedPartner,
     flowsByOdKey,
+  ]);
+
+  // Synthetic block-selection bundle — drives the StatsForZip 'blocks'
+  // branch + the BottomCardStrip 'blocks' branch. Mirrors the NonAnchorStats
+  // shape: a place label, a headline total, and top-N partner aggregates by
+  // place (so multi-ZIP cities collapse to one row). Flows pivot on the
+  // partner side based on blockSelectionMode (inbound = origin partner,
+  // outbound = destination partner).
+  type BlockBundleRow = { place: string; zips: string[]; workerCount: number };
+  const blockSelectionBundle = useMemo<{
+    label: string;
+    selectedCount: number;
+    totalWorkers: number;
+    topRows: BlockBundleRow[];
+    mode: Mode;
+  } | null>(() => {
+    if (!blockScopeActive) return null;
+    const isInbound = blockSelectionMode === 'inbound';
+    const partnerKeys = new Map<string, BlockBundleRow>();
+    let total = 0;
+    for (const f of blockSelectedFlows) {
+      total += f.workerCount;
+      const place = isInbound ? f.originPlace : f.destPlace;
+      const zip = isInbound ? f.originZip : f.destZip;
+      if (!place) continue;
+      const existing = partnerKeys.get(place);
+      if (existing) {
+        existing.workerCount += f.workerCount;
+        if (!existing.zips.includes(zip)) existing.zips.push(zip);
+      } else {
+        partnerKeys.set(place, { place, zips: [zip], workerCount: f.workerCount });
+      }
+    }
+    const rows = Array.from(partnerKeys.values());
+    for (const r of rows) r.zips.sort();
+    rows.sort((a, b) => b.workerCount - a.workerCount);
+    return {
+      label: `Selected Blocks · ${selectedBlocks.size}`,
+      selectedCount: selectedBlocks.size,
+      totalWorkers: total,
+      topRows: rows,
+      mode: blockSelectionMode,
+    };
+  }, [
+    blockScopeActive,
+    blockSelectedFlows,
+    blockSelectionMode,
+    selectedBlocks,
   ]);
 
   const visualVisibleFlows = useMemo(() => {
@@ -801,6 +882,7 @@ export function CommuteView({ data }: CommuteViewProps) {
     // Block-selection keys are scoped to mode × heatmapSide × selectedZip;
     // a mode flip invalidates them.
     setSelectedBlocks(new Set());
+    setBlocksHidden(false);
   };
   const handleHeatmapSideChange = (s: HeatmapSide) => {
     setHeatmapSide(s);
@@ -808,6 +890,14 @@ export function CommuteView({ data }: CommuteViewProps) {
     // keys) flips when heatmapSide changes — clear so the user starts fresh
     // against the new block set.
     setSelectedBlocks(new Set());
+    setBlocksHidden(false);
+  };
+  const handleBlockSelectionSideChange = (s: HeatmapSide) => {
+    // Switching side flips the selectable block universe — clear stale
+    // selections so the next click starts fresh against the new set.
+    setBlockSelectionSide(s);
+    setSelectedBlocks(new Set());
+    setBlocksHidden(false);
   };
   const handleSelectZip = (z: string | null) => {
     setHover(null);
@@ -819,6 +909,7 @@ export function CommuteView({ data }: CommuteViewProps) {
     // anchor; clearing on zip change keeps the filter from silently zeroing
     // the new view.
     setSelectedBlocks(new Set());
+    setBlocksHidden(false);
     // Resolve the non-anchor place bundle. If z is null, ALL_OTHER, or an
     // anchor, clear the bundle. Otherwise gather every ZIP that shares the
     // clicked ZIP's place name so multi-ZIP places aggregate as one unit,
@@ -864,6 +955,7 @@ export function CommuteView({ data }: CommuteViewProps) {
   };
   const handleClearSelectedBlocks = () => {
     setSelectedBlocks((prev) => (prev.size === 0 ? prev : new Set()));
+    setBlocksHidden(false);
   };
   const handleSelectedBlocksChange = (
     next: Set<string> | ((prev: Set<string>) => Set<string>),
@@ -970,6 +1062,14 @@ export function CommuteView({ data }: CommuteViewProps) {
         onBlockSelectionActiveChange={setBlockSelectionActive}
         selectedBlockCount={selectedBlocks.size}
         onClearSelectedBlocks={handleClearSelectedBlocks}
+        blockSelectionSide={blockSelectionSide}
+        onBlockSelectionSideChange={handleBlockSelectionSideChange}
+        blockSelectionMode={blockSelectionMode}
+        onBlockSelectionModeChange={setBlockSelectionMode}
+        blocksHidden={blocksHidden}
+        onBlocksHiddenChange={setBlocksHidden}
+        blockScopeActive={blockScopeActive}
+        blockSelectionBundle={blockSelectionBundle}
       />
       <main className="relative w-full md:flex-1">
         {/* Map area wrapper — gives the absolutely-positioned MapCanvas
@@ -1018,6 +1118,9 @@ export function CommuteView({ data }: CommuteViewProps) {
           blockSelectionActive={blockSelectionActive}
           selectedBlocks={selectedBlocks}
           onSelectedBlocksChange={handleSelectedBlocksChange}
+          blockScopeActive={blockScopeActive}
+          blocksHidden={blocksHidden}
+          odBlocks={odBlocks}
         />
 
         {/* Layer toggle — floats above the bottom card strip in the lower-left
@@ -1369,6 +1472,8 @@ export function CommuteView({ data }: CommuteViewProps) {
           onPassThroughDestChange={handlePassThroughDest}
           cardLayer={cardLayer}
           contextBundle={contextBundle}
+          blockScopeActive={blockScopeActive}
+          blockSelectionBundle={blockSelectionBundle}
         />
       </main>
     </div>

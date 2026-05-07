@@ -99,6 +99,30 @@ interface Props {
   onBlockSelectionActiveChange: (next: boolean) => void;
   selectedBlockCount: number;
   onClearSelectedBlocks: () => void;
+  // Block-selection side / mode / hide — independent state owned by
+  // CommuteView so the BlockSelectionToggle and the panel pivot stay in sync.
+  blockSelectionSide: HeatmapSide;
+  onBlockSelectionSideChange: (next: HeatmapSide) => void;
+  blockSelectionMode: Mode;
+  onBlockSelectionModeChange: (next: Mode) => void;
+  blocksHidden: boolean;
+  onBlocksHiddenChange: (next: boolean) => void;
+  // True when block selection is on AND at least one block is selected.
+  // When true, the panel pivots from the canonical anchor / aggregate /
+  // non-anchor selectionKind branches into a synthetic 'blocks' branch.
+  blockScopeActive: boolean;
+  // Synthetic block-selection bundle — shape parallels the non-anchor
+  // bundle: a label, a headline total, top-N partner aggregates by place.
+  // Null when blockScopeActive is false.
+  blockSelectionBundle:
+    | {
+        label: string;
+        selectedCount: number;
+        totalWorkers: number;
+        topRows: Array<{ place: string; zips: string[]; workerCount: number }>;
+        mode: Mode;
+      }
+    | null;
 }
 
 export function DashboardTile({
@@ -138,6 +162,14 @@ export function DashboardTile({
   onBlockSelectionActiveChange,
   selectedBlockCount,
   onClearSelectedBlocks,
+  blockSelectionSide,
+  onBlockSelectionSideChange,
+  blockSelectionMode,
+  onBlockSelectionModeChange,
+  blocksHidden,
+  onBlocksHiddenChange,
+  blockScopeActive,
+  blockSelectionBundle,
 }: Props) {
   return (
     <aside
@@ -181,12 +213,22 @@ export function DashboardTile({
             "Aggregate Regional Flows" label, so viewMode is effectively
             unused there. In anchor view it mirrors the user's mode; in
             non-anchor view it stays disabled and locked to inbound. */}
-        <ModeToggle
-          mode={viewMode}
-          onChange={onViewModeChange}
-          disabled={selectionKind === 'non-anchor'}
-          aggregate={selectionKind === 'aggregate'}
-        />
+        {/* When block selection is the active scope, the ModeToggle pivots
+            to the block-selection mode (defaults to outbound). The canonical
+            anchor / aggregate / non-anchor branching is preserved otherwise. */}
+        {blockScopeActive ? (
+          <ModeToggle
+            mode={blockSelectionMode}
+            onChange={onBlockSelectionModeChange}
+          />
+        ) : (
+          <ModeToggle
+            mode={viewMode}
+            onChange={onViewModeChange}
+            disabled={selectionKind === 'non-anchor'}
+            aggregate={selectionKind === 'aggregate'}
+          />
+        )}
         {selectionKind === 'non-anchor' && nonAnchorBundle && (
           <div className="-mt-2">
             <button
@@ -236,11 +278,36 @@ export function DashboardTile({
           selectedCount={selectedBlockCount}
           onToggle={onBlockSelectionActiveChange}
           onClear={onClearSelectedBlocks}
+          side={blockSelectionSide}
+          onSideChange={onBlockSelectionSideChange}
+          hidden={blocksHidden}
+          onHiddenChange={onBlocksHiddenChange}
         />
 
         {/* Stats */}
         <div>
-          {selectedZip ? (
+          {blockScopeActive && blockSelectionBundle ? (
+            <StatsForZip
+              flows={flows}
+              directionFilteredFlows={directionFilteredFlows}
+              flowsInbound={flowsInbound}
+              directionFilter={directionFilter}
+              zips={zips}
+              // selectedZip stays whatever the user last picked (or null) —
+              // the 'blocks' branch in StatsForZip ignores it and reads
+              // blockSelectionBundle instead.
+              selectedZip={selectedZip ?? 'BLOCKS'}
+              selectionKind="blocks"
+              nonAnchorBundle={null}
+              visibleFlows={visibleFlows}
+              bundleFlows={bundleFlows}
+              mode={blockSelectionMode}
+              blockSelectionBundle={blockSelectionBundle}
+              selectedPartner={selectedPartner}
+              onSelectPartner={onSelectPartner}
+              onReset={() => onSelectZip(null)}
+            />
+          ) : selectedZip ? (
             <StatsForZip
               flows={flows}
               directionFilteredFlows={directionFilteredFlows}

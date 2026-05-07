@@ -19,6 +19,7 @@ import type {
   Mode,
   ZipMeta,
 } from '../types/flow';
+import type { OdBlocksFile } from '../types/lodes';
 
 interface Props {
   flows: FlowRow[];
@@ -85,6 +86,18 @@ interface Props {
   onSelectedBlocksChange: (
     next: Set<string> | ((prev: Set<string>) => Set<string>),
   ) => void;
+  // True when block selection is on AND at least one block is selected.
+  // Drives the dashed block→anchor-ZIP branch primitive and tells the SVG
+  // render loop to skip the existing non-anchor / off-corridor branch tree
+  // (the corridor layer is already narrowed to block-derived flows, so the
+  // off-corridor pass would otherwise paint redundant strands).
+  blockScopeActive: boolean;
+  // When true, the selection-circle layer's filter limits visible circles
+  // to the selected block keys. Heatmap density underneath stays visible.
+  blocksHidden: boolean;
+  // Block-level lookup — used to project each selected block's centroid for
+  // the dashed branch primitive. Null while data is loading.
+  odBlocks: OdBlocksFile | null;
 }
 
 // CARTO Dark Matter style — open, no API key required.
@@ -123,6 +136,9 @@ export function MapCanvas({
   blockSelectionActive,
   selectedBlocks,
   onSelectedBlocksChange,
+  blockScopeActive,
+  blocksHidden,
+  odBlocks,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -499,6 +515,32 @@ export function MapCanvas({
     if (map.isStyleLoaded()) apply();
     else map.once('idle', apply);
   }, [blockSelectionActive]);
+
+  // Apply the Hide Blocks filter on the selection-circle layer. When
+  // `blocksHidden` is true and there are selections, the circle layer is
+  // limited to features whose `block` property matches the selected set;
+  // unselected dots disappear while the heatmap density underneath stays
+  // visible. When `blocksHidden` is false, the filter is cleared so every
+  // selectable block renders normally.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!map.getLayer(SELECT_LAYER_ID)) return;
+      if (blocksHidden && selectedBlocks.size > 0) {
+        const keys = Array.from(selectedBlocks);
+        map.setFilter(SELECT_LAYER_ID, [
+          'in',
+          ['get', 'block'],
+          ['literal', keys],
+        ]);
+      } else {
+        map.setFilter(SELECT_LAYER_ID, null);
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once('idle', apply);
+  }, [blocksHidden, selectedBlocks]);
 
   // Mirror the selectedBlocks set into MapLibre feature-state so the circle
   // layer's paint expressions can light up the selected dots. Feature IDs
@@ -1109,6 +1151,90 @@ export function MapCanvas({
         arcGroup.appendChild(path);
       }
 
+      // ---- Block-selection branches (block → containing-anchor ZIP) ----
+      // When the block-selection scope is active, draw a dashed branch from
+      // each selected block's centroid to its containing anchor ZIP node so
+      // the user sees the link from the selection to the anchor that feeds
+      // the corridor system. Multiple blocks within the same anchor (e.g.
+      // several GWS blocks → 81601) all converge on the GWS node before the
+      // corridor pipeline takes over from there. The dashed cadence
+      // (3 4) follows the off-corridor language already used for
+      // non-anchor branches.
+      if (blockScopeActive && odBlocks) {
+        // Build a lookup: block FIPS → { lat, lng, anchorZip } and a
+        // partner-zip lookup for the synthetic `zip:<zcta>` keys used by
+        // cross-anchor centroid fallback rows.
+        const blockLookup = new Map<string, { lat: number; lng: number; anchorZip: string }>();
+        for (const a of Object.values(odBlocks.anchors)) {
+          for (const b of a.workplaceBlocks) {
+            blockLookup.set(b.block, { lat: b.lat, lng: b.lng, anchorZip: b.anchorZip });
+          }
+          for (const b of a.homeBlocks) {
+            blockLookup.set(b.block, { lat: b.lat, lng: b.lng, anchorZip: b.anchorZip });
+          }
+        }
+        for (const key of selectedBlocks) {
+          // `zip:<zcta>` synthetic keys point to a ZIP centroid (already
+          // projected). Anchor target for these rows is `selectedZip` (the
+          // crossAnchorTargetZip used by filterFlowsBySelectedBlocks).
+          let originPt: { x: number; y: number };
+          let anchorZip: string;
+          if (key.startsWith('zip:')) {
+            const zcta = key.slice(4);
+            const zMeta = zips.find((z) => z.zip === zcta);
+            if (!zMeta || zMeta.lat == null || zMeta.lng == null) continue;
+            if (!selectedZip) continue;
+            originPt = map.project([zMeta.lng, zMeta.lat]);
+            anchorZip = selectedZip;
+          } else {
+            const lk = blockLookup.get(key);
+            if (!lk) continue;
+            originPt = map.project([lk.lng, lk.lat]);
+            anchorZip = lk.anchorZip;
+          }
+          const anchorPt = projected.get(anchorZip);
+          if (!anchorPt) continue;
+          // Skip degenerate branches (block centroid practically overlapping
+          // the anchor node).
+          const dx = anchorPt.x - originPt.x;
+          const dy = anchorPt.y - originPt.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          if (len < 4) continue;
+          // Lightly-curved cubic — avoids a perfectly straight line when
+          // many blocks fan into the same anchor.
+          const hashStr = key;
+          let hash = 0;
+          for (let i = 0; i < hashStr.length; i++) {
+            hash = (hash * 31 + hashStr.charCodeAt(i)) | 0;
+          }
+          const sign = hash & 1 ? 1 : -1;
+          const perpFrac = 0.06 + ((Math.abs(hash) % 100) / 100) * 0.05;
+          const px = -dy / len;
+          const py = dx / len;
+          const c1x = originPt.x + dx * 0.35 + px * len * perpFrac * sign;
+          const c1y = originPt.y + dy * 0.35 + py * len * perpFrac * sign;
+          const c2x = originPt.x + dx * 0.7 - px * len * perpFrac * sign;
+          const c2y = originPt.y + dy * 0.7 - py * len * perpFrac * sign;
+          const pathD =
+            `M ${originPt.x.toFixed(1)} ${originPt.y.toFixed(1)} ` +
+            `C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ` +
+            `${c2x.toFixed(1)} ${c2y.toFixed(1)}, ` +
+            `${anchorPt.x.toFixed(1)} ${anchorPt.y.toFixed(1)}`;
+          const branch = document.createElementNS(NS, 'path');
+          branch.setAttribute('d', pathD);
+          branch.setAttribute('fill', 'none');
+          branch.setAttribute('stroke', 'var(--accent)');
+          branch.setAttribute('stroke-width', '1.2');
+          branch.setAttribute('stroke-linecap', 'round');
+          branch.setAttribute('stroke-linejoin', 'round');
+          branch.setAttribute('stroke-dasharray', '3 4');
+          branch.setAttribute('opacity', '0.85');
+          branch.style.pointerEvents = 'none';
+          branch.setAttribute('aria-hidden', 'true');
+          offCorridorGroup.appendChild(branch);
+        }
+      }
+
       // ---- Off-corridor flows ----
       // Two sources feed this layer:
       //   1. When `bundleFlows` is non-empty (non-anchor selection) we draw
@@ -1120,6 +1246,10 @@ export function MapCanvas({
       //      whose corridorPath was empty at build time, drawn as the same
       //      branching primitive (single-destination → single branch).
       // Self-flows are excluded in both cases — they keep their ring render.
+      //
+      // Skipped entirely while the block-selection scope is active — the
+      // corridor layer is already narrowed to block-derived flows, and the
+      // block→anchor dashed branches above carry the selection-side detail.
       const corridorFlowIds = new Set<string>();
       for (const agg of visibleCorridorMap.values()) {
         for (const fr of agg.flows) corridorFlowIds.add(fr.flowId);
@@ -1128,7 +1258,9 @@ export function MapCanvas({
       // Source-flow set: bundle flows when present, else off-corridor
       // stragglers from visibleFlows. Prevents double-rendering when a
       // bundle flow is also off-corridor.
-      const sourceFlows: FlowRow[] = bundleFlows.length > 0
+      const sourceFlows: FlowRow[] = blockScopeActive
+        ? []
+        : bundleFlows.length > 0
         ? bundleFlows.filter((f) => f.originZip !== f.destZip)
         : visibleFlows.filter(
             (f) =>
@@ -1504,6 +1636,9 @@ export function MapCanvas({
     onHoverCorridor,
     onClickCorridor,
     prefersReducedMotion,
+    blockScopeActive,
+    selectedBlocks,
+    odBlocks,
   ]);
 
   return (

@@ -30,10 +30,22 @@ interface Props {
   selectedZip: string;
   // Selection class — when 'non-anchor', the panel pivots on origin (the
   // searched residence ZIP/place) and shows its workers' anchor destinations.
-  selectionKind: 'aggregate' | 'anchor' | 'non-anchor';
+  // When 'blocks', the panel pivots on a synthetic block-selection bundle
+  // (block-derived flows aggregated by partner-side place).
+  selectionKind: 'aggregate' | 'anchor' | 'non-anchor' | 'blocks';
   // Set when selectionKind === 'non-anchor'. Carries the place name and
   // every ZIP that shares it.
   nonAnchorBundle: { place: string; zips: string[] } | null;
+  // Set when selectionKind === 'blocks'. Carries the synthetic block
+  // selection's headline + top-N partner aggregates. The mode field reflects
+  // the user's block-scope inbound/outbound choice (defaults to outbound).
+  blockSelectionBundle?: {
+    label: string;
+    selectedCount: number;
+    totalWorkers: number;
+    topRows: Array<{ place: string; zips: string[]; workerCount: number }>;
+    mode: Mode;
+  } | null;
   // Map-facing visible flows — for non-anchor this is the aggregate inbound
   // network (so the map shows full context). Stats panels read `bundleFlows`
   // for the non-anchor pivot instead.
@@ -68,6 +80,7 @@ export function StatsForZip({
   selectedZip,
   selectionKind,
   nonAnchorBundle,
+  blockSelectionBundle,
   bundleFlows,
   mode,
   selectedPartner,
@@ -75,6 +88,19 @@ export function StatsForZip({
   onReset,
   slot,
 }: Props) {
+  // Block-selection branch — pivot on the synthetic bundle (label, total,
+  // top-N partner rows). Mode-aware: outbound (default) shows where the
+  // selected workers'/residents' partners are; inbound flips the pivot.
+  if (selectionKind === 'blocks' && blockSelectionBundle) {
+    return (
+      <BlockSelectionStats
+        bundle={blockSelectionBundle}
+        selectedPartner={selectedPartner}
+        onSelectPartner={onSelectPartner}
+      />
+    );
+  }
+
   const meta = zips.find((z) => z.zip === selectedZip);
   if (!meta) return null;
 
@@ -961,6 +987,204 @@ function NonAnchorStats({
           {top10.length === 0 && (
             <li className="text-xs italic" style={{ color: 'var(--text-dim)' }}>
               No anchor commute flows from {bundle.place} in this view.
+            </li>
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// BlockSelectionStats — synthetic-anchor stats for the block-selection scope.
+// Mirrors the NonAnchorStats layout (headline tile + Top-N partner list with
+// proportional bars) but reads from the block-derived flow bundle. The mode
+// in the bundle drives the partner side: outbound shows where the selected
+// blocks send workers/residents, inbound shows where they come from.
+// -----------------------------------------------------------------------------
+interface BlockSelectionStatsProps {
+  bundle: {
+    label: string;
+    selectedCount: number;
+    totalWorkers: number;
+    topRows: Array<{ place: string; zips: string[]; workerCount: number }>;
+    mode: Mode;
+  };
+  selectedPartner: { place: string; zips: string[] } | null;
+  onSelectPartner: (p: { place: string; zips: string[] } | null) => void;
+}
+
+function BlockSelectionStats({
+  bundle,
+  selectedPartner,
+  onSelectPartner,
+}: BlockSelectionStatsProps) {
+  const isInbound = bundle.mode === 'inbound';
+  const top10 = bundle.topRows.slice(0, 10);
+  const remainderCount = bundle.topRows
+    .slice(10)
+    .reduce((acc, r) => acc + r.workerCount, 0);
+  const headlineTotal = bundle.totalWorkers;
+
+  // Partner-scoped flow value — workers in flows whose partner side is one
+  // of the selectedPartner.zips. Used to override the headline tile when
+  // the user pins a single partner row.
+  const partnerSet = selectedPartner ? new Set(selectedPartner.zips) : null;
+  const partnerWorkers = partnerSet
+    ? bundle.topRows.reduce((acc, r) => {
+        for (const z of r.zips) {
+          if (partnerSet.has(z)) return acc + r.workerCount;
+        }
+        return acc;
+      }, 0)
+    : 0;
+
+  const maxCount = Math.max(
+    1,
+    ...top10.map((r) => r.workerCount),
+    remainderCount,
+  );
+
+  // Direction copy mirrors the canonical anchor-side stats so the read
+  // pattern stays familiar.
+  const tileTitle = isInbound
+    ? 'Inbound Workers to Selected Blocks'
+    : 'Outbound Workers from Selected Blocks';
+  const tileBody = isInbound
+    ? `workers commute INTO the selected ${bundle.selectedCount === 1 ? 'block' : 'blocks'}`
+    : `workers commute OUT of the selected ${bundle.selectedCount === 1 ? 'block' : 'blocks'}`;
+  const listTitle = isInbound
+    ? 'Top origin places sending to the selection'
+    : 'Top destination places of the selection';
+  const remainderLabel = isInbound
+    ? 'All other origins'
+    : 'All other destinations';
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <div>
+          <div className="text-base font-semibold" style={{ color: 'var(--text-h)' }}>
+            {bundle.label}
+          </div>
+          <div className="text-[11px] tnum" style={{ color: 'var(--text-dim)' }}>
+            Block-derived flows · LODES
+          </div>
+        </div>
+      </div>
+
+      <div className="py-2.5 border-b" style={{ borderColor: 'var(--rule)' }}>
+        <div
+          className="text-[10px] font-medium uppercase tracking-wider"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          {tileTitle}
+        </div>
+        <div className="mt-1 flex items-baseline gap-2">
+          <span
+            className="text-xl font-semibold tnum"
+            style={{ color: 'var(--text-h)' }}
+          >
+            {fmtInt(selectedPartner ? partnerWorkers : headlineTotal)}
+          </span>
+          <span className="text-[11px] tnum" style={{ color: 'var(--text-dim)' }}>
+            {selectedPartner
+              ? `${fmtPct(partnerWorkers / Math.max(1, headlineTotal))} of selected-block flow`
+              : `${fmtInt(headlineTotal)} workers across ${bundle.selectedCount} block(s)`}
+          </span>
+        </div>
+        <div className="mt-0.5 text-[10px]" style={{ color: 'var(--text-dim)' }}>
+          {selectedPartner
+            ? `${fmtInt(partnerWorkers)} workers attributed to ${selectedPartner.place}`
+            : `${fmtInt(headlineTotal)} ${tileBody}`}
+        </div>
+      </div>
+
+      <div className="py-2.5 border-b" style={{ borderColor: 'var(--rule)' }}>
+        <div
+          className="text-[10px] font-medium uppercase tracking-wider mb-2"
+          style={{ color: 'var(--text-dim)' }}
+        >
+          {listTitle}
+        </div>
+        <ul className="space-y-1.5">
+          {top10.map((r) => {
+            const share = r.workerCount / Math.max(1, headlineTotal);
+            const barW = (r.workerCount / maxCount) * 100;
+            const isSelected = selectedPartner?.place === r.place;
+            const isOtherSelected = selectedPartner != null && !isSelected;
+            return (
+              <li key={r.place} className="text-xs">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectPartner(
+                      isSelected ? null : { place: r.place, zips: r.zips },
+                    )
+                  }
+                  aria-pressed={isSelected}
+                  className="w-full text-left rounded-md px-1.5 py-1 transition-colors"
+                  style={{
+                    background: isSelected ? 'var(--accent-soft)' : 'transparent',
+                    border: `1px solid ${isSelected ? 'var(--accent)' : 'transparent'}`,
+                    opacity: isOtherSelected ? 0.45 : 1,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div className="flex justify-between mb-0.5">
+                    <span style={{ color: isSelected ? 'var(--accent)' : 'var(--text-h)' }}>
+                      {r.place}{' '}
+                      <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                        · {r.zips.length > 1 ? 'multiple' : r.zips[0]}
+                      </span>
+                    </span>
+                    <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                      {fmtInt(r.workerCount)} · {fmtPct(share)}
+                    </span>
+                  </div>
+                  <div
+                    className="h-[3px] rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,0.05)' }}
+                  >
+                    <div
+                      className="h-full"
+                      style={{
+                        width: `${barW}%`,
+                        background: 'var(--accent)',
+                        opacity: isSelected ? 1 : 0.8,
+                      }}
+                    />
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+          {remainderCount > 0 && (
+            <li className="text-xs">
+              <div className="flex justify-between mb-0.5">
+                <span style={{ color: 'var(--text-h)' }}>{remainderLabel}</span>
+                <span className="tnum" style={{ color: 'var(--text-dim)' }}>
+                  {fmtInt(remainderCount)} ·{' '}
+                  {fmtPct(remainderCount / Math.max(1, headlineTotal))}
+                </span>
+              </div>
+              <div
+                className="h-[3px] rounded-full overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.05)' }}
+              >
+                <div
+                  className="h-full"
+                  style={{
+                    width: `${(remainderCount / maxCount) * 100}%`,
+                    background: 'rgba(200,205,215,0.55)',
+                  }}
+                />
+              </div>
+            </li>
+          )}
+          {top10.length === 0 && (
+            <li className="text-xs italic" style={{ color: 'var(--text-dim)' }}>
+              No flows from the current block selection in this view.
             </li>
           )}
         </ul>
