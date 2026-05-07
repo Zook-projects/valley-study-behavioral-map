@@ -7,6 +7,7 @@ import { ModeToggle } from './ModeToggle';
 import { DirectionToggle } from './DirectionToggle';
 import { ViewLayerToggle, type ViewLayer } from './ViewLayerToggle';
 import { HeatmapModeToggle, type HeatmapSide } from './HeatmapModeToggle';
+import { BlockSelectionToggle } from './BlockSelectionToggle';
 import { ZipSelector } from './ZipSelector';
 import { StatsAggregated } from './StatsAggregated';
 import { StatsForZip } from './StatsForZip';
@@ -90,6 +91,14 @@ interface Props {
   // Optional regional context bundle — passed straight through to the
   // methodology footer so its Sources block can list every agency.
   contextBundle?: ContextBundle | null;
+  // Block-selection mode — when on, the map overlays a clickable circle layer
+  // over the heatmap source and supports drag-rectangle box select. Selected
+  // blocks drive a synthetic FlowRow set in CommuteView that narrows the
+  // corridor visualization to the selected residents'/workers' contribution.
+  blockSelectionActive: boolean;
+  onBlockSelectionActiveChange: (next: boolean) => void;
+  selectedBlockCount: number;
+  onClearSelectedBlocks: () => void;
 }
 
 export function DashboardTile({
@@ -125,6 +134,10 @@ export function DashboardTile({
   heatmapLegendSide,
   segmentFilter,
   contextBundle = null,
+  blockSelectionActive,
+  onBlockSelectionActiveChange,
+  selectedBlockCount,
+  onClearSelectedBlocks,
 }: Props) {
   return (
     <aside
@@ -211,6 +224,18 @@ export function DashboardTile({
           zips={zips}
           selectedZip={selectedZip}
           onSelectZip={onSelectZip}
+        />
+
+        {/* Block-selection mode — sits directly under the ZIP/place selector.
+            Always available (per design). When on, MapCanvas overlays a
+            clickable circle layer over the heatmap source so the user can
+            click or drag-select residential / workplace blocks; selection
+            narrows the corridor visualization to those blocks' flows. */}
+        <BlockSelectionToggle
+          active={blockSelectionActive}
+          selectedCount={selectedBlockCount}
+          onToggle={onBlockSelectionActiveChange}
+          onClear={onClearSelectedBlocks}
         />
 
         {/* Stats */}

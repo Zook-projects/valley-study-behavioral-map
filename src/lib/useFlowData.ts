@@ -33,6 +33,12 @@ export interface FlowData {
   zips: ZipMeta[];
   corridorIndex: Map<CorridorId, CorridorRecord>;
   flowIndex: Map<CorridorId, CorridorFlowEntry[]>;
+  // O(1) lookup of FlowRow by `${originZip}-${destZip}`. Built once from
+  // flowsInbound ∪ flowsOutbound (anchor↔anchor pairs dedupe to the inbound
+  // copy, which carries the same workerCount and corridorPath). Used by
+  // filterFlowsBySelectedBlocks to resolve the canonical corridor path for
+  // a synthetic block-aggregated flow row.
+  flowsByOdKey: Map<string, FlowRow>;
   racFile: RacFile;
   wacFile: WacFile;
   odSummary: OdSummaryFile;
@@ -184,10 +190,27 @@ export function useFlowData(): UseFlowDataResult {
     return unionFlowsByPair(flowsInbound, flowsOutbound);
   }, [flowsInbound, flowsOutbound]);
 
+  // OD-keyed flow lookup — `${originZip}-${destZip}` → FlowRow. Anchor↔anchor
+  // pairs appear in both inbound and outbound files with identical
+  // workerCount and corridorPath; the inbound copy wins on collision so the
+  // canonical path is stable.
+  const flowsByOdKey = useMemo<Map<string, FlowRow> | null>(() => {
+    if (!flowsInbound || !flowsOutbound) return null;
+    const out = new Map<string, FlowRow>();
+    for (const f of flowsInbound) out.set(`${f.originZip}-${f.destZip}`, f);
+    for (const f of flowsOutbound) {
+      const key = `${f.originZip}-${f.destZip}`;
+      if (out.has(key)) continue;
+      out.set(key, f);
+    }
+    return out;
+  }, [flowsInbound, flowsOutbound]);
+
   const ready =
     !!flowsInbound &&
     !!flowsOutbound &&
     !!flowsRegional &&
+    !!flowsByOdKey &&
     !!zips &&
     !!corridorIndex &&
     !!flowIndex &&
@@ -200,6 +223,7 @@ export function useFlowData(): UseFlowDataResult {
         flowsInbound: flowsInbound!,
         flowsOutbound: flowsOutbound!,
         flowsRegional: flowsRegional!,
+        flowsByOdKey: flowsByOdKey!,
         zips: zips!,
         corridorIndex: corridorIndex!,
         flowIndex: flowIndex!,

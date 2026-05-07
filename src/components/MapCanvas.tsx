@@ -75,6 +75,16 @@ interface Props {
   // strands. ZIP nodes + labels remain visible in both modes so selection
   // still works in heatmap view.
   viewLayer: 'corridor' | 'heatmap';
+  // Block-selection mode — when on, an interactive circle layer overlays the
+  // heatmap source so the user can click or drag-rectangle-select blocks. The
+  // layer is visible regardless of viewLayer so selection works in corridor
+  // view too. Selected feature keys can be either block FIPS codes or
+  // synthetic `zip:<zcta>` strings (cross-anchor centroid fallback rows).
+  blockSelectionActive: boolean;
+  selectedBlocks: Set<string>;
+  onSelectedBlocksChange: (
+    next: Set<string> | ((prev: Set<string>) => Set<string>),
+  ) => void;
 }
 
 // CARTO Dark Matter style — open, no API key required.
@@ -110,10 +120,28 @@ export function MapCanvas({
   onClickEmpty,
   heatmapData,
   viewLayer,
+  blockSelectionActive,
+  selectedBlocks,
+  onSelectedBlocksChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MLMap | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Box-select rectangle overlay (DOM, not SVG — sits above the map canvas
+  // and is activated only while the user is dragging in selection mode).
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  // Latest selection callback — held in a ref so the init-once map handlers
+  // (click, drag) always reach the current closure without re-binding.
+  const onSelectedBlocksChangeRef = useRef(onSelectedBlocksChange);
+  useEffect(() => {
+    onSelectedBlocksChangeRef.current = onSelectedBlocksChange;
+  }, [onSelectedBlocksChange]);
+  // Likewise for the active flag — read inside MapLibre event handlers that
+  // are bound once on style.load.
+  const blockSelectionActiveRef = useRef(blockSelectionActive);
+  useEffect(() => {
+    blockSelectionActiveRef.current = blockSelectionActive;
+  }, [blockSelectionActive]);
 
   // Keep onClickEmpty fresh inside the init-once effect — that effect captures
   // its closures on first mount, so we deref the latest callback on each click
@@ -262,6 +290,12 @@ export function MapCanvas({
       map.addSource(HEATMAP_SOURCE_ID, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
+        // Auto-assign stable numeric feature IDs so the block-selection
+        // circle layer can drive its paint state via setFeatureState. The
+        // build-time GeoJSON doesn't carry IDs and we don't need them on
+        // the heatmap layer itself, but the selection layer requires
+        // stable IDs to highlight selected dots.
+        generateId: true,
       });
       const firstSymbolLayerId =
         style.layers.find((l) => l.type === 'symbol')?.id;
@@ -367,6 +401,318 @@ export function MapCanvas({
       map.once('idle', apply);
     }
   }, [heatmapData, viewLayer]);
+
+  // ---- Block-selection circle layer ----------------------------------------
+  // Sibling to the heatmap layer, sourced from the same od-blocks GeoJSON.
+  // Visible only when blockSelectionActive is true; serves as both the
+  // hit-target for clicks and the visual feedback for selected blocks.
+  // Block FIPS (or `zip:<zcta>` synthetic key for cross-anchor centroid
+  // fallback rows) is exposed as feature.properties.block for hit-testing
+  // and as a paint expression input for selected styling.
+  const SELECT_LAYER_ID = 'od-blocks-select-layer';
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const ensureLayer = () => {
+      if (map.getLayer(SELECT_LAYER_ID)) return;
+      if (!map.getSource(HEATMAP_SOURCE_ID)) return; // wait for heatmap source
+      const style = map.getStyle();
+      if (!style?.layers) return;
+      const firstSymbolLayerId =
+        style.layers.find((l) => l.type === 'symbol')?.id;
+      map.addLayer(
+        {
+          id: SELECT_LAYER_ID,
+          type: 'circle',
+          source: HEATMAP_SOURCE_ID,
+          paint: {
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              8, 3,
+              11, 5,
+              14, 7,
+            ],
+            // Selected blocks render brighter + opaque; unselected render
+            // as low-opacity scaffolding the user can see to know what is
+            // hit-testable. Driven by feature-state `selected`, set by a
+            // sibling effect that mirrors the React selectedBlocks set.
+            'circle-color': [
+              'case',
+              ['boolean', ['feature-state', 'selected'], false],
+              '#ffb958',
+              'rgba(255, 255, 255, 0.7)',
+            ],
+            'circle-opacity': [
+              'case',
+              ['boolean', ['feature-state', 'selected'], false],
+              0.95,
+              0.65,
+            ],
+            'circle-stroke-color': [
+              'case',
+              ['boolean', ['feature-state', 'selected'], false],
+              '#ffd28a',
+              'rgba(0, 0, 0, 0.6)',
+            ],
+            'circle-stroke-width': [
+              'case',
+              ['boolean', ['feature-state', 'selected'], false],
+              1.5,
+              0.6,
+            ],
+          },
+          // Initial visibility tracks the current React flag so a layer
+          // registered AFTER the visibility-toggle effect already fired
+          // still comes up visible. Ref read is safe here — ensureLayer
+          // runs on map events, never during render.
+          layout: {
+            visibility: blockSelectionActiveRef.current ? 'visible' : 'none',
+          },
+        },
+        firstSymbolLayerId,
+      );
+    };
+    if (map.isStyleLoaded()) ensureLayer();
+    map.on('style.load', ensureLayer);
+    // Also try once data has settled (the heatmap source may register on idle).
+    map.on('idle', ensureLayer);
+    return () => {
+      map.off('style.load', ensureLayer);
+      map.off('idle', ensureLayer);
+    };
+  }, []);
+
+  // Toggle visibility of the selection layer with the mode flag. The heatmap
+  // layer is independent — both can be visible simultaneously when the user
+  // is in heatmap view + selection mode.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      if (!map.getLayer(SELECT_LAYER_ID)) return;
+      map.setLayoutProperty(
+        SELECT_LAYER_ID,
+        'visibility',
+        blockSelectionActive ? 'visible' : 'none',
+      );
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once('idle', apply);
+  }, [blockSelectionActive]);
+
+  // Mirror the selectedBlocks set into MapLibre feature-state so the circle
+  // layer's paint expressions can light up the selected dots. Feature IDs
+  // come from `properties.block` — the heatmap source needs `generateId`
+  // because the build-time GeoJSON doesn't carry numeric IDs. Instead of
+  // adding promoteId (which would require source re-registration), we walk
+  // the current feature collection and apply state by querying the source.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const src = map.getSource(HEATMAP_SOURCE_ID) as
+        | GeoJSONSource
+        | undefined;
+      if (!src) return;
+      // querySourceFeatures returns currently-loaded features; for a small
+      // GeoJSON source loaded all at once, that's everything. Walk and set
+      // state per feature based on whether its `block` property is selected.
+      const feats = map.querySourceFeatures(HEATMAP_SOURCE_ID);
+      for (const f of feats) {
+        const blockKey = (f.properties as { block?: string } | null)?.block;
+        if (blockKey == null) continue;
+        // Feature IDs in querySourceFeatures are not stable across calls
+        // unless promoteId is set. Rely on the (source, sourceLayer, id)
+        // contract: features have an `id` property when promoted. As a
+        // fallback, set state via the feature's `id` (numeric, MapLibre-
+        // assigned) — cleared when the source data updates. This is a
+        // best-effort highlight; the canonical source of truth for which
+        // blocks are filtered is the React state, not the map state.
+        if (f.id == null) continue;
+        const selected = selectedBlocks.has(blockKey);
+        map.setFeatureState(
+          { source: HEATMAP_SOURCE_ID, id: f.id },
+          { selected },
+        );
+      }
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once('idle', apply);
+  }, [selectedBlocks, heatmapData]);
+
+  // ---- Click + box-select interaction --------------------------------------
+  // Click handler for individual blocks; mousedown handler for drag-rectangle.
+  // Bound once on map init via the existing init-once effect — we attach
+  // through a separate effect here so the handlers can read fresh refs to
+  // selection state.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Click on a feature in the selection layer → toggle/replace.
+    const onClickLayer = (e: maplibregl.MapMouseEvent & {
+      features?: maplibregl.MapGeoJSONFeature[];
+    }) => {
+      if (!blockSelectionActiveRef.current) return;
+      if (!e.features || e.features.length === 0) return;
+      // Stop propagation so the empty-map click handler doesn't fire and
+      // clear an unrelated pinned tooltip.
+      e.originalEvent?.stopPropagation();
+      const additive = e.originalEvent?.shiftKey === true;
+      const blockKey = (e.features[0].properties as { block?: string } | null)
+        ?.block;
+      if (!blockKey) return;
+      onSelectedBlocksChangeRef.current((prev) => {
+        if (additive) {
+          const next = new Set(prev);
+          if (next.has(blockKey)) next.delete(blockKey);
+          else next.add(blockKey);
+          return next;
+        }
+        // Plain click: if the only selection is this block, clear; else
+        // replace with just this block. Lets a re-click of the same single
+        // block clear the selection.
+        if (prev.size === 1 && prev.has(blockKey)) return new Set();
+        return new Set([blockKey]);
+      });
+    };
+
+    map.on('click', SELECT_LAYER_ID, onClickLayer);
+    // Cursor affordance.
+    const onEnter = () => {
+      if (blockSelectionActiveRef.current) {
+        map.getCanvas().style.cursor = 'pointer';
+      }
+    };
+    const onLeave = () => {
+      map.getCanvas().style.cursor = '';
+    };
+    map.on('mouseenter', SELECT_LAYER_ID, onEnter);
+    map.on('mouseleave', SELECT_LAYER_ID, onLeave);
+
+    return () => {
+      map.off('click', SELECT_LAYER_ID, onClickLayer);
+      map.off('mouseenter', SELECT_LAYER_ID, onEnter);
+      map.off('mouseleave', SELECT_LAYER_ID, onLeave);
+    };
+  }, []);
+
+  // Drag-rectangle box select. Bound on the canvas element so MapLibre's
+  // own dragPan can be selectively suppressed for the duration of the drag.
+  // Only fires when blockSelectionActive (read via ref so we don't re-bind).
+  useEffect(() => {
+    const map = mapRef.current;
+    const box = boxRef.current;
+    if (!map || !box) return;
+    const canvas = map.getCanvasContainer();
+
+    let dragStart: { x: number; y: number } | null = null;
+    let dragEnd: { x: number; y: number } | null = null;
+    let additive = false;
+
+    const containerPoint = (e: MouseEvent): { x: number; y: number } => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+
+    const updateBox = () => {
+      if (!dragStart || !dragEnd) {
+        box.style.display = 'none';
+        return;
+      }
+      const minX = Math.min(dragStart.x, dragEnd.x);
+      const minY = Math.min(dragStart.y, dragEnd.y);
+      const w = Math.abs(dragEnd.x - dragStart.x);
+      const h = Math.abs(dragEnd.y - dragStart.y);
+      box.style.display = 'block';
+      box.style.left = `${minX}px`;
+      box.style.top = `${minY}px`;
+      box.style.width = `${w}px`;
+      box.style.height = `${h}px`;
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (!blockSelectionActiveRef.current) return;
+      // Left button only.
+      if (e.button !== 0) return;
+      // Don't start a drag-rectangle if the mousedown landed on a block
+      // dot — let the click handler handle it. queryRenderedFeatures at the
+      // start point reveals whether the user pressed on the select layer.
+      const p = containerPoint(e);
+      const direct = map.queryRenderedFeatures([p.x, p.y], {
+        layers: [SELECT_LAYER_ID],
+      });
+      if (direct.length > 0) return;
+
+      e.preventDefault();
+      additive = e.metaKey || e.ctrlKey;
+      dragStart = p;
+      dragEnd = p;
+      updateBox();
+      map.dragPan.disable();
+      map.boxZoom.disable();
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragStart) return;
+      dragEnd = containerPoint(e);
+      updateBox();
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      try {
+        if (!dragStart || !dragEnd) return;
+        const minX = Math.min(dragStart.x, dragEnd.x);
+        const minY = Math.min(dragStart.y, dragEnd.y);
+        const maxX = Math.max(dragStart.x, dragEnd.x);
+        const maxY = Math.max(dragStart.y, dragEnd.y);
+        // Treat very small drags as missed clicks — let them through.
+        if (maxX - minX < 3 && maxY - minY < 3) return;
+        const features = map.queryRenderedFeatures(
+          [
+            [minX, minY],
+            [maxX, maxY],
+          ],
+          { layers: [SELECT_LAYER_ID] },
+        );
+        const hits: string[] = [];
+        for (const f of features) {
+          const blockKey = (f.properties as { block?: string } | null)?.block;
+          if (blockKey) hits.push(blockKey);
+        }
+        if (hits.length === 0) return;
+        // Stop the synthetic click from firing onClickEmpty and dismissing
+        // any pinned tooltip when the user just finished a box-select.
+        e.preventDefault();
+        e.stopPropagation();
+        onSelectedBlocksChangeRef.current((prev) => {
+          if (additive) {
+            const next = new Set(prev);
+            for (const k of hits) next.add(k);
+            return next;
+          }
+          return new Set(hits);
+        });
+      } finally {
+        dragStart = null;
+        dragEnd = null;
+        updateBox();
+        map.dragPan.enable();
+        map.boxZoom.enable();
+      }
+    };
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    return () => {
+      canvas.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
 
   // ---- Fit bounds when a non-anchor bundle is selected ---------------------
   // Frame the bundle's ZIP centroids together with the 11 workplace anchors so
@@ -1170,6 +1516,21 @@ export function MapCanvas({
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
+        }}
+      />
+      {/* Box-select rectangle — sits above the canvas while the user is
+          drag-selecting blocks. Hidden by default; the box-select effect
+          updates left/top/width/height + display directly via the ref. */}
+      <div
+        ref={boxRef}
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          display: 'none',
+          border: '1.5px dashed var(--accent)',
+          background: 'rgba(255, 185, 88, 0.08)',
+          pointerEvents: 'none',
+          zIndex: 10,
         }}
       />
       {/* Pointer-events on the interactive arc + node geometry; nodes and

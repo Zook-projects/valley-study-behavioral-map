@@ -32,6 +32,7 @@ import {
   detailForNonAnchorOrigin,
   detailForZip,
   filterByDirection,
+  filterFlowsBySelectedBlocks,
   filterForSelection,
   isAnchorZip,
 } from '../lib/flowQueries';
@@ -251,6 +252,7 @@ export function CommuteView({ data }: CommuteViewProps) {
     flowsInbound,
     flowsOutbound,
     flowsRegional,
+    flowsByOdKey,
     zips,
     corridorIndex,
     flowIndex,
@@ -331,6 +333,17 @@ export function CommuteView({ data }: CommuteViewProps) {
   // The guard suppresses the hover tooltip for one specific corridor until the
   // user's mouse leaves it, at which point the suppression clears.
   const [suppressedHover, setSuppressedHover] = useState<CorridorId | null>(null);
+  // Block selection mode + selected block FIPS codes (and `zip:<zcta>`
+  // synthetic keys for cross-anchor centroid fallback rows). Drives a
+  // synthetic FlowRow set via filterFlowsBySelectedBlocks that narrows the
+  // corridor visualization to just the selected residents'/workers'
+  // contribution to each path. Reset effects below clear the selection any
+  // time the underlying scope (zip / mode / heatmapSide / nonAnchorBundle)
+  // changes — a stale selection would silently filter the new view.
+  const [blockSelectionActive, setBlockSelectionActive] = useState(false);
+  const [selectedBlocks, setSelectedBlocks] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   // Escape-key dismiss for the pinned tooltip. Listens at the document level
   // so the user can close the pinned panel from anywhere on the page without
@@ -526,7 +539,52 @@ export function CommuteView({ data }: CommuteViewProps) {
     selectionKind === 'aggregate'
       ? [...directionFilteredInbound, ...visualEastWestTransits]
       : directionFilteredFlows;
+  // Synthetic block-selection flow set. Empty when selection mode is off or
+  // no blocks are selected; otherwise carries (origin, dest) entries with
+  // the block-aggregated worker count and the canonical corridorPath. Built
+  // from the same block universe the heatmap surfaces under the current
+  // (mode × heatmapSide × selectedZip × directionFilter × segmentFilter ×
+  // selectedPartner) state, so the corridor visualization always tracks the
+  // selectable layer the user is interacting with.
+  const blockSelectedFlows = useMemo<FlowRow[]>(() => {
+    if (!blockSelectionActive) return [];
+    if (selectedBlocks.size === 0) return [];
+    return filterFlowsBySelectedBlocks({
+      odBlocks,
+      zips,
+      mode: visualMode,
+      heatmapSide,
+      selectedZip,
+      nonAnchorBundle,
+      directionFilter,
+      segmentFilter,
+      selectedPartner,
+      selectedBlocks,
+      flowsByOdKey,
+    });
+  }, [
+    blockSelectionActive,
+    selectedBlocks,
+    odBlocks,
+    zips,
+    visualMode,
+    heatmapSide,
+    selectedZip,
+    nonAnchorBundle,
+    directionFilter,
+    segmentFilter,
+    selectedPartner,
+    flowsByOdKey,
+  ]);
+
   const visualVisibleFlows = useMemo(() => {
+    // Block selection short-circuits the existing pipeline — the synthetic
+    // flow set already reflects every active filter (direction, segment,
+    // partner) inside filterFlowsBySelectedBlocks, and corridor widths
+    // should reflect just the selected residents'/workers' contribution.
+    if (blockSelectionActive && selectedBlocks.size > 0) {
+      return blockSelectedFlows;
+    }
     if (selectionKind === 'non-anchor') return directionFilteredInbound;
     return filterForSelection(
       visualDirectionFiltered,
@@ -534,6 +592,9 @@ export function CommuteView({ data }: CommuteViewProps) {
       visualMode,
     );
   }, [
+    blockSelectionActive,
+    selectedBlocks,
+    blockSelectedFlows,
     selectionKind,
     directionFilteredInbound,
     visualDirectionFiltered,
@@ -737,6 +798,16 @@ export function CommuteView({ data }: CommuteViewProps) {
     // orphaned partner across views where it wouldn't be visible.
     setSelectedPartner(null);
     clearPassThrough();
+    // Block-selection keys are scoped to mode × heatmapSide × selectedZip;
+    // a mode flip invalidates them.
+    setSelectedBlocks(new Set());
+  };
+  const handleHeatmapSideChange = (s: HeatmapSide) => {
+    setHeatmapSide(s);
+    // Block list shown to the user (and the universe of valid selection
+    // keys) flips when heatmapSide changes — clear so the user starts fresh
+    // against the new block set.
+    setSelectedBlocks(new Set());
   };
   const handleSelectZip = (z: string | null) => {
     setHover(null);
@@ -744,6 +815,10 @@ export function CommuteView({ data }: CommuteViewProps) {
     setSelectedZip(z);
     setSelectedPartner(null);
     clearPassThrough();
+    // Selection keys (block FIPS / `zip:<zcta>`) are scoped to the active
+    // anchor; clearing on zip change keeps the filter from silently zeroing
+    // the new view.
+    setSelectedBlocks(new Set());
     // Resolve the non-anchor place bundle. If z is null, ALL_OTHER, or an
     // anchor, clear the bundle. Otherwise gather every ZIP that shares the
     // clicked ZIP's place name so multi-ZIP places aggregate as one unit,
@@ -786,6 +861,22 @@ export function CommuteView({ data }: CommuteViewProps) {
     setHover(null);
     setPinned(null);
     setSegmentFilter(next);
+  };
+  const handleClearSelectedBlocks = () => {
+    setSelectedBlocks((prev) => (prev.size === 0 ? prev : new Set()));
+  };
+  const handleSelectedBlocksChange = (
+    next: Set<string> | ((prev: Set<string>) => Set<string>),
+  ) => {
+    setSelectedBlocks((prev) => {
+      const resolved =
+        typeof next === 'function' ? (next as (p: Set<string>) => Set<string>)(prev) : next;
+      // Clear any open hover/pin so corridor tooltips reflect the new flow set.
+      if (resolved.size !== prev.size) {
+        setHover(null);
+      }
+      return resolved;
+    });
   };
   const handlePassThroughOrigin = (
     sel: { place: string; zips: string[] } | null,
@@ -854,7 +945,7 @@ export function CommuteView({ data }: CommuteViewProps) {
         viewMode={mode}
         onViewModeChange={handleModeChange}
         heatmapSide={heatmapSide}
-        onHeatmapSideChange={setHeatmapSide}
+        onHeatmapSideChange={handleHeatmapSideChange}
         selectedZip={selectedZip}
         onSelectZip={handleSelectZip}
         selectionKind={selectionKind}
@@ -875,6 +966,10 @@ export function CommuteView({ data }: CommuteViewProps) {
         heatmapLegendSide={heatmapSide}
         segmentFilter={segmentFilter}
         contextBundle={contextBundle}
+        blockSelectionActive={blockSelectionActive}
+        onBlockSelectionActiveChange={setBlockSelectionActive}
+        selectedBlockCount={selectedBlocks.size}
+        onClearSelectedBlocks={handleClearSelectedBlocks}
       />
       <main className="relative w-full md:flex-1">
         {/* Map area wrapper — gives the absolutely-positioned MapCanvas
@@ -920,6 +1015,9 @@ export function CommuteView({ data }: CommuteViewProps) {
           }}
           heatmapData={heatmapData}
           viewLayer={viewLayer}
+          blockSelectionActive={blockSelectionActive}
+          selectedBlocks={selectedBlocks}
+          onSelectedBlocksChange={handleSelectedBlocksChange}
         />
 
         {/* Layer toggle — floats above the bottom card strip in the lower-left
@@ -961,6 +1059,8 @@ export function CommuteView({ data }: CommuteViewProps) {
           onClearSegmentFilter={() =>
             handleSegmentFilterChange({ axis: 'all', buckets: [] })
           }
+          selectedBlockCount={selectedBlocks.size}
+          onClearSelectedBlocks={handleClearSelectedBlocks}
         />
 
         {/* Region / Workplace export — top-right of the map. Renders for

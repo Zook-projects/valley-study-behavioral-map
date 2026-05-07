@@ -18,6 +18,11 @@ interface Props {
   directionDenominator: number;
   segmentFilter: SegmentFilter;
   onClearSegmentFilter: () => void;
+  // Block-selection chip — visible whenever any blocks are selected. The
+  // selection itself is owned upstream in CommuteView; this overlay only
+  // surfaces the chip + clear affordance.
+  selectedBlockCount: number;
+  onClearSelectedBlocks: () => void;
 }
 
 const AXIS_LABELS: Record<SegmentFilter['axis'], string> = {
@@ -89,10 +94,13 @@ export function ActiveFiltersOverlay({
   directionDenominator,
   segmentFilter,
   onClearSegmentFilter,
+  selectedBlockCount,
+  onClearSelectedBlocks,
 }: Props) {
   const directionActive = directionFilter !== 'all';
   const segmentActive = segmentFilter.axis !== 'all';
-  if (!directionActive && !selectedPartner && !segmentActive) return null;
+  const blockSelectionActive = selectedBlockCount > 0;
+  if (!directionActive && !selectedPartner && !segmentActive && !blockSelectionActive) return null;
 
   const directionLabel =
     directionFilter === 'east' ? 'Eastbound only' :
@@ -133,6 +141,13 @@ export function ActiveFiltersOverlay({
           label={`Segment: ${AXIS_LABELS[segmentFilter.axis]} · ${segmentBucketsLabel}`}
           onClear={onClearSegmentFilter}
           ariaLabel="Clear segment filter"
+        />
+      )}
+      {blockSelectionActive && (
+        <Chip
+          label={`Selected: ${fmtInt(selectedBlockCount)} block${selectedBlockCount === 1 ? '' : 's'}`}
+          onClear={onClearSelectedBlocks}
+          ariaLabel="Clear selected blocks"
         />
       )}
     </div>

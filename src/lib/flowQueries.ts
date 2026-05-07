@@ -14,12 +14,20 @@ import type {
 } from '../types/flow';
 import type {
   AgeBlock,
+  AnchorBlock,
+  BlockPartner,
   Naics3Block,
+  OdBlocksFile,
   OdLatest,
   OdTrend,
   TrendPoint,
   WageBlock,
 } from '../types/lodes';
+
+// Inlined to avoid a circular import with heatmapPoints.ts (which imports
+// EW_THRESHOLD_DEG / NS_DOMINANCE_RATIO / sumBucketsFromAllAxes from this
+// file). HeatmapSide is the canonical name re-exported from heatmapPoints.ts.
+type HeatmapSideLocal = 'workplace' | 'residence';
 
 // Threshold below which a pair's E-W component is too small to call.
 // 0.005° (longitude-corrected for latitude) keeps same-cluster pairs neutral
@@ -808,4 +816,302 @@ export function filteredOdLatestTotal(
   filter: SegmentFilter,
 ): number {
   return filteredLatestTotal(block, filter);
+}
+
+// ---------------------------------------------------------------------------
+// Block-selection filter — filter the corridor visualization to flows that
+// are attributable to a user-selected set of blocks.
+// ---------------------------------------------------------------------------
+//
+// Block-list resolution mirrors heatmapPoints.ts:buildHeatmapGeoJson exactly,
+// so the set of selectable blocks always matches the set of blocks the
+// heatmap surfaces under the same (mode × heatmapSide × selection) state:
+//
+//   aggregate            → union of every anchor's heatmapSide blocks
+//   anchor same-side     → blocks within the selected anchor (X)
+//   anchor cross-anchor  → blocks across other anchors A whose partner side
+//                          carries X (with crossAnchorTargetZip = X collapsing
+//                          partner side onto X) + ZIP-centroid fallback rows
+//                          keyed `zip:<zcta>` for non-anchor partner ZIPs.
+//
+// Once the candidate block list is resolved, the helper:
+//   1. Filters to blocks whose FIPS (or `zip:<zcta>` synthetic key) appears
+//      in `selectedBlocks`.
+//   2. Walks each surviving block's partners[], applying the same direction-
+//      bearing filter (classifyPartnerBearing) and segmentFilter re-weighting
+//      (sumBucketsFromAllAxes) used in heatmapPoints.ts. Partner-scope filter
+//      (selectedPartner) is applied identically too.
+//   3. Aggregates worker counts into (originZip, destZip) pairs based on
+//      mode + heatmapSide. Same-side: partner is the opposite side, so an
+//      outbound-style flow is (block.anchorZip, partner.zip) and an inbound-
+//      style flow is (partner.zip, block.anchorZip). Cross-anchor: partner
+//      collapses to X, so flows are (block.anchorZip, X) for inbound and
+//      (X, block.anchorZip) for outbound.
+//   4. Resolves the canonical corridorPath per pair from `flowsByOdKey`. Any
+//      pair without an entry is skipped (would mean the block-level data
+//      references an OD pair the ZIP-level data omits — extremely rare).
+//
+// Output: synthetic FlowRow[] carrying canonical corridorPath and the block-
+// aggregated workerCount. Feeds buildVisibleCorridorMap so corridor widths
+// reflect just the selected residents'/workers' contribution to each path.
+
+const SELECTION_BLOCK_KEY_PREFIX = 'zip:';
+
+export function selectionBlockKey(block: AnchorBlock): string {
+  return block.block;
+}
+
+export function selectionCentroidKey(zcta: string): string {
+  return `${SELECTION_BLOCK_KEY_PREFIX}${zcta}`;
+}
+
+/** Same bearing classifier used by heatmapPoints — keeps direction filter
+ * semantics identical between the heatmap and the block-selection filter. */
+function classifyPartnerBearingLocal(
+  anchorZip: string,
+  partnerZip: string,
+  zipMetaByZip: Map<string, ZipMeta>,
+): 'east' | 'west' | 'neutral' | null {
+  if (!anchorZip || !partnerZip) return null;
+  if (partnerZip === 'ALL_OTHER' || anchorZip === 'ALL_OTHER') return null;
+  if (partnerZip === anchorZip) return null;
+  const o = zipMetaByZip.get(anchorZip);
+  const d = zipMetaByZip.get(partnerZip);
+  if (!o || !d || o.lat == null || o.lng == null || d.lat == null || d.lng == null) {
+    return null;
+  }
+  const dLng = d.lng - o.lng;
+  const dLat = d.lat - o.lat;
+  const dx = dLng * Math.cos((o.lat * Math.PI) / 180);
+  const dy = dLat;
+  if (Math.abs(dx) < EW_THRESHOLD_DEG && Math.abs(dy) < EW_THRESHOLD_DEG) {
+    return 'neutral';
+  }
+  if (Math.abs(dy) > Math.abs(dx) * NS_DOMINANCE_RATIO) return 'neutral';
+  return dLng > 0 ? 'east' : 'west';
+}
+
+export interface FilterFlowsBySelectedBlocksArgs {
+  odBlocks: OdBlocksFile | null;
+  zips: ZipMeta[];
+  mode: Mode;
+  heatmapSide: HeatmapSideLocal;
+  selectedZip: string | null;
+  nonAnchorBundle: { place: string; zips: string[] } | null;
+  directionFilter: DirectionFilter;
+  segmentFilter: SegmentFilter;
+  selectedPartner: { place: string; zips: string[] } | null;
+  selectedBlocks: Set<string>;
+  flowsByOdKey: Map<string, FlowRow>;
+}
+
+export function filterFlowsBySelectedBlocks(
+  args: FilterFlowsBySelectedBlocksArgs,
+): FlowRow[] {
+  const {
+    odBlocks,
+    zips,
+    mode,
+    heatmapSide,
+    selectedZip,
+    nonAnchorBundle,
+    directionFilter,
+    segmentFilter,
+    selectedPartner,
+    selectedBlocks,
+    flowsByOdKey,
+  } = args;
+
+  if (!odBlocks) return [];
+  if (selectedBlocks.size === 0) return [];
+  // Non-anchor view never surfaces blocks — selection is a no-op there.
+  if (nonAnchorBundle) return [];
+
+  const isAggregate = !selectedZip || selectedZip === 'ALL_OTHER';
+  const anchorEntry = !isAggregate ? odBlocks.anchors[selectedZip!] : null;
+  if (!isAggregate && !anchorEntry) return [];
+
+  // ----- Block list resolution + cross-anchor projection -------------------
+  let blocks: AnchorBlock[];
+  let crossAnchorTargetZip: string | null = null;
+  const centroidFallback: Array<{ partnerZip: string; partners: BlockPartner[] }> = [];
+
+  if (isAggregate) {
+    const useHomes = heatmapSide === 'residence';
+    blocks = [];
+    for (const a of Object.values(odBlocks.anchors)) {
+      const list = useHomes ? a.homeBlocks : a.workplaceBlocks;
+      for (const b of list) blocks.push(b);
+    }
+  } else {
+    const X = selectedZip!;
+    const xSide: HeatmapSideLocal = mode === 'outbound' ? 'residence' : 'workplace';
+
+    if (heatmapSide === xSide) {
+      blocks =
+        heatmapSide === 'workplace'
+          ? anchorEntry!.workplaceBlocks
+          : anchorEntry!.homeBlocks;
+    } else {
+      const useHomes = heatmapSide === 'residence';
+      const partnerScopeAnchors = selectedPartner
+        ? new Set(selectedPartner.zips)
+        : null;
+      blocks = [];
+      for (const [aZip, a] of Object.entries(odBlocks.anchors)) {
+        if (partnerScopeAnchors && !partnerScopeAnchors.has(aZip)) continue;
+        const list = useHomes ? a.homeBlocks : a.workplaceBlocks;
+        for (const b of list) blocks.push(b);
+      }
+      crossAnchorTargetZip = X;
+
+      const oppositeList = useHomes
+        ? anchorEntry!.workplaceBlocks
+        : anchorEntry!.homeBlocks;
+      const anchorZipSet = new Set(Object.keys(odBlocks.anchors));
+      const fallbackAcc = new Map<string, BlockPartner[]>();
+      for (const b of oppositeList) {
+        for (const p of b.partners) {
+          if (p.zip === 'ALL_OTHER') continue;
+          if (anchorZipSet.has(p.zip)) continue;
+          if (partnerScopeAnchors && !partnerScopeAnchors.has(p.zip)) continue;
+          let arr = fallbackAcc.get(p.zip);
+          if (!arr) {
+            arr = [];
+            fallbackAcc.set(p.zip, arr);
+          }
+          arr.push(p);
+        }
+      }
+      for (const [pz, partners] of fallbackAcc) {
+        centroidFallback.push({ partnerZip: pz, partners });
+      }
+    }
+  }
+
+  // ----- Filter setup ------------------------------------------------------
+  const segmentActive = !isSegmentFilterAll(segmentFilter);
+  const directionActive = directionFilter !== 'all';
+  const bearingTarget: 'east' | 'west' | null =
+    directionFilter === 'up-valley' ? 'east' :
+    directionFilter === 'down-valley' ? 'west' :
+    directionFilter === 'east' || directionFilter === 'west' ? directionFilter :
+    null;
+  const upValleyAnchorWorkplace = directionFilter === 'up-valley';
+
+  let blockPartnerFilter: Set<string> | null = null;
+  if (crossAnchorTargetZip) {
+    blockPartnerFilter = new Set([crossAnchorTargetZip]);
+  } else if (selectedPartner) {
+    blockPartnerFilter = new Set(selectedPartner.zips);
+  }
+
+  const zipMetaByZip = new Map<string, ZipMeta>();
+  for (const z of zips) zipMetaByZip.set(z.zip, z);
+
+  // ----- Walk selected blocks, accumulate per-(origin,dest) worker counts --
+  // Two accumulators so regional mode can emit both inbound and outbound
+  // contributions and the existing aggregateCorridor regional dedupe handles
+  // double-counting on anchor↔anchor pairs.
+  const inboundAcc = new Map<string, number>();
+  const outboundAcc = new Map<string, number>();
+  const odKeyOf = (origin: string, dest: string) => `${origin}-${dest}`;
+
+  // For same-side branches the partner is the OPPOSITE side. heatmapSide
+  // tells us which side the BLOCK represents:
+  //   - heatmapSide === 'workplace' → block is a workplace; partner is a home
+  //     ZIP; flow is (partner.zip, block.anchorZip) → inbound-style.
+  //   - heatmapSide === 'residence' → block is a home; partner is a work ZIP;
+  //     flow is (block.anchorZip, partner.zip) → outbound-style.
+  // For cross-anchor branches the partner has been collapsed to X via
+  // crossAnchorTargetZip, but the block side is still the heatmapSide — so
+  // the same (block.anchorZip ↔ partner.zip) → flow-direction mapping holds.
+  const blockIsWorkplace = heatmapSide === 'workplace';
+
+  for (const b of blocks) {
+    if (!selectedBlocks.has(b.block)) continue;
+    for (const p of b.partners) {
+      if (blockPartnerFilter && !blockPartnerFilter.has(p.zip)) continue;
+      if (directionActive) {
+        const bearing = classifyPartnerBearingLocal(
+          b.anchorZip,
+          p.zip,
+          zipMetaByZip,
+        );
+        if (bearing !== bearingTarget) continue;
+        if (upValleyAnchorWorkplace && heatmapSide === 'workplace' && !isAnchorZip(p.zip)) continue;
+      }
+      const value = segmentActive
+        ? sumBucketsFromAllAxes(p, segmentFilter)
+        : p.total;
+      if (value <= 0) continue;
+      // Direction of the synthetic flow:
+      const origin = blockIsWorkplace ? p.zip : b.anchorZip;
+      const dest = blockIsWorkplace ? b.anchorZip : p.zip;
+      const key = odKeyOf(origin, dest);
+      const acc = blockIsWorkplace ? inboundAcc : outboundAcc;
+      acc.set(key, (acc.get(key) ?? 0) + value);
+    }
+  }
+
+  // Centroid fallback rows (cross-anchor only). Each fallback represents a
+  // non-anchor partner ZIP whose contribution is summed across X's opposite-
+  // side blocks. Selection key is `zip:<zcta>`.
+  if (crossAnchorTargetZip && centroidFallback.length > 0) {
+    for (const entry of centroidFallback) {
+      const key = `${SELECTION_BLOCK_KEY_PREFIX}${entry.partnerZip}`;
+      if (!selectedBlocks.has(key)) continue;
+
+      if (directionActive) {
+        const bearing = classifyPartnerBearingLocal(
+          crossAnchorTargetZip,
+          entry.partnerZip,
+          zipMetaByZip,
+        );
+        if (bearing !== bearingTarget) continue;
+        if (upValleyAnchorWorkplace && heatmapSide === 'workplace') continue;
+      }
+
+      let weight = 0;
+      for (const p of entry.partners) {
+        const value = segmentActive
+          ? sumBucketsFromAllAxes(p, segmentFilter)
+          : p.total;
+        if (value > 0) weight += value;
+      }
+      if (weight <= 0) continue;
+      // The "block" here is a non-anchor partner ZIP whose blocks are off-
+      // dataset; conceptually it sits on the opposite side of crossAnchorTargetZip
+      // (X). When heatmapSide === 'residence', the centroid ZIPs are home ZIPs
+      // so the flow is (centroid, X) → inbound at X. When heatmapSide ===
+      // 'workplace', they're work ZIPs so the flow is (X, centroid) → outbound.
+      const origin = heatmapSide === 'residence' ? entry.partnerZip : crossAnchorTargetZip;
+      const dest = heatmapSide === 'residence' ? crossAnchorTargetZip : entry.partnerZip;
+      const odk = odKeyOf(origin, dest);
+      const acc = heatmapSide === 'residence' ? inboundAcc : outboundAcc;
+      acc.set(odk, (acc.get(odk) ?? 0) + weight);
+    }
+  }
+
+  // ----- Resolve canonical corridorPath + emit synthetic FlowRows ----------
+  const out: FlowRow[] = [];
+  const emit = (acc: Map<string, number>) => {
+    for (const [key, weight] of acc) {
+      const canonical = flowsByOdKey.get(key);
+      if (!canonical) continue;
+      out.push({ ...canonical, workerCount: weight });
+    }
+  };
+  // In single-direction modes, only emit the matching accumulator. In
+  // regional mode emit both — aggregateCorridor's flowId dedupe collapses
+  // anchor↔anchor pairs that legitimately appear in both.
+  if (mode === 'inbound') {
+    emit(inboundAcc);
+  } else if (mode === 'outbound') {
+    emit(outboundAcc);
+  } else {
+    emit(inboundAcc);
+    emit(outboundAcc);
+  }
+  return out;
 }
